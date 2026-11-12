@@ -11,6 +11,13 @@ class Location(models.Model):
     region = models.CharField(max_length=150)
     country = models.CharField(max_length=100)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name", "region", "country"], name="location_name_region_country_uniq"
+            ),
+        ]
+
     def __str__(self):
         return f"{self.name}, {self.region}, {self.country}"
 

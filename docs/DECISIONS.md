@@ -200,6 +200,42 @@ Rules for this file:
 - Why: §5.2.9 types it as a string and the doc does not specify image upload or storage.
 - Where in code: `apps/charities/models.py` (`Charity.image`)
 
+## D-022: Dev tooling may write any app's rows
+- Date: 2026-11-12
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.1
+- Decision: The shared test factories (`tests/factories/`) and the dev seed command (`manage.py seed`, in the dashboards app) may create any app's rows directly. This is the only exception to D-006, and it applies to dev tooling only, never to runtime code.
+- Why: Building fake data through every app's services would mean writing services that no feature needs yet. Dashboards is the app §6.1 already lets depend on every other app.
+- Where in code: `tests/factories/`, `apps/dashboards/management/commands/seed.py`, `CLAUDE.md`
+
+## D-023: A charity is visible only with an approved NEW_CHARITY request
+- Date: 2026-11-12
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §5.3, §6.2.14
+- Decision: A charity is visible to the public if and only if it has an APPROVAL_REQUEST of kind `new_charity` with status `approved`. When an admin adds a charity directly (§6.2.14), a `new_charity` request is still created, already approved and decided by that admin. There are no exceptions.
+- Why: §5.3 hides unapproved charities and keeps pending status only in the approval tables, but the doc does not say what makes a charity with no request visible. A single rule covers every case.
+- Where in code: `apps/approvals/models.py` (`ApprovalRequest`, `NewCharityRequest`), `apps/dashboards/management/commands/seed.py`
+
+## D-024: Seeded charity images use an external placeholder host
+- Date: 2026-11-12
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: not in design doc
+- Decision: Fake charity images in dev seed data point at an external placeholder image host. This applies to dev data only.
+- Why: It needs no image files in the repo.
+- Where in code: `apps/dashboards/management/commands/seed.py` (`PLACEHOLDER_IMAGE`)
+
+## D-025: Bare minimum, as long as changing it later is easy
+- Date: 2026-11-12
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: not in design doc
+- Decision: Build the smallest thing that meets the goal, and leave out anything that is cheap to add later (extra seed data, options, tooling). Do not cut corners on anything expensive to change later: schema shape, app boundaries, URL structure, settings and secrets, auth, and migration history. Every step or PR report includes the line "Shortcuts taken that would be costly to reverse: none / <list>".
+- Why: Cheap omissions save time now. Expensive shortcuts cost far more to undo once data and other developers' code depend on them.
+- Where in code: `CLAUDE.md`
+
 ---
 
 ## Open questions

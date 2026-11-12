@@ -56,6 +56,7 @@ LOCATIONS = [
 NAME_PREFIXES = ["Keren", "Chasdei", "Yad", "Ezras", "Bais", "Tomchei", "Achiezer", "Lev"]
 NAME_WORDS = ["Chesed", "Shalom", "Emunah", "Tzedakah", "Rachamim", "Simcha", "Torah", "Chaim"]
 
+PLACEHOLDER_IMAGE = "https://placehold.co/600x400.png"  # D-024
 APPROVED, PENDING = 185, 15
 MEMBERS, OWNERS, RABBIS = 100, 30, 10
 EVENTS = 8000
@@ -97,7 +98,7 @@ class Command(BaseCommand):
         charities = []
         for i in range(APPROVED + PENDING):
             name = f"{self.rng.choice(NAME_PREFIXES)} {self.rng.choice(NAME_WORDS)}"
-            charity = f.CharityFactory(name=name)
+            charity = f.CharityFactory(name=name, image=PLACEHOLDER_IMAGE if i % 3 == 0 else None)
             for domain in self.rng.sample(domains, self.rng.randint(1, 3)):
                 f.CharityDomainFactory(charity=charity, domain=domain)
             f.CharityLocationFactory(charity=charity, location=self.rng.choice(locations))

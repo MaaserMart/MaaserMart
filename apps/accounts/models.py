@@ -2,12 +2,20 @@
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.db.models.functions import Lower
 
 
 class User(AbstractUser):
     """§5.2.1 USER. Admin status is Django's is_superuser (§5.2.2)."""
 
-    email = models.EmailField(unique=True)
+    email = models.EmailField()
+
+    class Meta:
+        constraints = [
+            # Case-insensitive, so "A@x.com" and "a@x.com" can't be two accounts.
+            models.UniqueConstraint(Lower("email"), name="user_email_ci_uniq"),
+            models.UniqueConstraint(Lower("username"), name="user_username_ci_uniq"),
+        ]
 
 
 class RoleAssignment(models.Model):
