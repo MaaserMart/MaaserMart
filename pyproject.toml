@@ -33,3 +33,6 @@ extend-exclude = ["*/migrations/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "DJ"]
+# DJ001: the data dictionary (§5.2) marks several string columns nullable; we follow it.
+# DJ008: __str__ on every model is optional.
+ignore = ["DJ001", "DJ008"]
