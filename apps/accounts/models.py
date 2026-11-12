@@ -55,9 +55,7 @@ class CharityOwner(models.Model):
     """§5.2.4 CHARITY_OWNER: which users own which charities."""
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="owned_charities")
-    charity = models.ForeignKey(
-        "charities.Charity", on_delete=models.CASCADE, related_name="owners"
-    )
+    charity = models.ForeignKey("charities.Charity", on_delete=models.CASCADE, related_name="+")
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:

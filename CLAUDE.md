@@ -4,7 +4,7 @@ MaaserMart is a Django modular monolith: DTL templates, HTMX + Alpine, PostgreSQ
 
 ## Sources of truth
 - Decisions that override or fill gaps in the design doc are in docs/DECISIONS.md. Check it before following the doc.
-- If docs/design/INDEX.md exists (locally at /Users/yosefwolf/Desktop/MaaserMart/docs/design/INDEX.md), read it and open only the sections it lists for your piece. Never read the full design doc.
+- If `docs/design/INDEX.md` exists (local only, git-ignored), read it and open only the sections it lists for your piece. Never read the full design doc.
 
 ## Building
 - Bare minimum, as long as changing it later is easy (D-025). Leave out whatever is cheap to add later. Never cut corners on schema shape, app boundaries, URL structure, settings and secrets, auth, or migration history.

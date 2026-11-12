@@ -97,9 +97,7 @@ class Review(models.Model):
     """§5.2.15 REVIEW. Index on charity_id (§5.2.20) is the FK index."""
 
     charity = models.ForeignKey(Charity, on_delete=models.CASCADE, related_name="reviews")
-    author = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reviews"
-    )
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
     rating = models.PositiveSmallIntegerField()
     body = models.TextField(blank=True)
     created = models.DateTimeField(auto_now_add=True)
@@ -120,7 +118,7 @@ class Haskama(models.Model):
         DISAPPROVE = "disapprove", "Disapprove"
 
     rabbi_user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="haskamas"
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+"
     )
     charity = models.ForeignKey(Charity, on_delete=models.CASCADE, related_name="haskamas")
     verdict = models.CharField(max_length=16, choices=Verdict.choices)

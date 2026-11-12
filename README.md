@@ -1,7 +1,6 @@
 # MaaserMart
 
 Charity discovery for maaser giving. See MaaserMart.com.
-Hosting info: https://ap.www.namecheap.com/domains/domaincontrolpanel/maasermart.com/advancedns
 
 A Django app with PostgreSQL, HTMX and Alpine.
 
@@ -51,12 +50,14 @@ Open http://localhost:8000. The admin is at http://localhost:8000/django-admin/:
 
 ## Tests and lint
 
+CI runs these on every pull request; run them before you push:
 ```bash
-uv run pytest
 uv run ruff check .
-uv run ruff format .
+uv run ruff format --check .
+uv run python manage.py makemigrations --check --dry-run
+uv run pytest
 ```
-CI runs the same checks on every pull request.
+`uv run ruff format .` fixes formatting.
 
 ## Working on the code
 
