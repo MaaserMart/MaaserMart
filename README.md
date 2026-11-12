@@ -14,7 +14,8 @@ Full instructions arrive with the Phase 0 README step. The short version:
 4. `cp .env.example .env` and set `DJANGO_SECRET_KEY`.
 5. `uv sync` (installs Python 3.13 and all dependencies from `uv.lock`)
 6. `uv run python manage.py migrate`
-7. `uv run python manage.py runserver`
+7. `uv run python manage.py seed` fills the database with ~200 fake charities and related data (add `--reset` to wipe and reseed). Log in at http://localhost:8000/django-admin/ as `admin` / `admin`. Seeded users (`member1`, `owner1`, `rabbi1`, `supporter1`, ...) use the password `password`.
+8. `uv run python manage.py runserver`
 
 Layout: `config/` holds settings (`config/settings/{base,local,test,prod}.py`), URLs, WSGI and Celery.
 `apps/` holds the nine apps from design doc §6.1. Each app exposes its public functions in `services.py`.

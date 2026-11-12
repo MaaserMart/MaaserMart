@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
                 ('tagline', models.CharField(blank=True, max_length=300, null=True)),
                 ('description', models.TextField(blank=True, null=True)),
                 ('image', models.CharField(blank=True, max_length=500, null=True)),
-                ('created', models.DateTimeField(auto_now_add=True, null=True)),
+                ('created', models.DateTimeField(auto_now_add=True)),
             ],
             options={
                 'verbose_name_plural': 'charities',

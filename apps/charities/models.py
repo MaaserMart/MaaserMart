@@ -32,7 +32,7 @@ class Charity(models.Model):
     # The doc marks description and image unique; held back pending a CEO decision.
     description = models.TextField(null=True, blank=True)
     image = models.CharField(max_length=500, null=True, blank=True)
-    created = models.DateTimeField(auto_now_add=True, null=True)
+    created = models.DateTimeField(auto_now_add=True)
 
     domains = models.ManyToManyField(Domain, through="CharityDomain", related_name="charities")
     locations = models.ManyToManyField(
