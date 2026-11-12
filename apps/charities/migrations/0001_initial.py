@@ -126,4 +126,8 @@ class Migration(migrations.Migration):
             model_name='review',
             constraint=models.CheckConstraint(condition=models.Q(('rating__gte', 1), ('rating__lte', 5)), name='review_rating_1_to_5'),
         ),
+        migrations.AddConstraint(
+            model_name='link',
+            constraint=models.UniqueConstraint(fields=('charity', 'kind'), name='link_charity_kind_uniq'),
+        ),
     ]

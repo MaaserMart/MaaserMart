@@ -7,6 +7,7 @@ from apps.approvals.models import ApprovalRequest, EditRequest
 from tests.factories import (
     ApprovalRequestFactory,
     CharityFactory,
+    LinkFactory,
     LocationFactory,
     ReviewFactory,
     UserFactory,
@@ -67,3 +68,10 @@ def test_charity_created_is_set_automatically():
 def test_approval_request_needs_an_explicit_batch_id():
     with pytest.raises(IntegrityError):
         ApprovalRequest.objects.create(kind=ApprovalRequest.Kind.RABBI)
+
+
+def test_one_link_per_kind_per_charity():
+    link = LinkFactory(kind="website_donate")
+    LinkFactory(charity=link.charity, kind="website_about")
+    with pytest.raises(IntegrityError):
+        LinkFactory(charity=link.charity, kind="website_donate")

@@ -326,6 +326,15 @@ Rules for this file:
 - Why: Both are cheap to add when there are real pages to show them on (D-025). The site is not deployed in Phase 0.
 - Where in code: `templates/` (403.html, 404.html, 500.html in Phase 1)
 
+## D-036: One LINK per kind per charity, built to relax later
+- Date: 2026-11-12
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §5.2.14, §5.2.8
+- Decision: As of 2026-11-12, a charity has at most one link of each kind (donate, about, contact), enforced by a unique constraint on LINK (charity, kind). The CEO: "right now 1 per and if we need more later we can add but build it ajustable". To keep it adjustable, links stay in their own table (no single-valued `website_*` columns on CHARITY), and nothing outside `apps/charities/services.py` assumes one link per kind: anything that reads links gets a list or queryset. To allow several links per kind later, drop the `link_charity_kind_uniq` constraint in one migration, with no other code change.
+- Why: §5.2.14 does not say, but EDIT_REQUEST (§5.2.8) edits a link kind with a single new_value, which implies one per kind. Adding the constraint after data exists would need a cleanup migration, while dropping it later is free.
+- Where in code: `apps/charities/models.py` (`Link.Meta.constraints`, `link_charity_kind_uniq`), `tests/unit/test_models.py`
+
 ---
 
 ## Open questions
@@ -334,5 +343,5 @@ Rules for this file:
 - **2026-11-11: Default charity listing order.** §6.2.3 says alphabetical; UC-03 (§8.5) says "no particular order".
 - **2026-11-12: How the charities listing learns visibility without depending on approvals.** D-023 makes visibility depend on approvals' tables, but §6.1 has approvals depending on charities, not the reverse, and D-006 limits calls to listed dependencies. To be decided before the Phase 1 listing.
 - **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link.
-- **2026-11-12: One LINK per kind per charity?** §5.2.14 does not say, but EDIT_REQUEST.field (§5.2.8) has one `website_donate`/`website_about`/`website_contact` value with a single new_value, which implies one link per kind. `Link` has no (charity, kind) uniqueness. Adding it after data exists needs a cleanup migration, so decide before Phase 1 writes links.
+- **2026-11-12: One LINK per kind per charity?** §5.2.14 does not say, but EDIT_REQUEST.field (§5.2.8) has one `website_donate`/`website_about`/`website_contact` value with a single new_value, which implies one link per kind. `Link` has no (charity, kind) uniqueness. Adding it after data exists needs a cleanup migration, so decide before Phase 1 writes links. Resolved as D-036 on 2026-11-12.
 - **2026-11-12: Is the nav sticky?** §7.2 says the nav tab is "always visible": on every page (done, through `base.html`), or also fixed while scrolling (not done). Cheap either way.
