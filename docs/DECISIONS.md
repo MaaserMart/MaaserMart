@@ -290,6 +290,42 @@ Rules for this file:
 - Why: A finding that is reported and turns out not to matter costs little; one that is dropped can cost a lot later.
 - Where in code: `CLAUDE.md`
 
+## D-032: Constraints stricter than the data dictionary
+- Date: 2026-11-12
+- Decided by: Platform Lead (schema and platform owner); open to CEO override by a later entry
+- Status: Active
+- Design doc ref: §5.2.1, §5.2.8, §5.2.10
+- Decision: USER.username and USER.email are unique ignoring case (unique on `Lower(...)`). LOCATION is unique on (name, region, country). EDIT_REQUEST.target_type is non-null. The doc states the first two as plain "unique" and gives no uniqueness for LOCATION or nullability for target_type. Login and signup must normalise username case to match (a Phase 1 task).
+- Why: Case-variant duplicate accounts and duplicate filter locations are costly to clean up once data exists. target_type must be set for D-014's check constraint to work.
+- Where in code: `apps/accounts/models.py` (`User.Meta.constraints`), `apps/charities/models.py` (`Location.Meta.constraints`), `apps/approvals/models.py` (`EditRequest.target_type`)
+
+## D-033: Nav hides Sign up when logged in
+- Date: 2026-11-12
+- Decided by: Platform Lead (schema and platform owner); open to CEO override by a later entry
+- Status: Active
+- Design doc ref: §7.2
+- Decision: When a user is logged in, the nav shows "Log out" in place of both "Log in" and "Sign up". §7.2 says only that login becomes logout.
+- Why: Signing up again while logged in is not a normal path; the signup pages (§6.2.2) handle extra roles for logged-in users on their own.
+- Where in code: `templates/base.html`
+
+## D-034: Cross-app foreign keys are schema-only and allowed in any direction
+- Date: 2026-11-12
+- Decided by: Platform Lead (schema and platform owner); open to CEO override by a later entry
+- Status: Active
+- Design doc ref: §6.1
+- Decision: A model may hold a foreign key to another app's model in any direction, declared with a string label and always with `related_name="+"`, so no app gets reverse accessors into another app's tables. Foreign keys are not dependencies in the §6.1 sense: queries and calls still go only through `services.py` and only along §6.1's dependencies (D-006).
+- Why: §6.1 marks only events as "string FKs only", yet accounts, tools and support "depend on nothing" while needing foreign keys to CHARITY and USER. The schema needs these keys; keeping them schema-only preserves the module boundaries.
+- Where in code: `apps/*/models.py` (every cross-app `ForeignKey`), `CLAUDE.md`
+
+## D-035: Friendly error pages and the network retry indicator arrive in Phase 1
+- Date: 2026-11-12
+- Decided by: Platform Lead (schema and platform owner); open to CEO override by a later entry
+- Status: Active
+- Design doc ref: §4.1, §4.16
+- Decision: As of 2026-11-12, there are no custom 403/404/500 pages and no 5-second retry with a "connecting" indicator. Both are built in Phase 1: the error pages extend `base.html` (500.html without context that can fail), and the retry comes with the first HTMX interaction.
+- Why: Both are cheap to add when there are real pages to show them on (D-025). The site is not deployed in Phase 0.
+- Where in code: `templates/` (403.html, 404.html, 500.html in Phase 1)
+
 ---
 
 ## Open questions
@@ -298,3 +334,5 @@ Rules for this file:
 - **2026-11-11: Default charity listing order.** §6.2.3 says alphabetical; UC-03 (§8.5) says "no particular order".
 - **2026-11-12: How the charities listing learns visibility without depending on approvals.** D-023 makes visibility depend on approvals' tables, but §6.1 has approvals depending on charities, not the reverse, and D-006 limits calls to listed dependencies. To be decided before the Phase 1 listing.
 - **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link.
+- **2026-11-12: One LINK per kind per charity?** §5.2.14 does not say, but EDIT_REQUEST.field (§5.2.8) has one `website_donate`/`website_about`/`website_contact` value with a single new_value, which implies one link per kind. `Link` has no (charity, kind) uniqueness. Adding it after data exists needs a cleanup migration, so decide before Phase 1 writes links.
+- **2026-11-12: Is the nav sticky?** §7.2 says the nav tab is "always visible": on every page (done, through `base.html`), or also fixed while scrolling (not done). Cheap either way.

@@ -18,7 +18,7 @@ MaaserMart is a Django modular monolith: DTL templates, HTMX + Alpine, PostgreSQ
 - `tests/unit/`, `tests/integration/`, `tests/factories/` (shared factory_boy factories).
 
 ## App boundaries
-- Apps talk to each other only through their `services.py`. Never import another app's models or query its tables. Foreign keys to another app's models use string labels (`"charities.Charity"`). Only call the apps that §6.1 lists as dependencies. (D-006)
+- Apps talk to each other only through their `services.py`. Never import another app's models or query its tables. Foreign keys to another app's models use string labels (`"charities.Charity"`) and `related_name="+"`; they are schema-only and may point either way (D-034). Only call the apps that §6.1 lists as dependencies. (D-006)
 - Exception: test factories and the dev seed command (`apps/dashboards/management/commands/seed.py`) may create any app's rows directly. They are dev tooling, never runtime code. (D-022)
 - Files grow into packages when they get big: `services.py` becomes `services/`, `views.py` becomes `views/`, and so on.
 
