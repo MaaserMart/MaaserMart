@@ -7,6 +7,8 @@
   <script src="{% static 'vendor/htmx-2.0.4.min.js' %}"></script>
   <script defer src="{% static 'vendor/alpinejs-3.14.8.min.js' %}"></script>
   <style>
+    /* Pinned to the top on every screen size (D-037); sticky stays in the flow, so it never covers content. */
+    nav { position: sticky; top: 0; z-index: 10; background: #fff; }
     nav ul { display: flex; flex-wrap: wrap; gap: 1rem; list-style: none; margin: 0; padding: 0.5rem 0; }
     nav form { display: inline; }
   </style>

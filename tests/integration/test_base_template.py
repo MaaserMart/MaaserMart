@@ -32,3 +32,9 @@ def test_logged_in_nav_shows_logout_instead_of_login(client):
 
     assert 'action="/accounts/logout/"' in html
     assert 'href="/accounts/login/"' not in html
+
+
+def test_nav_is_pinned_to_the_top(client):
+    html = client.get("/").content.decode()
+
+    assert "nav { position: sticky; top: 0;" in html

@@ -335,6 +335,15 @@ Rules for this file:
 - Why: §5.2.14 does not say, but EDIT_REQUEST (§5.2.8) edits a link kind with a single new_value, which implies one per kind. Adding the constraint after data exists would need a cleanup migration, while dropping it later is free.
 - Where in code: `apps/charities/models.py` (`Link.Meta.constraints`, `link_charity_kind_uniq`), `tests/unit/test_models.py`
 
+## D-037: The nav stays pinned to the top while scrolling
+- Date: 2026-11-12
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §7.2
+- Decision: §7.2's "always visible" means the nav bar is on every page and stays pinned to the top of the screen while scrolling, on every screen size. It uses CSS `position: sticky`, which keeps it in the page flow so it never covers content. The CEO: "so well go for b now". Hiding the bar on phones while scrolling down was considered and deferred. Could add later: hide-on-scroll-down for small screens, which is a small Alpine addition to `base.html`.
+- Why: Settles the open question on what "always visible" means.
+- Where in code: `templates/base.html` (`nav` style), `tests/integration/test_base_template.py`
+
 ---
 
 ## Open questions
@@ -344,4 +353,4 @@ Rules for this file:
 - **2026-11-12: How the charities listing learns visibility without depending on approvals.** D-023 makes visibility depend on approvals' tables, but §6.1 has approvals depending on charities, not the reverse, and D-006 limits calls to listed dependencies. To be decided before the Phase 1 listing.
 - **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link.
 - **2026-11-12: One LINK per kind per charity?** §5.2.14 does not say, but EDIT_REQUEST.field (§5.2.8) has one `website_donate`/`website_about`/`website_contact` value with a single new_value, which implies one link per kind. `Link` has no (charity, kind) uniqueness. Adding it after data exists needs a cleanup migration, so decide before Phase 1 writes links. Resolved as D-036 on 2026-11-12.
-- **2026-11-12: Is the nav sticky?** §7.2 says the nav tab is "always visible": on every page (done, through `base.html`), or also fixed while scrolling (not done). Cheap either way.
+- **2026-11-12: Is the nav sticky?** §7.2 says the nav tab is "always visible": on every page (done, through `base.html`), or also fixed while scrolling (not done). Cheap either way. Resolved as D-037 on 2026-11-12.
