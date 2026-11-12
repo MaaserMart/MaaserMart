@@ -38,10 +38,12 @@ def test_unknown_charity_raises():
 def test_each_change_records_who_changed_it(change):
     charity = CharityFactory()
     admin = UserFactory()
+    if change is hide_charity:
+        publish_charity(charity.id)
 
     change(charity.id, by_user_id=admin.id)
 
-    event = Event.objects.get(charity=charity)
+    event = Event.objects.filter(charity=charity).latest("id")
     assert event.action == Event.Action.CHARITY_UPDATED
     assert event.user_id == admin.id
 
@@ -57,3 +59,16 @@ def test_unknown_charity_records_no_event():
     with pytest.raises(Charity.DoesNotExist):
         hide_charity(999_999)
     assert not Event.objects.exists()
+
+
+@pytest.mark.parametrize("change", [publish_charity, hide_charity])
+def test_no_event_when_already_in_that_state(change):
+    charity = CharityFactory()
+    if change is hide_charity:
+        publish_charity(charity.id)
+    before = Event.objects.count()
+
+    change(charity.id)
+    change(charity.id)
+
+    assert Event.objects.count() == before + 1

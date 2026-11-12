@@ -18,6 +18,7 @@ from django.utils import timezone
 from apps.accounts.models import RoleAssignment, User
 from apps.approvals.models import ApprovalRequest
 from apps.charities.models import Charity, Haskama, Link
+from apps.charities.services import publish_charity
 from apps.events.models import Event
 from tests import factories as f
 from tests.factories.accounts import DEFAULT_PASSWORD
@@ -110,12 +111,7 @@ class Command(BaseCommand):
         for i in range(APPROVED + PENDING):
             name = f"{self.rng.choice(NAME_PREFIXES)} {self.rng.choice(NAME_WORDS)}"
             approved = i < APPROVED
-            # Approved charities are shown, pending ones stay hidden (D-038).
-            charity = f.CharityFactory(
-                name=name,
-                image=PLACEHOLDER_IMAGE if i % 3 == 0 else None,
-                is_visible=approved,
-            )
+            charity = f.CharityFactory(name=name, image=PLACEHOLDER_IMAGE if i % 3 == 0 else None)
             for domain in self.rng.sample(domains, self.rng.randint(1, 3)):
                 f.CharityDomainFactory(charity=charity, domain=domain)
             f.CharityLocationFactory(charity=charity, location=self.rng.choice(locations))
@@ -127,6 +123,9 @@ class Command(BaseCommand):
                 approval_request__status=Status.APPROVED if approved else Status.PENDING,
                 approval_request__decided_by=admin if approved else None,
             )
+            if approved:
+                # Through the service, as approvals will do, so it records its event (D-038).
+                publish_charity(charity.id, by_user_id=admin.id)
             charities.append(charity)
         approved = charities[:APPROVED]
 

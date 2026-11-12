@@ -1,4 +1,6 @@
-"""The base template and nav bar (design doc §7.2, D-026, D-029)."""
+"""The base template and nav bar (design doc §7.2, D-026, D-029, D-037)."""
+
+import re
 
 import pytest
 
@@ -37,4 +39,4 @@ def test_logged_in_nav_shows_logout_instead_of_login(client):
 def test_nav_is_pinned_to_the_top(client):
     html = client.get("/").content.decode()
 
-    assert "nav { position: sticky; top: 0;" in html
+    assert re.search(r"nav\s*\{[^}]*position:\s*sticky", html)

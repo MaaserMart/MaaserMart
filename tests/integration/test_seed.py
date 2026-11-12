@@ -3,7 +3,7 @@
 import pytest
 from django.core.management import CommandError, call_command
 
-from apps.approvals.models import ApprovalRequest
+from apps.approvals.models import ApprovalRequest, NewCharityRequest
 from apps.charities.models import Charity
 from apps.events.models import Event
 from tests.factories import CharityFactory
@@ -17,11 +17,16 @@ def test_seed_fills_an_empty_database(settings):
 
     assert Charity.objects.count() == 200
     assert Event.objects.exists()
-    visible = ApprovalRequest.objects.filter(
-        kind=ApprovalRequest.Kind.NEW_CHARITY, status=ApprovalRequest.Status.APPROVED
+    approved_ids = set(
+        NewCharityRequest.objects.filter(
+            approval_request__status=ApprovalRequest.Status.APPROVED
+        ).values_list("charity_id", flat=True)
     )
-    assert visible.count() == 185
-    assert Charity.objects.filter(is_visible=True).count() == 185
+    visible_ids = set(Charity.objects.filter(is_visible=True).values_list("id", flat=True))
+    assert len(approved_ids) == 185
+    assert visible_ids == approved_ids
+    published = Event.objects.filter(action=Event.Action.CHARITY_UPDATED)
+    assert set(published.values_list("charity_id", flat=True)) == approved_ids
 
 
 def test_second_run_is_refused_and_leaves_data_untouched(settings):

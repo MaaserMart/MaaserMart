@@ -329,7 +329,7 @@ Rules for this file:
 ## D-036: One LINK per kind per charity, built to relax later
 - Date: 2026-11-12
 - Decided by: CEO (Yosef)
-- Status: Active
+- Status: Superseded by D-040 on 2026-11-12
 - Design doc ref: §5.2.14, §5.2.8
 - Decision: As of 2026-11-12, a charity has at most one link of each kind (donate, about, contact), enforced by a unique constraint on LINK (charity, kind). The CEO: "right now 1 per and if we need more later we can add but build it ajustable". To keep it adjustable, links stay in their own table (no single-valued `website_*` columns on CHARITY), and nothing outside `apps/charities/services.py` assumes one link per kind: anything that reads links gets a list or queryset. To allow several links per kind later, drop the `link_charity_kind_uniq` constraint in one migration, with no other code change.
 - Why: §5.2.14 does not say, but EDIT_REQUEST (§5.2.8) edits a link kind with a single new_value, which implies one per kind. Adding the constraint after data exists would need a cleanup migration, while dropping it later is free.
@@ -361,6 +361,24 @@ Rules for this file:
 - Decision: `publish_charity` and `hide_charity` each record one EVENT with action `charity_updated` and the acting user (`by_user_id`), in the same transaction as the change, through `events.services.record_event`. EVENT (§5.2.17) has no details column, so the event says who changed the charity and when, but not that it was a publish or a hide. No column is added for it. If that detail is needed later, register CHARITY with django-auditlog (an open question) or add a details column in a new migration.
 - Why: §6.1 has charities record a `charity_updated` event on every change, which gives hiding an audit trail of who and when. Adding a details column is a schema change the doc does not ask for.
 - Where in code: `apps/charities/services.py` (`_set_visible`), `apps/events/services.py` (`record_event`), `tests/unit/test_charity_services.py`
+
+## D-040: One LINK per kind per charity; relaxing it also needs EDIT_REQUEST to name the link
+- Date: 2026-11-12
+- Decided by: CEO (Yosef); correction by Platform Lead
+- Status: Active
+- Design doc ref: §5.2.14, §5.2.8
+- Decision: Same rule as D-036: a charity has at most one link of each kind, enforced by `link_charity_kind_uniq` on LINK (charity, kind). The CEO: "right now 1 per and if we need more later we can add but build it ajustable". Links stay in their own table and are read as lists. D-036 said relaxing the rule needs no other code change, which is wrong: EDIT_REQUEST names a link only by `field` (`website_donate`/`website_about`/`website_contact`) with one `new_value`, so with several links of a kind an edit request could not say which one it changes. To allow several per kind later: (1) drop `link_charity_kind_uniq` in a new migration, (2) add a nullable `link` foreign key to EDIT_REQUEST in a new migration, (3) make `apply_charity_edit` use it.
+- Why: The review of D-036 found the overclaim. Entries are never edited, so the correction is this new entry.
+- Where in code: `apps/charities/models.py` (`Link.Meta.constraints`), `apps/approvals/models.py` (`EditRequest.field`), `tests/unit/test_models.py`
+
+## D-041: Publishing or hiding a charity already in that state does nothing
+- Date: 2026-11-12
+- Decided by: Platform Lead (schema and platform owner); open to CEO override by a later entry
+- Status: Active
+- Design doc ref: §5.2.21, §6.1
+- Decision: `publish_charity` on a visible charity and `hide_charity` on a hidden one change nothing and record no event. Django admin shows `is_visible` read-only and offers "Publish selected charities" / "Hide selected charities" actions that call the services with the admin as the acting user. The seed publishes approved charities through `publish_charity` too, so seeded data has the same events as real data (all dated at seed time).
+- Why: A charity_updated event moves the derived "last updated" date (§5.2.21), so it must mean a real change. The admin form must not bypass the services, or changes would skip the event that D-039 relies on.
+- Where in code: `apps/charities/services.py` (`_set_visible`), `apps/charities/admin.py` (`CharityAdmin`), `apps/dashboards/management/commands/seed.py`, `tests/unit/test_charity_services.py`, `tests/integration/test_charity_admin.py`
 
 ---
 

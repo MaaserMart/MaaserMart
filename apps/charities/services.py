@@ -21,8 +21,13 @@ def hide_charity(charity_id, by_user_id=None):
 
 
 def _set_visible(charity_id, visible, by_user_id):
-    # Every change to a charity is recorded as a charity_updated EVENT (§6.1, D-039).
     with transaction.atomic():
-        if not Charity.objects.filter(pk=charity_id).update(is_visible=visible):
+        charity = Charity.objects.select_for_update().filter(pk=charity_id).first()
+        if charity is None:
             raise Charity.DoesNotExist(f"No charity with id {charity_id}")
+        if charity.is_visible == visible:
+            return  # Already in that state: no change, so no event (D-041).
+        charity.is_visible = visible
+        charity.save(update_fields=["is_visible"])
+        # Every change to a charity is recorded as a charity_updated EVENT (§6.1, D-039).
         record_event(charity_id, "charity_updated", user_id=by_user_id)

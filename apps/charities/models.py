@@ -92,8 +92,8 @@ class Link(models.Model):
     url = models.URLField(max_length=500)
 
     class Meta:
-        # One link per kind for now (D-036). Read links as a list or queryset, never as a
-        # single value, so allowing several per kind is just dropping this constraint.
+        # One link per kind for now. Read links as a list or queryset, never as a single
+        # value. D-040 lists the steps to allow several per kind.
         constraints = [
             models.UniqueConstraint(fields=["charity", "kind"], name="link_charity_kind_uniq"),
         ]
