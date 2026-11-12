@@ -1,0 +1,3 @@
+# MaaserMart dependencies.
+# Install with:  pip install -r requirements.txt
+Django~=5.2
