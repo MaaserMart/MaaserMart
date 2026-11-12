@@ -36,3 +36,7 @@ select = ["E", "F", "I", "B", "UP", "DJ"]
 # DJ001: the data dictionary (§5.2) marks several string columns nullable; we follow it.
 # DJ008: __str__ on every model is optional.
 ignore = ["DJ001", "DJ008"]
+
+[tool.pytest.ini_options]
+addopts = "--ds=config.settings.test"
+testpaths = ["tests"]

@@ -236,6 +236,42 @@ Rules for this file:
 - Why: Cheap omissions save time now. Expensive shortcuts cost far more to undo once data and other developers' code depend on them.
 - Where in code: `CLAUDE.md`
 
+## D-026: Nav URLs for pages D-009 doesn't name
+- Date: 2026-11-12
+- Decided by: COO, under the CEO's delegation
+- Status: Active
+- Design doc ref: §7.1, §7.2
+- Decision: As of 2026-11-12, these paths are fixed: charity listing `/charity/`, help `/support/help/`, report a charity `/support/report/`, maaser tools `/tools/`, login `/accounts/login/`, signup `/accounts/signup/`, logout `/accounts/logout/` (a POST).
+- Why: Each page sits under the prefix of the app that owns it (§6.1), following D-009.
+- Where in code: `templates/base.html` (nav)
+
+## D-027: Maaser pages live under /tools/
+- Date: 2026-11-12
+- Decided by: COO, under the CEO's delegation
+- Status: Active
+- Design doc ref: §7.1.3, §6.1
+- Decision: Income history, donation history and the maaser calculator are at `/tools/income/`, `/tools/donations/` and `/tools/maaser/`, not under `member_dashboard/` as §7.1.3 lists them. The member dashboard links to them.
+- Why: The tools app owns TRANSACTION and the maaser calculation (§6.1), and D-009 puts each app's pages under its own prefix.
+- Where in code: `apps/tools/urls.py` (when the tools pages are built)
+
+## D-028: / redirects to the charity listing
+- Date: 2026-11-12
+- Decided by: COO, under the CEO's delegation
+- Status: Active
+- Design doc ref: §6.2.3
+- Decision: Once the charity listing exists, `/` redirects to `/charity/`. As of 2026-11-12, `/` shows a placeholder page.
+- Why: §6.2.3 makes the listing the landing page.
+- Where in code: `config/urls.py`, `templates/home.html`
+
+## D-029: HTMX and Alpine are served from static/
+- Date: 2026-11-12
+- Decided by: COO, under the CEO's delegation
+- Status: Active
+- Design doc ref: §4.7, §4.13, §2.4.3
+- Decision: HTMX 2.0.4 and Alpine.js 3.14.8 are committed under `static/vendor/` and served with the site's own static files, never from a third-party CDN. Upgrading means replacing the file and its versioned name.
+- Why: §4.13 says no CDN; a third-party CDN would see every visitor's IP, against the privacy requirement (§2.4.3); and the site must not break when the CDN is down.
+- Where in code: `static/vendor/`, `templates/base.html`
+
 ---
 
 ## Open questions

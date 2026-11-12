@@ -1,11 +1,11 @@
-<!doctype html>
+{% load static %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}MaaserMart{% endblock %}</title>
-  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
-  <script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
+  <script src="{% static 'vendor/htmx-2.0.4.min.js' %}"></script>
+  <script defer src="{% static 'vendor/alpinejs-3.14.8.min.js' %}"></script>
   <style>
     nav ul { display: flex; flex-wrap: wrap; gap: 1rem; list-style: none; margin: 0; padding: 0.5rem 0; }
     nav form { display: inline; }
