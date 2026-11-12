@@ -353,6 +353,15 @@ Rules for this file:
 - Why: It replaces D-023, which would have made the listing depend on approvals' tables against §6.1. It also lets a charity be hidden again without touching its approval history.
 - Where in code: `apps/charities/models.py` (`Charity.is_visible`), `apps/charities/services.py` (`publish_charity`, `hide_charity`), `apps/dashboards/management/commands/seed.py`, `tests/unit/test_charity_services.py`
 
+## D-039: Visibility changes are recorded as charity_updated events, without details
+- Date: 2026-11-12
+- Decided by: Platform Lead (schema and platform owner); open to CEO override by a later entry
+- Status: Active
+- Design doc ref: §5.2.17, §6.1
+- Decision: `publish_charity` and `hide_charity` each record one EVENT with action `charity_updated` and the acting user (`by_user_id`), in the same transaction as the change, through `events.services.record_event`. EVENT (§5.2.17) has no details column, so the event says who changed the charity and when, but not that it was a publish or a hide. No column is added for it. If that detail is needed later, register CHARITY with django-auditlog (an open question) or add a details column in a new migration.
+- Why: §6.1 has charities record a `charity_updated` event on every change, which gives hiding an audit trail of who and when. Adding a details column is a schema change the doc does not ask for.
+- Where in code: `apps/charities/services.py` (`_set_visible`), `apps/events/services.py` (`record_event`), `tests/unit/test_charity_services.py`
+
 ---
 
 ## Open questions
