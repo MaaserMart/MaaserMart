@@ -10,7 +10,16 @@ pytestmark = pytest.mark.django_db
 def test_home_page_shows_nav_and_local_scripts(client):
     html = client.get("/").content.decode()
 
-    for path in ["/charity/", "/support/help/", "/tools/", "/accounts/login/"]:
+    for path in [
+        "/charity/",
+        "/charity/add/",
+        "/support/report/",
+        "/tools/",
+        "/dashboard/",
+        "/support/help/",
+        "/accounts/login/",
+        "/accounts/signup/",
+    ]:
         assert f'href="{path}"' in html
     assert "/static/vendor/htmx-2.0.4.min.js" in html
     assert "/static/vendor/alpinejs-3.14.8.min.js" in html

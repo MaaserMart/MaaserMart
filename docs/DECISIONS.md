@@ -272,6 +272,24 @@ Rules for this file:
 - Why: §4.13 says no CDN; a third-party CDN would see every visitor's IP, against the privacy requirement (§2.4.3); and the site must not break when the CDN is down.
 - Where in code: `static/vendor/`, `templates/base.html`
 
+## D-030: The seed command only runs on an empty database
+- Date: 2026-11-12
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: not in design doc
+- Decision: `manage.py seed` deletes nothing. It refuses to run, with an error naming the tables that have rows, unless every app table is empty and DEBUG is on. To reseed, a developer drops and recreates the database, then runs `migrate` and `seed`.
+- Why: DEBUG is on by default in local settings, so a seed that wiped tables could erase a real database (such as RDS) if a `.env` pointed at it.
+- Where in code: `apps/dashboards/management/commands/seed.py` (`Command.handle`), `tests/integration/test_seed.py`, `README.md`
+
+## D-031: If you see something, say something
+- Date: 2026-11-12
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: not in design doc
+- Decision: Every problem, risk or doubt anyone notices goes into their report, even if it is out of scope or cannot be verified. Unverified items are reported as questions. Nothing is dropped silently; worst case, it reaches the CEO.
+- Why: A finding that is reported and turns out not to matter costs little; one that is dropped can cost a lot later.
+- Where in code: `CLAUDE.md`
+
 ---
 
 ## Open questions

@@ -1,13 +1,15 @@
-"""Wipe the local database's app data and fill it with fake data: `manage.py seed`.
+"""Fill an empty local database with fake data: `manage.py seed`.
 
 Dev tooling only (see CLAUDE.md): it builds every app's rows through the shared
-factories in tests/factories. It refuses to run unless DEBUG is on.
+factories in tests/factories. It refuses to run unless DEBUG is on and every app
+table is empty (D-030).
 """
 
 import random
 from datetime import timedelta
 
 import factory.random
+from django.apps import apps as django_apps
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -15,7 +17,7 @@ from django.utils import timezone
 
 from apps.accounts.models import RoleAssignment, User
 from apps.approvals.models import ApprovalRequest
-from apps.charities.models import Charity, Domain, Haskama, Link, Location
+from apps.charities.models import Charity, Haskama, Link
 from apps.events.models import Event
 from tests import factories as f
 from tests.factories.accounts import DEFAULT_PASSWORD
@@ -63,18 +65,27 @@ EVENTS = 8000
 
 
 class Command(BaseCommand):
-    help = "Wipe app data and seed ~200 fake charities with users, reviews, haskamas and events."
+    help = "Seed an empty database with ~200 fake charities, users, reviews, haskamas and events."
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
             raise CommandError("seed only runs with DEBUG on (local development).")
+        # Never wipe or add to existing data: this could be pointed at a real database.
+        filled = [
+            model._meta.label
+            for model in django_apps.get_models()
+            if model.__module__.startswith("apps.") and model.objects.exists()
+        ]
+        if filled:
+            raise CommandError(
+                "seed only runs on an empty database, and these tables have rows: "
+                + ", ".join(sorted(filled))
+                + ". Drop and recreate the database, run migrate, then seed."
+            )
         self.rng = random.Random(613)
         factory.random.reseed_random(613)
         self.now = timezone.now()
         with transaction.atomic():
-            # Events and approval requests PROTECT charities, so they go first.
-            for model in [Event, ApprovalRequest, Charity, Domain, Location, User]:
-                model.objects.all().delete()
             self.seed()
         self.stdout.write(
             self.style.SUCCESS(

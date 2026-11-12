@@ -1,7 +1,5 @@
 """Tables owned by approvals (design doc §5.2.5-5.2.8)."""
 
-import uuid
-
 from django.conf import settings
 from django.db import models
 
@@ -38,7 +36,8 @@ class ApprovalRequest(models.Model):
         related_name="+",
     )
     decided_at = models.DateTimeField(null=True, blank=True)
-    batch_id = models.UUIDField(default=uuid.uuid4)
+    # No default: callers set it, so requests submitted together share one batch.
+    batch_id = models.UUIDField()
 
     class Meta:
         indexes = [

@@ -1,3 +1,5 @@
+import uuid
+
 import factory
 from factory.django import DjangoModelFactory
 
@@ -11,6 +13,7 @@ class ApprovalRequestFactory(DjangoModelFactory):
     submitted_by = factory.SubFactory("tests.factories.accounts.UserFactory")
     kind = ApprovalRequest.Kind.NEW_CHARITY
     status = ApprovalRequest.Status.PENDING
+    batch_id = factory.LazyFunction(uuid.uuid4)
 
 
 class NewCharityRequestFactory(DjangoModelFactory):

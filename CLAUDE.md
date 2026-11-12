@@ -9,6 +9,7 @@ MaaserMart is a Django modular monolith: DTL templates, HTMX + Alpine, PostgreSQ
 ## Building
 - Bare minimum, as long as changing it later is easy (D-025). Leave out whatever is cheap to add later. Never cut corners on schema shape, app boundaries, URL structure, settings and secrets, auth, or migration history.
 - Every report includes "Shortcuts taken that would be costly to reverse: none / <list>".
+- If you see something, say something (D-031). Never drop a finding because it is out of scope or you can't verify it. Report unverified items as questions.
 
 ## Layout
 - `config/`: settings (`config/settings/{base,local,test,prod}.py`, with secrets from env vars only), root URLs, WSGI, Celery.

@@ -3,7 +3,7 @@
 import pytest
 from django.db import IntegrityError
 
-from apps.approvals.models import EditRequest
+from apps.approvals.models import ApprovalRequest, EditRequest
 from tests.factories import (
     ApprovalRequestFactory,
     CharityFactory,
@@ -62,3 +62,8 @@ def test_location_is_unique():
 
 def test_charity_created_is_set_automatically():
     assert CharityFactory().created is not None
+
+
+def test_approval_request_needs_an_explicit_batch_id():
+    with pytest.raises(IntegrityError):
+        ApprovalRequest.objects.create(kind=ApprovalRequest.Kind.RABBI)
