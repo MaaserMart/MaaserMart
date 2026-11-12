@@ -21,3 +21,6 @@ media/
 
 # Design doc sections: kept local only, never committed
 docs/design/
+
+# Local-only session roster
+.team/
