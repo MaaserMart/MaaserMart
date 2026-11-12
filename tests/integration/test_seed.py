@@ -1,4 +1,4 @@
-"""The dev seed command every developer runs after setup (D-022, D-023, D-030)."""
+"""The dev seed command every developer runs after setup (D-022, D-030, D-038)."""
 
 import pytest
 from django.core.management import CommandError, call_command
@@ -21,6 +21,7 @@ def test_seed_fills_an_empty_database(settings):
         kind=ApprovalRequest.Kind.NEW_CHARITY, status=ApprovalRequest.Status.APPROVED
     )
     assert visible.count() == 185
+    assert Charity.objects.filter(is_visible=True).count() == 185
 
 
 def test_second_run_is_refused_and_leaves_data_untouched(settings):

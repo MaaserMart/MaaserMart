@@ -32,14 +32,16 @@ class Domain(models.Model):
 
 
 class Charity(models.Model):
-    """§5.2.9 CHARITY. Unapproved charities live here too; pending status is only in approvals."""
+    """§5.2.9 CHARITY. New charities start hidden; only services.py changes is_visible (D-038)."""
 
     name = models.CharField(max_length=200)
     tagline = models.CharField(max_length=300, null=True, blank=True)
-    # The doc marks description and image unique; held back pending a CEO decision.
+    # Not unique, although §5.2.9 says so (D-013).
     description = models.TextField(null=True, blank=True)
     image = models.CharField(max_length=500, null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
+    # Set only through publish_charity / hide_charity in services.py. Indexed for the listing.
+    is_visible = models.BooleanField(default=False, db_index=True)
 
     domains = models.ManyToManyField(Domain, through="CharityDomain", related_name="charities")
     locations = models.ManyToManyField(

@@ -23,6 +23,7 @@ class Migration(migrations.Migration):
                 ('description', models.TextField(blank=True, null=True)),
                 ('image', models.CharField(blank=True, max_length=500, null=True)),
                 ('created', models.DateTimeField(auto_now_add=True)),
+                ('is_visible', models.BooleanField(db_index=True, default=False)),
             ],
             options={
                 'verbose_name_plural': 'charities',

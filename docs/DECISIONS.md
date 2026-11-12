@@ -212,7 +212,7 @@ Rules for this file:
 ## D-023: A charity is visible only with an approved NEW_CHARITY request
 - Date: 2026-11-12
 - Decided by: CEO (Yosef)
-- Status: Active
+- Status: Superseded by D-038 on 2026-11-12
 - Design doc ref: §5.3, §6.2.14
 - Decision: A charity is visible to the public if and only if it has an APPROVAL_REQUEST of kind `new_charity` with status `approved`. When an admin adds a charity directly (§6.2.14), a `new_charity` request is still created, already approved and decided by that admin. There are no exceptions.
 - Why: §5.3 hides unapproved charities and keeps pending status only in the approval tables, but the doc does not say what makes a charity with no request visible. A single rule covers every case.
@@ -344,13 +344,22 @@ Rules for this file:
 - Why: Settles the open question on what "always visible" means.
 - Where in code: `templates/base.html` (`nav` style), `tests/integration/test_base_template.py`
 
+## D-038: Charity visibility is an on/off switch owned by charities
+- Date: 2026-11-12
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §5.3, §6.1, §6.2.14
+- Decision: CHARITY has `is_visible` (default false, indexed). A new charity starts hidden. When its approval goes through, approvals calls `charities.services.publish_charity(charity_id)`, which is the allowed direction under §6.1. An admin can hide a visible charity again with `hide_charity(charity_id)`, for example to review it after many reports. Nothing outside the charities app sets the field directly. The listing reads `is_visible` and does not depend on approvals. Every charity still gets a NEW_CHARITY approval request as its approval record, and an admin who adds a charity directly (§6.2.14) creates it already approved, then publishes it. The CEO: "option b please makes sense charitys start as hidden then when approved its fipped to visible but theres still an option to hide it for lets say its been reported a lot and we want to review it again". Could add later: a reason for hiding, an "under review" state, and a link from hiding to the reports/tickets that caused it. It stays a plain on/off switch for now so it is easy to grow.
+- Why: It replaces D-023, which would have made the listing depend on approvals' tables against §6.1. It also lets a charity be hidden again without touching its approval history.
+- Where in code: `apps/charities/models.py` (`Charity.is_visible`), `apps/charities/services.py` (`publish_charity`, `hide_charity`), `apps/dashboards/management/commands/seed.py`, `tests/unit/test_charity_services.py`
+
 ---
 
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1.
 - **2026-11-11: Default charity listing order.** §6.2.3 says alphabetical; UC-03 (§8.5) says "no particular order".
-- **2026-11-12: How the charities listing learns visibility without depending on approvals.** D-023 makes visibility depend on approvals' tables, but §6.1 has approvals depending on charities, not the reverse, and D-006 limits calls to listed dependencies. To be decided before the Phase 1 listing.
+- **2026-11-12: How the charities listing learns visibility without depending on approvals.** D-023 makes visibility depend on approvals' tables, but §6.1 has approvals depending on charities, not the reverse, and D-006 limits calls to listed dependencies. To be decided before the Phase 1 listing. Resolved as D-038 on 2026-11-12.
 - **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link.
 - **2026-11-12: One LINK per kind per charity?** §5.2.14 does not say, but EDIT_REQUEST.field (§5.2.8) has one `website_donate`/`website_about`/`website_contact` value with a single new_value, which implies one link per kind. `Link` has no (charity, kind) uniqueness. Adding it after data exists needs a cleanup migration, so decide before Phase 1 writes links. Resolved as D-036 on 2026-11-12.
 - **2026-11-12: Is the nav sticky?** §7.2 says the nav tab is "always visible": on every page (done, through `base.html`), or also fixed while scrolling (not done). Cheap either way. Resolved as D-037 on 2026-11-12.

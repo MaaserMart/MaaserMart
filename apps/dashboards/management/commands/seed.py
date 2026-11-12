@@ -109,14 +109,18 @@ class Command(BaseCommand):
         charities = []
         for i in range(APPROVED + PENDING):
             name = f"{self.rng.choice(NAME_PREFIXES)} {self.rng.choice(NAME_WORDS)}"
-            charity = f.CharityFactory(name=name, image=PLACEHOLDER_IMAGE if i % 3 == 0 else None)
+            approved = i < APPROVED
+            # Approved charities are shown, pending ones stay hidden (D-038).
+            charity = f.CharityFactory(
+                name=name,
+                image=PLACEHOLDER_IMAGE if i % 3 == 0 else None,
+                is_visible=approved,
+            )
             for domain in self.rng.sample(domains, self.rng.randint(1, 3)):
                 f.CharityDomainFactory(charity=charity, domain=domain)
             f.CharityLocationFactory(charity=charity, location=self.rng.choice(locations))
             for kind in Link.Kind:
                 f.LinkFactory(charity=charity, kind=kind, url=f"https://charity{i}.example.org/")
-            # Visibility comes from the NEW_CHARITY request's status (§5.3).
-            approved = i < APPROVED
             f.NewCharityRequestFactory(
                 charity=charity,
                 approval_request__submitted_by=self.rng.choice(owners),
