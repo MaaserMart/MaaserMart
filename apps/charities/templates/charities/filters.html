@@ -22,19 +22,24 @@ and the browser's Back button works (UC-03's implementation constraints).
       <summary class="filters__summary">{{ group.legend }}</summary>
 
       {% if group.kind == "checkboxes" %}
-        {% for option in group.options %}
-          <label class="filters__option">
-            <input
-              type="checkbox"
-              name="{{ group.parameter }}"
-              value="{{ option.id }}"
-              {% if option.id in group.selected %}checked{% endif %}
-            >
-            <span class="filters__option-label">{{ option.label }}</span>
-          </label>
-        {% empty %}
-          <p class="filters__none">{{ group.empty_note }}</p>
-        {% endfor %}
+        {% comment %}The option list scrolls instead of growing without limit: a
+        real location list can run to thousands of rows, and an unrolled sidebar
+        would push the Apply button off the page.{% endcomment %}
+        <div class="filters__options" tabindex="0" role="group" aria-label="{{ group.legend }}">
+          {% for option in group.options %}
+            <label class="filters__option">
+              <input
+                type="checkbox"
+                name="{{ group.parameter }}"
+                value="{{ option.id }}"
+                {% if option.id in group.selected %}checked{% endif %}
+              >
+              <span class="filters__option-label">{{ option.label }}</span>
+            </label>
+          {% empty %}
+            <p class="filters__none">{{ group.empty_note }}</p>
+          {% endfor %}
+        </div>
       {% else %}
         <div class="filters__number">
           <label class="filters__option" for="{{ group.parameter }}">
@@ -45,7 +50,7 @@ and the browser's Back button works (UC-03's implementation constraints).
               inputmode="numeric"
               {% if group.min is not None %}min="{{ group.min }}"{% endif %}
               {% if group.max is not None %}max="{{ group.max }}"{% endif %}
-              value="{{ group.value|default_if_none:'' }}"
+              {% if group.is_set %}value="{{ group.value }}"{% endif %}
             >
             <span class="filters__option-label">{{ group.label }}</span>
           </label>

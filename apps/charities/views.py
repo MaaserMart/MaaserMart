@@ -43,9 +43,10 @@ def listing(request: HttpRequest) -> HttpResponse:
     form = filter_form(
         filters,
         {
-            "domain": list_domains(options_repository),
-            "location": list_locations(options_repository),
-            "haskama_rabbis": list_rabbis(options_repository),
+            # Keyed by the list each group draws from, not by URL parameter.
+            "domains": list_domains(options_repository),
+            "locations": list_locations(options_repository),
+            "rabbis": list_rabbis(options_repository),
         },
     )
     return render(request, "charities/listing.html", {"page": page, "form": form})

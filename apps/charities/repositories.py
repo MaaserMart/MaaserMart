@@ -102,13 +102,14 @@ class DjangoCharityRepository:
             rows = rows.filter(locations__in=filters.locations)
         if filters.haskama_rabbis:
             rows = rows.filter(haskamas__rabbi_user__in=filters.haskama_rabbis)
-        if filters.min_rating is not None:
-            # The Doc's scale is stars (D-045). No reviews means no average, and a
-            # charity with no average cannot clear a minimum rating.
-            rows = rows.filter(
-                review_count__gt=0,
-                average_rating__gte=min(filters.min_rating, MAX_STAR_RATING),
-            )
+        if filters.min_rating is not None and (
+            MIN_STAR_RATING <= filters.min_rating <= MAX_STAR_RATING
+        ):
+            # The scale is stars (D-045). No reviews means no average, and a
+            # charity with no average cannot clear a minimum rating. A value off
+            # the scale is not saturating: it is unusable, so it filters nothing,
+            # like every other unusable value the URL parser lets through.
+            rows = rows.filter(review_count__gt=0, average_rating__gte=filters.min_rating)
         if filters.min_reviews is not None:
             rows = rows.filter(review_count__gte=filters.min_reviews)
         if filters.min_approving_haskamas is not None:
@@ -167,8 +168,3 @@ class DjangoFilterOptionsRepository:
         lands, this method returns its results and no other code changes.
         """
         return ()
-
-    @staticmethod
-    def min_star_rating() -> int:
-        """The lowest value the rating group accepts (§6.2.4, D-045)."""
-        return MIN_STAR_RATING

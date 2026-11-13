@@ -113,6 +113,19 @@ body {
   padding: 0.25rem 0;
 }
 
+/* A bounded, scrolling list of choices. The domain and location lists are
+   managed on their own and can grow without limit, so the panel must not. */
+.filters__options {
+  max-height: 14rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.filters__options:focus-visible {
+  outline: 2px solid #1a4d8f;
+  outline-offset: 2px;
+}
+
 .filters__option {
   align-items: baseline;
   color: #333;
