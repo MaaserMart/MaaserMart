@@ -4,6 +4,48 @@ body {
   margin: 0;
 }
 
+/* Top bar (D-037). The bar spans the full viewport; the rail inside it keeps the
+   links aligned with the page content so a wide screen does not look empty. */
+.nav {
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.nav__list {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  list-style: none;
+  margin: 0 auto;
+  max-width: 56rem;
+  padding: 0.75rem 1.5rem;
+}
+
+.nav__list a,
+.nav__list button {
+  background: none;
+  border: 0;
+  color: #1a4d8f;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: none;
+}
+
+.nav__list a:hover,
+.nav__list button:hover {
+  text-decoration: underline;
+}
+
+.nav form {
+  display: inline;
+}
+
 /* Charity listing */
 .listing {
   margin: 0 auto;

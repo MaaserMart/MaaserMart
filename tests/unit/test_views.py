@@ -136,6 +136,15 @@ class ListingPageTest(TestCase):
 
         self.assertContains(response, "/static/charities/img/charity-01.svg")
 
+    def test_absolute_image_url_is_not_wrapped_in_static(self) -> None:
+        # Seed data stores a full URL (D-024); {% static %} would mangle it into a 404.
+        Charity.objects.create(name="Keren L'Dugma", image="https://placehold.co/600x400.png")
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, 'src="https://placehold.co/600x400.png"')
+        self.assertNotContains(response, "/static/https")
+
     def test_next_link_is_html_escaped(self) -> None:
         for index in range(1, 4):
             Charity.objects.create(name=f"Charity {index:02d}")

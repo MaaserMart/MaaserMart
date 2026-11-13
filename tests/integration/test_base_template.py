@@ -3,6 +3,7 @@
 import re
 
 import pytest
+from django.conf import settings
 
 from tests.factories import UserFactory
 
@@ -44,7 +45,20 @@ def test_logged_in_nav_shows_logout_instead_of_login(client):
     assert 'href="/accounts/login/"' not in html
 
 
-def test_nav_is_pinned_to_the_top(client):
+def test_nav_is_pinned_to_the_top():
+    """D-037: the nav is sticky, so it stays visible while the page scrolls.
+
+    The rule lives in the stylesheet the page loads, not in a literal inline
+    <style> block, so this reads the CSS rather than the HTML.
+    """
+    css = (settings.BASE_DIR / "static" / "css" / "site.css").read_text(encoding="utf-8")
+
+    assert re.search(r"\.nav\s*\{[^}]*position:\s*sticky", css)
+
+
+def test_nav_is_a_full_width_bar_above_the_content(client):
+    """The bar spans the viewport and sits before <main>, so it never crowds the page."""
     html = client.get("/charity/").content.decode()
 
-    assert re.search(r"nav\s*\{[^}]*position:\s*sticky", html)
+    assert '<nav class="nav">' in html
+    assert html.index('class="nav"') < html.index("<main>")
