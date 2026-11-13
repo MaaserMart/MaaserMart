@@ -6,9 +6,10 @@ the mapping between rows and cards.
 
 from django.test import TestCase
 
-from apps.charities.contracts import CharityCard
-from apps.charities.models import Charity, Domain, Location
+from apps.charities.contracts import CharityCard, ReviewSummary
+from apps.charities.models import Charity, Domain, Location, Review
 from apps.charities.repositories import DjangoCharityRepository
+from tests.factories.accounts import UserFactory
 
 
 class DjangoCharityRepositoryTest(TestCase):
@@ -76,6 +77,34 @@ class DjangoCharityRepositoryTest(TestCase):
             cards = self.repository.page(offset=0, limit=10)
 
         self.assertEqual(cards[0].domains[0].name, "Free loans")
+
+    def test_maps_review_average_and_count(self) -> None:
+        """§5.3: the average rating is derived from the reviews, not stored."""
+        author = UserFactory()
+        charity = Charity.objects.create(name="Keren L'Dugma")
+        for rating in (2, 4, 5):
+            Review.objects.create(charity=charity, author=author, rating=rating)
+
+        card = self.repository.page(offset=0, limit=1)[0]
+
+        self.assertEqual(card.reviews.count, 3)
+        self.assertAlmostEqual(card.reviews.average, 11 / 3)
+
+    def test_charity_without_reviews_has_no_average(self) -> None:
+        Charity.objects.create(name="Keren L'Dugma")
+
+        card = self.repository.page(offset=0, limit=1)[0]
+
+        self.assertEqual(card.reviews, ReviewSummary(count=0, average=None))
+
+    def test_reviews_do_not_add_queries_per_charity(self) -> None:
+        author = UserFactory()
+        for index in range(1, 4):
+            charity = Charity.objects.create(name=f"Charity {index:02d}")
+            Review.objects.create(charity=charity, author=author, rating=5)
+
+        with self.assertNumQueries(3):  # page and the two prefetches
+            self.repository.page(offset=0, limit=10)
 
 
 class PublishedOnlyTest(TestCase):

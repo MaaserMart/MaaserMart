@@ -6,7 +6,7 @@ interface, which is exactly the point of keeping them separate.
 
 from django.test import SimpleTestCase
 
-from apps.charities.contracts import CharityCard, DomainTag, LocationTag
+from apps.charities.contracts import CharityCard, DomainTag, LocationTag, ReviewSummary
 from apps.charities.services import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
@@ -24,6 +24,7 @@ def card(name: str) -> CharityCard:
         image="",
         domains=(DomainTag(name="Free loans"),),
         locations=(LocationTag(name="Lakewood"),),
+        reviews=ReviewSummary(count=0, average=None),
     )
 
 

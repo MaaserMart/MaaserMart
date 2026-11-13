@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from django.db.models import QuerySet
+from django.db.models import Avg, Count, QuerySet
 
-from apps.charities.contracts import CharityCard, DomainTag, LocationTag
+from apps.charities.contracts import CharityCard, DomainTag, LocationTag, ReviewSummary
 from apps.charities.models import Charity
 
 
@@ -51,6 +51,9 @@ class DjangoCharityRepository:
     def page(self, offset: int, limit: int) -> tuple[CharityCard, ...]:
         rows = (
             self._rows()
+            # §5.3: the average rating and review count are derived per row, in
+            # the same query as the page, so the listing costs no extra round trip.
+            .annotate(review_count=Count("reviews"), average_rating=Avg("reviews__rating"))
             .prefetch_related("domains", "locations")
             .order_by("name")[offset : offset + limit]
         )
@@ -68,4 +71,5 @@ class DjangoCharityRepository:
             image=row.image,
             domains=tuple(DomainTag(name=d.name) for d in row.domains.all()),
             locations=tuple(LocationTag(name=loc.name) for loc in row.locations.all()),
+            reviews=ReviewSummary(count=row.review_count, average=row.average_rating),
         )

@@ -118,6 +118,23 @@ body {
   color: #444;
 }
 
+.charity-card__rating {
+  color: #444;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  gap: 0.25rem;
+}
+
+.charity-card__rating--empty,
+.rating__count {
+  color: #777;
+}
+
+.rating__value {
+  font-weight: 600;
+}
+
 .charity-card__meta {
   display: flex;
   flex-wrap: wrap;

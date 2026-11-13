@@ -51,6 +51,18 @@
                   <span class="charity-card__tagline">{{ charity.tagline }}</span>
                 {% endif %}
 
+                {# §5.3: the average rating on the list page, derived from the reviews. #}
+                {% if charity.reviews.count %}
+                  <span class="charity-card__rating">
+                    <span class="rating__value">{{ charity.reviews.average|floatformat:1 }} out of 5</span>
+                    <span class="rating__count">
+                      ({{ charity.reviews.count }} review{{ charity.reviews.count|pluralize }})
+                    </span>
+                  </span>
+                {% else %}
+                  <span class="charity-card__rating charity-card__rating--empty">No reviews yet</span>
+                {% endif %}
+
                 <span class="charity-card__meta">
                   {% for domain in charity.domains %}
                     <span class="chip">{{ domain.name }}</span>
