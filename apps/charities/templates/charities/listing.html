@@ -34,7 +34,12 @@
             {# TODO(comtai): point at the charity page once that bullet exists. #}
             <a class="charity-card" href="#">
               {% if charity.image %}
-                <img class="charity-card__image" src="{% static charity.image %}" alt="" width="96" height="96">
+                {% if charity.image|slice:":4" == "http" %}
+                  {# Seed data and user-supplied images are absolute URLs; {% static %} is for repo files. #}
+                  <img class="charity-card__image" src="{{ charity.image }}" alt="" width="96" height="96">
+                {% else %}
+                  <img class="charity-card__image" src="{% static charity.image %}" alt="" width="96" height="96">
+                {% endif %}
               {% else %}
                 <span class="charity-card__image charity-card__image--empty" aria-hidden="true"></span>
               {% endif %}
