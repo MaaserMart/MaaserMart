@@ -1,0 +1,66 @@
+{% comment %}
+The listing's filter sidebar (§6.2.4, D-045). Amazon-style: groups on the left,
+results on the right. Everything is a plain GET form, so filters live in the URL
+and the browser's Back button works (UC-03's implementation constraints).
+{% endcomment %}
+<form class="filters" method="get" action="{% url 'charities:listing' %}">
+  <div class="filters__head">
+    <h2 class="filters__title">Filters</h2>
+    {% if form.is_active %}
+      <span class="filters__count">{{ form.filters.active_count }} group{{ form.filters.active_count|pluralize }} on</span>
+    {% endif %}
+  </div>
+
+  {% comment %}Keep the page size the reader chose; a filter resets the page to 1
+  (§6.2.4), which is what a missing `page` parameter means.{% endcomment %}
+  <input type="hidden" name="page_size" value="{{ page.page_size }}">
+
+  {% comment %}Each group is an open panel like Amazon's. <details> needs no
+  JavaScript and keeps the page working if Alpine fails to load.{% endcomment %}
+  {% for group in form.groups %}
+    <details class="filters__group" open>
+      <summary class="filters__summary">{{ group.legend }}</summary>
+
+      {% if group.kind == "checkboxes" %}
+        {% for option in group.options %}
+          <label class="filters__option">
+            <input
+              type="checkbox"
+              name="{{ group.parameter }}"
+              value="{{ option.id }}"
+              {% if option.id in group.selected %}checked{% endif %}
+            >
+            <span class="filters__option-label">{{ option.label }}</span>
+          </label>
+        {% empty %}
+          <p class="filters__none">{{ group.empty_note }}</p>
+        {% endfor %}
+      {% else %}
+        <div class="filters__number">
+          <label class="filters__option" for="{{ group.parameter }}">
+            <input
+              id="{{ group.parameter }}"
+              name="{{ group.parameter }}"
+              type="number"
+              inputmode="numeric"
+              {% if group.min is not None %}min="{{ group.min }}"{% endif %}
+              {% if group.max is not None %}max="{{ group.max }}"{% endif %}
+              value="{{ group.value|default_if_none:'' }}"
+            >
+            <span class="filters__option-label">{{ group.label }}</span>
+          </label>
+          {% if group.none_note %}
+            <p class="filters__none">{{ group.none_note }}</p>
+          {% endif %}
+        </div>
+      {% endif %}
+    </details>
+  {% endfor %}
+
+  <div class="filters__actions">
+    <button class="filters__apply" type="submit">Apply filters</button>
+    {% if form.is_active %}
+      <a class="filters__clear" href="{% url 'charities:listing' %}?page_size={{ page.page_size }}">Clear filters</a>
+    {% endif %}
+  </div>
+</form>

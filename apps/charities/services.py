@@ -11,7 +11,7 @@ from django.db import transaction
 from apps.events.services import record_event
 
 from .contracts import CharityCard, DomainOption, LocationOption, RabbiOption
-from .filters import CharityFilters, FilterForm
+from .filters import CharityFilters, FilterForm, query_pairs, query_string, sidebar_groups
 from .models import Charity
 from .repositories import CharityRepository
 
@@ -54,12 +54,19 @@ def page_count(total: int, page_size: int) -> int:
 
 @dataclass(frozen=True)
 class Page:
-    """One page of results, plus the links needed to move between pages."""
+    """One page of results, plus the links needed to move between pages.
+
+    `filters_query` is the query string a page link must repeat so the reader
+    keeps the filters they chose; empty when nothing is filtered.
+    """
 
     items: tuple[CharityCard, ...]
     total: int
     number: int
     page_size: int
+    filters_query: str = ""
+    # The same filters as (name, value) pairs, for replaying them as hidden inputs.
+    filter_pairs: tuple[tuple[str, object], ...] = ()
 
     @property
     def page_count(self) -> int:
@@ -75,7 +82,10 @@ class Page:
 
     def query(self, number: int) -> str:
         """Query string for another page of this same result set."""
-        return urlencode({"page": number, "page_size": self.page_size})
+        parts = {"page": number, "page_size": min(self.page_size, MAX_PAGE_SIZE)}
+        if self.filters_query:
+            return f"{urlencode(parts)}&{self.filters_query}"
+        return urlencode(parts)
 
     @property
     def previous_query(self) -> str:
@@ -118,6 +128,8 @@ def list_charities(
         total=total,
         number=number,
         page_size=page_size,
+        filters_query=query_string(filters),
+        filter_pairs=query_pairs(filters),
     )
 
 
@@ -148,4 +160,4 @@ def filter_form(
     options: dict[str, tuple],
 ) -> FilterForm:
     """Assemble the sidebar from the chosen filters and the option lists."""
-    return FilterForm(filters=filters, options=options)
+    return FilterForm(filters=filters, groups=sidebar_groups(filters, options))

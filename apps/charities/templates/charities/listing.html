@@ -5,128 +5,145 @@
 
 {% block content %}
   <div class="listing">
-    <div class="listing__header">
-      <h1>Charities</h1>
+    {# §6.2.4 Filter: the sidebar narrows the listing, Amazon-style. #}
+    <aside class="listing__sidebar">
+      {% include "charities/filters.html" %}
+    </aside>
 
-      <form class="page-size" method="get">
-        {% if page.number > 1 %}
-          <input type="hidden" name="page" value="1">
-        {% endif %}
-        <label class="page-size__label" for="page-size">Page size</label>
-        <input
-          class="page-size__input"
-          id="page-size"
-          name="page_size"
-          type="number"
-          inputmode="numeric"
-          min="1"
-          max="100"
-          value="{{ page.page_size }}"
-        >
-        <button class="page-size__submit" type="submit">Go</button>
-      </form>
-    </div>
+    <div class="listing__results">
+      <div class="listing__header">
+        <h1>Charities</h1>
 
-    {% if page.items %}
-      <ul class="charity-list">
-        {% for charity in page.items %}
-          <li>
-            {# TODO(comtai): point at the charity page once that bullet exists. #}
-            <a class="charity-card" href="#">
-              {% if charity.image %}
-                {% if charity.image|slice:":4" == "http" %}
-                  {# Seed data and user-supplied images are absolute URLs; {% static %} is for repo files. #}
-                  <img class="charity-card__image" src="{{ charity.image }}" alt="" width="96" height="96">
+        <form class="page-size" method="get">
+          {% if page.number > 1 %}
+            <input type="hidden" name="page" value="1">
+          {% endif %}
+          {# Keep the filters when the reader changes the page size. #}
+          {% for name, value in page.filter_pairs %}
+            <input type="hidden" name="{{ name }}" value="{{ value }}">
+          {% endfor %}
+          <label class="page-size__label" for="page-size">Page size</label>
+          <input
+            class="page-size__input"
+            id="page-size"
+            name="page_size"
+            type="number"
+            inputmode="numeric"
+            min="1"
+            max="100"
+            value="{{ page.page_size }}"
+          >
+          <button class="page-size__submit" type="submit">Go</button>
+        </form>
+      </div>
+
+      {% if page.items %}
+        <ul class="charity-list">
+          {% for charity in page.items %}
+            <li>
+              {# TODO(comtai): point at the charity page once that bullet exists. #}
+              <a class="charity-card" href="#">
+                {% if charity.image %}
+                  {% if charity.image|slice:":4" == "http" %}
+                    {# Seed data and user-supplied images are absolute URLs; {% static %} is for repo files. #}
+                    <img class="charity-card__image" src="{{ charity.image }}" alt="" width="96" height="96">
+                  {% else %}
+                    <img class="charity-card__image" src="{% static charity.image %}" alt="" width="96" height="96">
+                  {% endif %}
                 {% else %}
-                  <img class="charity-card__image" src="{% static charity.image %}" alt="" width="96" height="96">
-                {% endif %}
-              {% else %}
-                <span class="charity-card__image charity-card__image--empty" aria-hidden="true"></span>
-              {% endif %}
-
-              <span class="charity-card__body">
-                <span class="charity-card__name">{{ charity.name }}</span>
-
-                {% if charity.tagline %}
-                  <span class="charity-card__tagline">{{ charity.tagline }}</span>
+                  <span class="charity-card__image charity-card__image--empty" aria-hidden="true"></span>
                 {% endif %}
 
-                {# §5.3: the average rating on the list page, derived from the reviews. #}
-                {% if charity.reviews.count %}
-                  <span class="charity-card__rating">
-                    <span class="rating__value">{{ charity.reviews.average|floatformat:1 }} out of 5</span>
-                    <span class="rating__count">
-                      ({{ charity.reviews.count }} review{{ charity.reviews.count|pluralize }})
-                    </span>
-                  </span>
-                {% else %}
-                  <span class="charity-card__rating charity-card__rating--empty">No reviews yet</span>
-                {% endif %}
+                <span class="charity-card__body">
+                  <span class="charity-card__name">{{ charity.name }}</span>
 
-                <span class="charity-card__meta">
-                  {% for domain in charity.domains %}
-                    <span class="chip">{{ domain.name }}</span>
-                  {% endfor %}
-
-                  {% if charity.domains and charity.locations %}
-                    <span class="chip-divider" role="separator" aria-orientation="vertical"></span>
+                  {% if charity.tagline %}
+                    <span class="charity-card__tagline">{{ charity.tagline }}</span>
                   {% endif %}
 
-                  {% for location in charity.locations %}
-                    <span class="chip chip--location">{{ location.name }}</span>
-                  {% endfor %}
+                  {# §5.3: the average rating on the list page, derived from the reviews. #}
+                  {% if charity.reviews.count %}
+                    <span class="charity-card__rating">
+                      <span class="rating__value">{{ charity.reviews.average|floatformat:1 }} out of 5</span>
+                      <span class="rating__count">
+                        ({{ charity.reviews.count }} review{{ charity.reviews.count|pluralize }})
+                      </span>
+                    </span>
+                  {% else %}
+                    <span class="charity-card__rating charity-card__rating--empty">No reviews yet</span>
+                  {% endif %}
+
+                  <span class="charity-card__meta">
+                    {% for domain in charity.domains %}
+                      <span class="chip">{{ domain.name }}</span>
+                    {% endfor %}
+
+                    {% if charity.domains and charity.locations %}
+                      <span class="chip-divider" role="separator" aria-orientation="vertical"></span>
+                    {% endif %}
+
+                    {# A location's name is not unique, so the chip states its full identity (D-045). #}
+                    {% for location in charity.locations %}
+                      <span class="chip chip--location">{{ location.label }}</span>
+                    {% endfor %}
+                  </span>
                 </span>
-              </span>
-            </a>
-          </li>
-        {% endfor %}
-      </ul>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
 
-      {% if page.page_count > 1 %}
-        <nav class="pagination" aria-label="Pagination">
-          {% if page.has_previous %}
-            <a class="pagination__step" href="?{{ page.previous_query }}" rel="prev">&larr; Prev</a>
-          {% else %}
-            <span class="pagination__step" aria-disabled="true">&larr; Prev</span>
-          {% endif %}
+        {% if page.page_count > 1 %}
+          <nav class="pagination" aria-label="Pagination">
+            {% if page.has_previous %}
+              <a class="pagination__step" href="?{{ page.previous_query }}" rel="prev">&larr; Prev</a>
+            {% else %}
+              <span class="pagination__step" aria-disabled="true">&larr; Prev</span>
+            {% endif %}
 
-          <ul class="pagination__pages">
-            {% for number, query in page.numbers %}
-              <li class="pagination__item">
-                {% if number == page.number %}
-                  <span class="pagination__page pagination__page--current" aria-current="page">{{ number }}</span>
-                {% else %}
-                  <a class="pagination__page" href="?{{ query }}">{{ number }}</a>
-                {% endif %}
-              </li>
-            {% endfor %}
-          </ul>
+            <ul class="pagination__pages">
+              {% for number, query in page.numbers %}
+                <li class="pagination__item">
+                  {% if number == page.number %}
+                    <span class="pagination__page pagination__page--current" aria-current="page">{{ number }}</span>
+                  {% else %}
+                    <a class="pagination__page" href="?{{ query }}">{{ number }}</a>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
 
-          {% if page.has_next %}
-            <a class="pagination__step" href="?{{ page.next_query }}" rel="next">Next &rarr;</a>
-          {% else %}
-            <span class="pagination__step" aria-disabled="true">Next &rarr;</span>
-          {% endif %}
+            {% if page.has_next %}
+              <a class="pagination__step" href="?{{ page.next_query }}" rel="next">Next &rarr;</a>
+            {% else %}
+              <span class="pagination__step" aria-disabled="true">Next &rarr;</span>
+            {% endif %}
 
-          <form class="jump" method="get">
-            <input type="hidden" name="page_size" value="{{ page.page_size }}">
-            <label class="jump__label" for="jump-page">Go to</label>
-            <input
-              class="jump__input"
-              id="jump-page"
-              name="page"
-              type="number"
-              inputmode="numeric"
-              min="1"
-              max="{{ page.page_count }}"
-              placeholder="{{ page.number }}"
-            >
-            <button class="jump__submit" type="submit">Go</button>
-          </form>
-        </nav>
+            <form class="jump" method="get">
+              <input type="hidden" name="page_size" value="{{ page.page_size }}">
+              {% for name, value in page.filter_pairs %}
+                <input type="hidden" name="{{ name }}" value="{{ value }}">
+              {% endfor %}
+              <label class="jump__label" for="jump-page">Go to</label>
+              <input
+                class="jump__input"
+                id="jump-page"
+                name="page"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                max="{{ page.page_count }}"
+                placeholder="{{ page.number }}"
+              >
+              <button class="jump__submit" type="submit">Go</button>
+            </form>
+          </nav>
+        {% endif %}
+      {% elif form.is_active %}
+        <p class="empty">No charities match those filters.</p>
+      {% else %}
+        <p class="empty">No charities found.</p>
       {% endif %}
-    {% else %}
-      <p class="empty">No charities found.</p>
-    {% endif %}
+    </div>
   </div>
 {% endblock %}

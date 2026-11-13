@@ -11,7 +11,8 @@ alone ambiguous, and a name in a URL would break the moment a row is renamed.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, fields
+from urllib.parse import urlencode
 
 # §6.2.4 Filter: the seven groups, in the order the sidebar shows them.
 # (parameter, repeatable?)
@@ -47,8 +48,12 @@ class CharityFilters:
 
     @property
     def is_empty(self) -> bool:
-        """True when nothing is filtered, so the listing shows every charity."""
-        return not any(getattr(self, group.name) for group in fields(self))
+        """True when nothing is filtered, so the listing shows every charity.
+
+        `0` is a real filter value (D-045), so each group is tested for being
+        unset rather than for truthiness.
+        """
+        return all(getattr(self, group.name) in ((), None) for group in fields(self))
 
     def selected(self, name: str) -> tuple[int, ...]:
         """The ids ticked in a repeatable group; empty for the numeric groups."""
@@ -59,7 +64,7 @@ class CharityFilters:
 
     def active_count(self) -> int:
         """How many groups narrow the listing, for the sidebar's summary line."""
-        return sum(1 for group in GROUPS if getattr(self, _attr(group[0])))
+        return sum(1 for group in GROUPS if getattr(self, _attr(group[0])) not in ((), None))
 
 
 def _attr(parameter: str) -> str:
@@ -69,6 +74,23 @@ def _attr(parameter: str) -> str:
         "location": "locations",
         "haskama_rabbis": "haskama_rabbis",
     }.get(parameter, parameter)
+
+
+def query_pairs(filters: CharityFilters) -> tuple[tuple[str, object], ...]:
+    """The filter groups as (parameter, value) pairs, in the doc's order."""
+    parts: list[tuple[str, object]] = []
+    for parameter, repeatable in GROUPS:
+        value = getattr(filters, _attr(parameter))
+        if repeatable:
+            parts.extend((parameter, item) for item in value)
+        elif value is not None:
+            parts.append((parameter, value))
+    return tuple(parts)
+
+
+def query_string(filters: CharityFilters) -> str:
+    """The filter groups as a query string, so a page link can repeat them."""
+    return urlencode(query_pairs(filters))
 
 
 def from_query(query) -> CharityFilters:
@@ -100,8 +122,13 @@ def _token_ids(raw_values) -> tuple[int, ...]:
 
 
 def _number(raw: str | None) -> int | None:
-    """An optional whole number; junk is treated as absent."""
-    if raw is None:
+    """An optional whole number; a blank input and junk both mean "absent".
+
+    The sidebar always submits every number input, so an unticked group arrives
+    as an empty string. Treating that as no filter keeps a submitted URL as clean
+    as a hand-written one.
+    """
+    if raw is None or raw.strip() == "":
         return None
     try:
         return int(raw)
@@ -111,15 +138,115 @@ def _number(raw: str | None) -> int | None:
 
 @dataclass(frozen=True)
 class FilterForm:
-    """The sidebar's groups with their options, ready to render (D-045).
+    """The sidebar, ready to render (D-045).
 
-    `options` maps a repeatable group's parameter name to its choices;
-    `values` maps every parameter name to what the URL asked for.
+    `groups` is the doc's order, each with its options or its single input;
+    `filters` is what the URL asked for, so the sidebar shows the live state.
     """
 
     filters: CharityFilters
-    options: dict[str, tuple] = field(default_factory=dict)
+    groups: tuple[FilterGroup, ...] = ()
 
     @property
     def is_active(self) -> bool:
         return not self.filters.is_empty
+
+
+@dataclass(frozen=True)
+class FilterOption:
+    """One tickable choice, already carrying the label it is shown with."""
+
+    id: int
+    label: str
+
+
+@dataclass(frozen=True)
+class FilterGroup:
+    """One group in the sidebar, ready to render as checkboxes or one number input.
+
+    `kind` is "checkboxes" or "number". A number group carries the bounds its
+    input accepts (`min`, `max`, may be None) and a `label` for the input; a
+    checkbox group carries `options` and the `selected` ids from the URL.
+    """
+
+    parameter: str
+    legend: str
+    kind: str
+    options: tuple[FilterOption, ...] = ()
+    selected: tuple[int, ...] = ()
+    value: int | None = None
+    label: str = ""
+    min: int | None = None
+    max: int | None = None
+    empty_note: str = ""
+    none_note: str = ""
+
+
+# The legends and input labels, in the doc's order (§6.2.4). Kept beside the
+# groups so a new group cannot be added without saying what it is called.
+LEGENDS: dict[str, str] = {
+    "domain": "Domains",
+    "location": "Locations",
+    "haskama_rabbis": "Haskamos",
+    "min_rating": "Rating",
+    "min_reviews": "Reviews",
+    "min_approving_haskamas": "Approving haskamos",
+    "max_disapproving_haskamas": "Disapproving haskamos",
+}
+
+NUMBER_LABELS: dict[str, str] = {
+    "min_rating": "stars or more",
+    "min_reviews": "reviews or more",
+    "min_approving_haskamas": "at least",
+    "max_disapproving_haskamas": "at most",
+}
+
+NONE_NOTES: dict[str, str] = {
+    "max_disapproving_haskamas": "Leave blank for no limit.",
+}
+
+EMPTY_NOTES: dict[str, str] = {
+    # D-045: the group is real but its options come from accounts, which has no
+    # rabbi search yet. Saying so beats an empty box that looks broken.
+    "haskama_rabbis": "Rabbi search is not available yet.",
+}
+
+
+def sidebar_groups(filters: CharityFilters, options: dict[str, tuple]) -> tuple[FilterGroup, ...]:
+    """Build the sidebar's groups from the URL's filters and the option lists."""
+    groups: list[FilterGroup] = []
+    for parameter, repeatable in GROUPS:
+        if repeatable:
+            choices = tuple(
+                FilterOption(id=option.id, label=_option_label(option))
+                for option in options.get(parameter, ())
+            )
+            groups.append(
+                FilterGroup(
+                    parameter=parameter,
+                    legend=LEGENDS[parameter],
+                    kind="checkboxes",
+                    options=choices,
+                    selected=filters.selected(parameter),
+                    empty_note=EMPTY_NOTES.get(parameter, "Nothing to choose from."),
+                )
+            )
+            continue
+        groups.append(
+            FilterGroup(
+                parameter=parameter,
+                legend=LEGENDS[parameter],
+                kind="number",
+                value=getattr(filters, parameter),
+                label=NUMBER_LABELS[parameter],
+                min=MIN_STAR_RATING if parameter == "min_rating" else 0,
+                max=MAX_STAR_RATING if parameter == "min_rating" else None,
+                none_note=NONE_NOTES.get(parameter, ""),
+            )
+        )
+    return tuple(groups)
+
+
+def _option_label(option) -> str:
+    """A location states its full identity; anything else has one name (D-045)."""
+    return getattr(option, "label", None) or getattr(option, "name", str(option.id))

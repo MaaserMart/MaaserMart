@@ -3,7 +3,8 @@
 from django.test import TestCase
 from django.urls import reverse
 
-from apps.charities.models import Charity, Domain, Location
+from apps.accounts.models import User
+from apps.charities.models import Charity, Domain, Location, Review
 
 
 class ListingPageTest(TestCase):
@@ -116,9 +117,14 @@ class ListingPageTest(TestCase):
         response = self.client.get(self.url)
         body = response.content.decode()
 
-        self.assertIn("chip-divider", body)
-        self.assertLess(body.index("Free loans"), body.index("chip-divider"))
-        self.assertLess(body.index("chip-divider"), body.index("Lakewood"))
+        # Locations are labelled with their full identity (D-045). The sidebar
+        # offers the same strings, so look inside the card only.
+        card = body[body.index("charity-card") :]
+        card = card[: card.index("</a>")]
+        self.assertIn("chip-divider", card)
+        chip_divider = card.index('class="chip-divider"')
+        self.assertLess(card.index("Free loans"), chip_divider)
+        self.assertLess(chip_divider, card.index("Lakewood, NJ, USA"))
 
     def test_no_divider_when_a_charity_has_no_domains(self) -> None:
         location = Location.objects.create(name="Lakewood", region="NJ", country="USA")
@@ -173,3 +179,122 @@ class ListingPageTest(TestCase):
         self.assertContains(response, "Prev")
         self.assertContains(response, 'aria-disabled="true">Next &rarr;</span>')
         self.assertNotContains(response, 'rel="next"')
+
+
+class ListingFilterPageTest(TestCase):
+    """Black-box: a visitor picks filters in the sidebar and the results narrow (§6.2.4)."""
+
+    def setUp(self) -> None:
+        self.url = reverse("charities:listing")
+        self.food = Domain.objects.create(name="Food Security")
+        self.education = Domain.objects.create(name="Education")
+        self.pantry = Charity.objects.create(name="Pantry")
+        self.school = Charity.objects.create(name="School")
+        self.pantry.domains.add(self.food)
+        self.school.domains.add(self.education)
+
+    def test_the_sidebar_offers_every_domain_and_location(self) -> None:
+        Location.objects.create(name="Lakewood", region="New Jersey", country="USA")
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, 'name="domain"')
+        self.assertContains(response, "Food Security")
+        self.assertContains(response, "Education")
+        # A location is offered by its full identity, never its name alone (D-045).
+        self.assertContains(response, "Lakewood, New Jersey, USA")
+
+    def test_a_chosen_domain_narrows_the_results(self) -> None:
+        response = self.client.get(self.url, {"domain": [self.food.id]})
+
+        self.assertContains(response, "Pantry")
+        self.assertNotContains(response, "School")
+
+    def test_two_domains_are_or(self) -> None:
+        response = self.client.get(self.url, {"domain": [self.food.id, self.education.id]})
+
+        self.assertContains(response, "Pantry")
+        self.assertContains(response, "School")
+
+    def test_a_chosen_box_stays_ticked(self) -> None:
+        response = self.client.get(self.url, {"domain": [self.food.id]})
+
+        self.assertContains(response, f'value="{self.food.id}"\n              checked', count=1)
+
+    def test_filters_and_numbers_are_and(self) -> None:
+        author = User.objects.create_user(username="reviewer", password="x")
+        Review.objects.create(charity=self.pantry, author=author, rating=5)
+        Review.objects.create(charity=self.school, author=author, rating=1)
+
+        response = self.client.get(
+            self.url, {"domain": [self.food.id, self.education.id], "min_rating": 4}
+        )
+
+        self.assertContains(response, "Pantry")
+        self.assertNotContains(response, "School")
+
+    def test_no_match_says_so(self) -> None:
+        response = self.client.get(self.url, {"min_rating": 5})
+
+        self.assertContains(response, "No charities match those filters.")
+        self.assertNotContains(response, "No charities found.")
+
+    def test_an_empty_listing_still_says_no_charities_found(self) -> None:
+        Charity.objects.all().delete()
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "No charities found.")
+
+    def test_the_filter_form_has_no_page_field_so_apply_starts_at_page_one(self) -> None:
+        """§6.2.4: setting a filter returns page 1. The sidebar form sends no
+        `page`, so a fresh Apply always lands on page 1; a URL with an explicit
+        page keeps it, because UC-03 stores the whole view state in the URL."""
+        for index in range(1, 26):
+            Charity.objects.create(name=f"Charity {index:02d}")
+
+        response = self.client.get(self.url, {"page": 3, "page_size": 5})
+
+        form = response.content.decode()
+        form = form[form.index('<form class="filters"') : form.index("</form>")]
+        self.assertNotIn('name="page"', form)
+
+    def test_a_shared_url_keeps_its_page_and_filters(self) -> None:
+        for index in range(1, 26):
+            charity = Charity.objects.create(name=f"Charity {index:02d}")
+            charity.domains.add(self.food)
+
+        response = self.client.get(self.url, {"page": 2, "page_size": 5, "domain": self.food.id})
+
+        self.assertEqual(response.context["page"].number, 2)
+
+    def test_page_links_keep_the_filters(self) -> None:
+        for index in range(1, 26):
+            charity = Charity.objects.create(name=f"Charity {index:02d}")
+            charity.domains.add(self.food)
+
+        response = self.client.get(self.url, {"domain": [self.food.id], "page_size": 5})
+
+        self.assertContains(response, f"page=2&amp;page_size=5&amp;domain={self.food.id}")
+
+    def test_page_size_form_keeps_the_filters(self) -> None:
+        response = self.client.get(self.url, {"domain": [self.food.id]})
+
+        self.assertContains(response, f'<input type="hidden" name="domain" value="{self.food.id}">')
+
+    def test_clear_filters_link_appears_only_when_filtering(self) -> None:
+        self.assertNotContains(self.client.get(self.url), "Clear filters")
+        self.assertContains(self.client.get(self.url, {"domain": [self.food.id]}), "Clear filters")
+
+    def test_a_junk_filter_value_is_ignored(self) -> None:
+        response = self.client.get(self.url, {"domain": "nonsense"})
+
+        self.assertContains(response, "Pantry")
+        self.assertContains(response, "School")
+
+    def test_the_sidebar_is_on_the_page_for_every_visitor(self) -> None:
+        """Filtering needs no account (§6.2.4 Permissions)."""
+        response = self.client.get(self.url)
+
+        self.assertContains(response, 'class="listing__sidebar"')
+        self.assertContains(response, "Apply filters")
