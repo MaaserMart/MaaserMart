@@ -83,7 +83,8 @@ class ListingTemplateContractTest(TestCase):
         """Guards the shape the template iterates over.
 
         The template reads .name, .tagline, .image, .domains, .locations and
-        each tag's .name, plus .reviews.count and .reviews.average. If a card
+        each tag's .name (and .label for a location), plus .reviews.count and
+        .reviews.average. If a card
         stops exposing one of those, or exposes a manager instead of a
         sequence, this fails loudly.
         """
@@ -93,7 +94,7 @@ class ListingTemplateContractTest(TestCase):
             tagline="t",
             image="i.svg",
             domains=(DomainTag(name="Free loans"),),
-            locations=(LocationTag(name="Lakewood"),),
+            locations=(LocationTag(name="Lakewood", region="NJ", country="USA"),),
             reviews=ReviewSummary(count=2, average=4.5),
         )
 
@@ -103,7 +104,7 @@ class ListingTemplateContractTest(TestCase):
         # The template iterates these directly, so they must be iterable and
         # must not be ORM managers left over from the old contract.
         self.assertEqual(list(card.domains)[0].name, "Free loans")
-        self.assertEqual(list(card.locations)[0].name, "Lakewood")
+        self.assertEqual(list(card.locations)[0].label, "Lakewood, NJ, USA")
         self.assertFalse(hasattr(card.domains, "all"))
         self.assertEqual(card.reviews.count, 2)
         self.assertEqual(card.reviews.average, 4.5)

@@ -5,8 +5,16 @@ from __future__ import annotations
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
-from .repositories import DjangoCharityRepository
-from .services import Page, list_charities
+from .filters import from_query
+from .repositories import DjangoCharityRepository, DjangoFilterOptionsRepository
+from .services import (
+    Page,
+    filter_form,
+    list_charities,
+    list_domains,
+    list_locations,
+    list_rabbis,
+)
 
 
 def _positive_int(raw: str | None) -> int | None:
@@ -21,12 +29,23 @@ def _positive_int(raw: str | None) -> int | None:
 
 
 def listing(request: HttpRequest) -> HttpResponse:
-    """Render the paginated list of charities."""
+    """Render the paginated list of charities, narrowed by the sidebar's filters."""
+    filters = from_query(request.GET)
+    options_repository = DjangoFilterOptionsRepository()
     page: Page = list_charities(
         # published_only stays False until the admin approval queue publishes
         # charities; see D-042.
         repository=DjangoCharityRepository(published_only=False),
         page=_positive_int(request.GET.get("page")),
         page_size=_positive_int(request.GET.get("page_size")),
+        filters=filters,
     )
-    return render(request, "charities/listing.html", {"page": page})
+    form = filter_form(
+        filters,
+        {
+            "domain": list_domains(options_repository),
+            "location": list_locations(options_repository),
+            "haskama_rabbis": list_rabbis(options_repository),
+        },
+    )
+    return render(request, "charities/listing.html", {"page": page, "form": form})

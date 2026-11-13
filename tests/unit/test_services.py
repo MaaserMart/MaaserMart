@@ -7,6 +7,7 @@ interface, which is exactly the point of keeping them separate.
 from django.test import SimpleTestCase
 
 from apps.charities.contracts import CharityCard, DomainTag, LocationTag, ReviewSummary
+from apps.charities.filters import CharityFilters
 from apps.charities.services import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
@@ -23,7 +24,7 @@ def card(name: str) -> CharityCard:
         tagline="",
         image="",
         domains=(DomainTag(name="Free loans"),),
-        locations=(LocationTag(name="Lakewood"),),
+        locations=(LocationTag(name="Lakewood", region="NJ", country="USA"),),
         reviews=ReviewSummary(count=0, average=None),
     )
 
@@ -34,10 +35,12 @@ class FakeCharityRepository:
     def __init__(self, names: list[str]) -> None:
         self._cards = tuple(card(name) for name in sorted(names))
 
-    def page(self, offset: int, limit: int) -> tuple[CharityCard, ...]:
+    def page(
+        self, offset: int, limit: int, filters: CharityFilters | None = None
+    ) -> tuple[CharityCard, ...]:
         return self._cards[offset : offset + limit]
 
-    def count(self) -> int:
+    def count(self, filters: CharityFilters | None = None) -> int:
         return len(self._cards)
 
 
