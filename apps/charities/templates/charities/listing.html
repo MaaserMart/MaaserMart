@@ -8,22 +8,22 @@
     <div class="listing__header">
       <h1>Charities</h1>
 
-      <form class="per-page" method="get">
+      <form class="page-size" method="get">
         {% if page.number > 1 %}
           <input type="hidden" name="page" value="1">
         {% endif %}
-        <label class="per-page__label" for="per-page">Per page</label>
+        <label class="page-size__label" for="page-size">Page size</label>
         <input
-          class="per-page__input"
-          id="per-page"
-          name="per_page"
+          class="page-size__input"
+          id="page-size"
+          name="page_size"
           type="number"
           inputmode="numeric"
           min="1"
           max="100"
-          value="{{ page.size }}"
+          value="{{ page.page_size }}"
         >
-        <button class="per-page__submit" type="submit">Go</button>
+        <button class="page-size__submit" type="submit">Go</button>
       </form>
     </div>
 
@@ -92,7 +92,7 @@
           {% endif %}
 
           <form class="jump" method="get">
-            <input type="hidden" name="per_page" value="{{ page.size }}">
+            <input type="hidden" name="page_size" value="{{ page.page_size }}">
             <label class="jump__label" for="jump-page">Go to</label>
             <input
               class="jump__input"

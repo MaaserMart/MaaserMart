@@ -46,9 +46,9 @@ DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
 
 
-def page_count(total: int, size: int) -> int:
+def page_count(total: int, page_size: int) -> int:
     """Pages needed for `total` rows; at least one, so a page always exists."""
-    return max(1, -(-total // size))
+    return max(1, -(-total // page_size))
 
 
 @dataclass(frozen=True)
@@ -58,11 +58,11 @@ class Page:
     items: tuple[CharityCard, ...]
     total: int
     number: int
-    size: int
+    page_size: int
 
     @property
     def page_count(self) -> int:
-        return page_count(self.total, self.size)
+        return page_count(self.total, self.page_size)
 
     @property
     def has_previous(self) -> bool:
@@ -74,7 +74,7 @@ class Page:
 
     def query(self, number: int) -> str:
         """Query string for another page of this same result set."""
-        return urlencode({"page": number, "per_page": self.size})
+        return urlencode({"page": number, "page_size": self.page_size})
 
     @property
     def previous_query(self) -> str:
@@ -104,15 +104,15 @@ def list_charities(
     page_size: int | None = None,
 ) -> Page:
     """Return one page of charities, alphabetically by name."""
-    size = clamp_page_size(page_size)
+    page_size = clamp_page_size(page_size)
     total = repository.count()
-    count = page_count(total, size)
+    count = page_count(total, page_size)
     number = max(1, min(page or 1, count))
-    offset = (number - 1) * size
+    offset = (number - 1) * page_size
 
     return Page(
-        items=repository.page(offset=offset, limit=size),
+        items=repository.page(offset=offset, limit=page_size),
         total=total,
         number=number,
-        size=size,
+        page_size=page_size,
     )

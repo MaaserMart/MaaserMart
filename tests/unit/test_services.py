@@ -68,7 +68,7 @@ class ListCharitiesPaginationTest(SimpleTestCase):
     def test_default_page_size_is_used(self) -> None:
         page = list_charities(self.repository)
 
-        self.assertEqual(page.size, DEFAULT_PAGE_SIZE)
+        self.assertEqual(page.page_size, DEFAULT_PAGE_SIZE)
         self.assertEqual(len(page.items), DEFAULT_PAGE_SIZE)
         self.assertEqual(page.total, 25)
 
@@ -129,37 +129,37 @@ class PageQueryTest(SimpleTestCase):
     """The page builds its own links, so the template holds no URL logic."""
 
     def test_next_query_carries_page_and_size(self) -> None:
-        page = Page(items=(), total=30, number=1, size=10)
+        page = Page(items=(), total=30, number=1, page_size=10)
 
-        self.assertEqual(page.next_query, "page=2&per_page=10")
+        self.assertEqual(page.next_query, "page=2&page_size=10")
 
     def test_previous_query_carries_page_and_size(self) -> None:
-        page = Page(items=(), total=30, number=3, size=10)
+        page = Page(items=(), total=30, number=3, page_size=10)
 
-        self.assertEqual(page.previous_query, "page=2&per_page=10")
+        self.assertEqual(page.previous_query, "page=2&page_size=10")
 
     def test_page_count_rounds_up(self) -> None:
-        self.assertEqual(Page(items=(), total=31, number=1, size=10).page_count, 4)
+        self.assertEqual(Page(items=(), total=31, number=1, page_size=10).page_count, 4)
 
     def test_page_count_is_one_when_empty(self) -> None:
-        self.assertEqual(Page(items=(), total=0, number=1, size=10).page_count, 1)
+        self.assertEqual(Page(items=(), total=0, number=1, page_size=10).page_count, 1)
 
     def test_numbers_window_around_the_current_page(self) -> None:
-        page = Page(items=(), total=200, number=10, size=10)
+        page = Page(items=(), total=200, number=10, page_size=10)
 
         self.assertEqual([number for number, _ in page.numbers()], [8, 9, 10, 11, 12])
 
     def test_numbers_window_is_clipped_at_the_start(self) -> None:
-        page = Page(items=(), total=200, number=1, size=10)
+        page = Page(items=(), total=200, number=1, page_size=10)
 
         self.assertEqual([number for number, _ in page.numbers()], [1, 2, 3])
 
     def test_numbers_window_is_clipped_at_the_end(self) -> None:
-        page = Page(items=(), total=200, number=20, size=10)
+        page = Page(items=(), total=200, number=20, page_size=10)
 
         self.assertEqual([number for number, _ in page.numbers()], [18, 19, 20])
 
     def test_numbers_carry_a_usable_query_string(self) -> None:
-        page = Page(items=(), total=30, number=1, size=10)
+        page = Page(items=(), total=30, number=1, page_size=10)
 
-        self.assertEqual(page.numbers()[1], (2, "page=2&per_page=10"))
+        self.assertEqual(page.numbers()[1], (2, "page=2&page_size=10"))
