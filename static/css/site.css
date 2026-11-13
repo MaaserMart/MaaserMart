@@ -1,0 +1,251 @@
+/* Minimal site styling; the templates are thin and server-rendered. */
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+}
+
+/* Top bar (D-037). The bar spans the full viewport; the rail inside it keeps the
+   links aligned with the page content so a wide screen does not look empty. */
+.nav {
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.nav__list {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  list-style: none;
+  margin: 0 auto;
+  max-width: 56rem;
+  padding: 0.75rem 1.5rem;
+}
+
+.nav__list a,
+.nav__list button {
+  background: none;
+  border: 0;
+  color: #1a4d8f;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: none;
+}
+
+.nav__list a:hover,
+.nav__list button:hover {
+  text-decoration: underline;
+}
+
+.nav form {
+  display: inline;
+}
+
+/* Charity listing */
+.listing {
+  margin: 0 auto;
+  max-width: 56rem;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+.listing__header {
+  align-items: baseline;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
+}
+
+.listing__header h1 {
+  font-size: 1.75rem;
+  margin: 0;
+}
+
+.charity-list {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.charity-card {
+  align-items: flex-start;
+  border: 1px solid #ddd;
+  border-radius: 0.5rem;
+  color: inherit;
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem;
+  text-decoration: none;
+}
+
+.charity-card:hover,
+.charity-card:focus-visible {
+  background: #f7f7f7;
+  border-color: #bbb;
+}
+
+.charity-card__image {
+  border-radius: 0.375rem;
+  flex: 0 0 6rem;
+  height: 6rem;
+  object-fit: cover;
+  width: 6rem;
+}
+
+.charity-card__image--empty {
+  background: #eee;
+}
+
+.charity-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.charity-card__name {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.charity-card__tagline {
+  color: #444;
+}
+
+.charity-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.25rem;
+}
+
+.chip {
+  background: #eef2f7;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  padding: 0.125rem 0.625rem;
+}
+
+.chip--location {
+  background: #f2f0e6;
+}
+
+.chip-divider {
+  align-self: center;
+  border-left: 1px solid #ccc;
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 1rem;
+  margin: 0 0.375rem;
+}
+
+.pagination {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 2.5rem;
+}
+
+.pagination__pages {
+  display: flex;
+  flex-direction: row;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pagination__item {
+  display: block;
+}
+
+.pagination__page,
+.pagination__step {
+  border-radius: 0.25rem;
+  color: #1a4f8a;
+  display: inline-block;
+  padding: 0.375rem 0.75rem;
+  text-decoration: none;
+}
+
+.pagination__page {
+  min-width: 2.25rem;
+  text-align: center;
+}
+
+.pagination__page:hover,
+.pagination__step:hover {
+  background: #f2f2f2;
+}
+
+.pagination__page--current {
+  background: #1a4f8a;
+  color: #fff;
+  font-weight: 600;
+}
+
+.pagination__step[aria-disabled="true"] {
+  color: #bbb;
+  pointer-events: none;
+}
+
+/* Per-page control, top right of the listing */
+.page-size {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.page-size__label,
+.jump__label {
+  color: #555;
+  font-size: 0.875rem;
+}
+
+.page-size__input,
+.jump__input {
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  font: inherit;
+  padding: 0.25rem 0.375rem;
+  width: 4.5rem;
+}
+
+.jump {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  margin-left: 0.5rem;
+}
+
+.jump__input {
+  width: 3.5rem;
+}
+
+.page-size__submit,
+.jump__submit {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.25rem 0.625rem;
+}
+
+.page-size__submit:hover,
+.jump__submit:hover {
+  background: #f2f2f2;
+}
+
+.empty {
+  color: #555;
+}

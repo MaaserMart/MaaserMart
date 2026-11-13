@@ -380,6 +380,28 @@ Rules for this file:
 - Why: A charity_updated event moves the derived "last updated" date (§5.2.21), so it must mean a real change. The admin form must not bypass the services, or changes would skip the event that D-039 relies on.
 - Where in code: `apps/charities/services.py` (`_set_visible`), `apps/charities/admin.py` (`CharityAdmin`), `apps/dashboards/management/commands/seed.py`, `tests/unit/test_charity_services.py`, `tests/integration/test_charity_admin.py`
 
+## D-042: The listing shows every charity until something can publish one
+
+- Date: 2026-11-12
+- Decided by: builder, pending CEO/COO confirmation
+- Status: Active
+- Design doc ref: §6.2.3
+- Decision: `charities.repositories.DjangoCharityRepository` takes `published_only`, default `False`, so the listing reads all charities. It flips to `True` when the admin approval queue lands, since that queue is what calls `publish_charity` (D-038). The option is a constructor argument, not a setting or a class attribute, so the behaviour is explicit at the call site and testable in both directions.
+- Why: D-038 makes `is_visible` the visibility switch and gives every charity `False` by default. Nothing calls `publish_charity` yet, because the admin approval queue is not built. Reading `is_visible` literally would render an empty listing and make the tracer bullet unverifiable. This is a deliberate, temporary departure from D-038 and it is undone by one argument when the queue exists.
+- Where in code: `apps/charities/repositories.py` (`published_only`), `apps/charities/views.py` (`listing`)
+
+---
+
+## D-043: Seeded charity images use the artwork already in the repo
+
+- Date: 2026-11-13
+- Decided by: CEO (Yosef), asked for directly
+- Status: Active (supersedes D-024)
+- Design doc ref: not in design doc
+- Decision: The dev seed gives every charity one of the twelve SVGs in `static/charities/img/`, cycling through them by index, instead of pointing at an external placeholder host. `image` holds a repo-relative path such as `charities/img/charity-04.svg`, so the template serves it through `{% static %}` the way a real uploaded path would be served.
+- Why: D-024's placeholders rendered as grey rectangles with the text "600x400", which read as broken. Only every third charity got one at all, so 133 of 200 rows had no image. The repo already ships twelve distinct images that nothing referenced. This also exercises the relative-path branch of the listing template, which the external URLs never touched, and removes a network dependency from dev.
+- Where in code: `apps/dashboards/management/commands/seed.py` (`IMAGE_PATHS`), `apps/charities/templates/charities/listing.html`
+
 ---
 
 ## Open questions

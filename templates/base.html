@@ -4,19 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}MaaserMart{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/site.css' %}">
   <script src="{% static 'vendor/htmx-2.0.4.min.js' %}"></script>
   <script defer src="{% static 'vendor/alpinejs-3.14.8.min.js' %}"></script>
-  <style>
-    /* Pinned to the top on every screen size (D-037); sticky stays in the flow, so it never covers content. */
-    nav { position: sticky; top: 0; z-index: 10; background: #fff; }
-    nav ul { display: flex; flex-wrap: wrap; gap: 1rem; list-style: none; margin: 0; padding: 0.5rem 0; }
-    nav form { display: inline; }
-  </style>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   {# Nav bar from design doc §7.2. Paths follow D-009; pages arrive with their features. #}
-  <nav>
-    <ul>
+  <nav class="nav">
+    <ul class="nav__list">
       <li><a href="/charity/">Charities</a></li>
       <li><a href="/charity/add/">Request a charity</a></li>
       <li><a href="/support/report/">Report a charity</a></li>

@@ -4,6 +4,7 @@ MaaserMart is a Django modular monolith: DTL templates, HTMX + Alpine, PostgreSQ
 
 ## Sources of truth
 - Decisions that override or fill gaps in the design doc are in docs/DECISIONS.md. Check it before following the doc.
+- The design doc (docs/design.docx, docs/requirements.docx) is the customer's document. Never edit it, and never edit any .docx, without asking the human first. Record changes as a D-entry in docs/DECISIONS.md instead.
 - If `docs/design/INDEX.md` exists (local only, git-ignored), read it and open only the sections it lists for your piece. Never read the full design doc.
 
 ## Building
