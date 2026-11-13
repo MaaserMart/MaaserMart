@@ -21,6 +21,19 @@ class LocationTag:
 
 
 @dataclass(frozen=True)
+class ReviewSummary:
+    """A charity's reviews, as the listing shows them (§5.2.15, §5.3).
+
+    `average` is None when there are no reviews, so a card with no reviews
+    cannot be mistaken for one rated 0. §5.3 derives both values from REVIEW
+    rows; nothing is stored.
+    """
+
+    count: int
+    average: float | None
+
+
+@dataclass(frozen=True)
 class CharityCard:
     """What the listing shows for one charity."""
 
@@ -30,3 +43,4 @@ class CharityCard:
     image: str
     domains: tuple[DomainTag, ...]
     locations: tuple[LocationTag, ...]
+    reviews: ReviewSummary

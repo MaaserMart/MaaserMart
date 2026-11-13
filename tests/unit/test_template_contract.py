@@ -10,8 +10,9 @@ than quietly emptying the page.
 from django.test import TestCase
 from django.urls import reverse
 
-from apps.charities.contracts import CharityCard, DomainTag, LocationTag
-from apps.charities.models import Charity, Domain, Location
+from apps.charities.contracts import CharityCard, DomainTag, LocationTag, ReviewSummary
+from apps.charities.models import Charity, Domain, Location, Review
+from tests.factories.accounts import UserFactory
 
 
 class ListingTemplateContractTest(TestCase):
@@ -58,12 +59,33 @@ class ListingTemplateContractTest(TestCase):
 
         self.assertIn("Lakewood", body)
 
+    def test_review_summary_renders(self) -> None:
+        author = UserFactory()
+        charity = Charity.objects.create(name="Keren L'Dugma")
+        for rating in (4, 5):
+            Review.objects.create(charity=charity, author=author, rating=rating)
+
+        body = self._render_single_charity()
+
+        self.assertIn("4.5 out of 5", body)
+        self.assertIn("2 reviews", body)
+
+    def test_charity_without_reviews_says_so(self) -> None:
+        """The empty state stands in for the rating, rather than showing 0 out of 5."""
+        Charity.objects.create(name="Keren L'Dugma")
+
+        body = self._render_single_charity()
+
+        self.assertIn("No reviews yet", body)
+        self.assertNotIn("out of 5", body)
+
     def test_card_type_has_the_attributes_the_template_uses(self) -> None:
         """Guards the shape the template iterates over.
 
         The template reads .name, .tagline, .image, .domains, .locations and
-        each tag's .name. If a card stops exposing one of those, or exposes a
-        manager instead of a sequence, this fails loudly.
+        each tag's .name, plus .reviews.count and .reviews.average. If a card
+        stops exposing one of those, or exposes a manager instead of a
+        sequence, this fails loudly.
         """
         card = CharityCard(
             id=1,
@@ -72,9 +94,10 @@ class ListingTemplateContractTest(TestCase):
             image="i.svg",
             domains=(DomainTag(name="Free loans"),),
             locations=(LocationTag(name="Lakewood"),),
+            reviews=ReviewSummary(count=2, average=4.5),
         )
 
-        for attribute in ("name", "tagline", "image", "domains", "locations"):
+        for attribute in ("name", "tagline", "image", "domains", "locations", "reviews"):
             self.assertTrue(hasattr(card, attribute), attribute)
 
         # The template iterates these directly, so they must be iterable and
@@ -82,6 +105,8 @@ class ListingTemplateContractTest(TestCase):
         self.assertEqual(list(card.domains)[0].name, "Free loans")
         self.assertEqual(list(card.locations)[0].name, "Lakewood")
         self.assertFalse(hasattr(card.domains, "all"))
+        self.assertEqual(card.reviews.count, 2)
+        self.assertEqual(card.reviews.average, 4.5)
 
     def test_empty_relations_do_not_render_a_divider(self) -> None:
         Charity.objects.create(name="Keren L'Dugma")
