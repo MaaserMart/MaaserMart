@@ -380,6 +380,19 @@ Rules for this file:
 - Why: A charity_updated event moves the derived "last updated" date (§5.2.21), so it must mean a real change. The admin form must not bypass the services, or changes would skip the event that D-039 relies on.
 - Where in code: `apps/charities/services.py` (`_set_visible`), `apps/charities/admin.py` (`CharityAdmin`), `apps/dashboards/management/commands/seed.py`, `tests/unit/test_charity_services.py`, `tests/integration/test_charity_admin.py`
 
+## D-044: AWS environment: RDS, SQS and SES in us-east-2
+- Date: 2026-11-13
+- Decided by: Benjamin (AWS environment owner); open to CEO override by a later entry
+- Status: Active
+- Design doc ref: §4.9, §4.12, §4.14, §4.16
+- Decision: All AWS resources live in us-east-2 (Ohio), the region AWS assigned to the account at sign-up, which it does not let us change. The code's us-east-1 defaults are overridden through `.env`.
+  - RDS: instance `maasermart-db`, PostgreSQL 16 (matching dev and CI, D-005), db.t4g.micro, 20 GB gp3, encrypted, 1-day automated backups, deletion protection on. Database `maasermart`, master user `maasermart_admin`. It is publicly accessible, but security group `maasermart-db-sg` admits port 5432 only from listed IPs, one /32 per person. RDS requires SSL (`rds.force_ssl`), which psycopg uses by default. `migrate` was applied at the migrations on `main` as of f07f9e0. Never run `seed` against it.
+  - SQS: standard queue `maasermart-tasks` (visibility timeout 300 s, 20 s long polling, SSE on). After 5 receives a message moves to the dead-letter queue `maasermart-tasks-dlq` (kept 14 days). This is §4.16's limit on how many times a task is tried.
+  - SES: domain `maasermart.com` verified with Easy DKIM (3 CNAMEs) and a `_dmarc` TXT record (`p=none`) in Namecheap DNS. Production access granted (out of the sandbox). Django sends through SES SMTP as IAM user `maasermart-ses-smtp`, whose only permission is `ses:SendRawEmail` from `*@maasermart.com`. Sender: `MaaserMart <no-reply@maasermart.com>`.
+  - Secrets (the RDS password and the SMTP login) live only in `.env` and are shared privately by the AWS owner (D-004).
+- Why: The design doc names RDS, SQS with Celery, and SES but leaves out region, sizing and limits. These choices keep cost low (§4.9), give email a bounded retry (§4.16), keep mail out of spam folders, and limit what a leaked SMTP password could do.
+- Where in code: `.env.example`, `config/settings/prod.py` (pending: the Celery queue settings, see the PR)
+
 ---
 
 ## Open questions
@@ -389,4 +402,5 @@ Rules for this file:
 - **2026-11-12: How the charities listing learns visibility without depending on approvals.** D-023 makes visibility depend on approvals' tables, but §6.1 has approvals depending on charities, not the reverse, and D-006 limits calls to listed dependencies. To be decided before the Phase 1 listing. Resolved as D-038 on 2026-11-12.
 - **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link.
 - **2026-11-12: One LINK per kind per charity?** §5.2.14 does not say, but EDIT_REQUEST.field (§5.2.8) has one `website_donate`/`website_about`/`website_contact` value with a single new_value, which implies one link per kind. `Link` has no (charity, kind) uniqueness. Adding it after data exists needs a cleanup migration, so decide before Phase 1 writes links. Resolved as D-036 on 2026-11-12.
+- **2026-11-13: How does the deployed server get AWS credentials for SQS?** Celery needs to read and write `maasermart-tasks`. The SES SMTP user cannot (it can only send email). Options: an EC2 instance role, if the site runs on EC2, or a dedicated IAM user limited to the two queues. This depends on where the site is deployed.
 - **2026-11-12: Is the nav sticky?** §7.2 says the nav tab is "always visible": on every page (done, through `base.html`), or also fixed while scrolling (not done). Cheap either way. Resolved as D-037 on 2026-11-12.

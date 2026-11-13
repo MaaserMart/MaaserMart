@@ -28,7 +28,7 @@ docker run -d --name maasermart-db -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e
 
 **2. Get the code and configure it:**
 ```bash
-git clone https://github.com/BenjaminYazdi/MaaserMart.git
+git clone https://github.com/MaaserMart/MaaserMart.git
 cd MaaserMart
 cp .env.example .env
 ```
