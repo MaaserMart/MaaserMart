@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Shaarei Tefillah">
+  <rect width="96" height="96" fill="#a8a07a"/>
+  <circle cx="48" cy="38" r="16" fill="#ffffff" opacity="0.25"/>
+  <path d="M0 96 L48 58 L96 96 Z" fill="#ffffff" opacity="0.18"/>
+  <text x="48" y="60" text-anchor="middle" font-family="system-ui, sans-serif"
+        font-size="22" font-weight="700" fill="#ffffff" opacity="0.9">ST</text>
+</svg>

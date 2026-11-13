@@ -9,8 +9,16 @@ from tests.factories import UserFactory
 pytestmark = pytest.mark.django_db
 
 
+def test_root_redirects_to_the_charity_listing(client):
+    """D-028: now that the listing exists, `/` redirects to it."""
+    response = client.get("/")
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/charity/"
+
+
 def test_home_page_shows_nav_and_local_scripts(client):
-    html = client.get("/").content.decode()
+    html = client.get("/charity/").content.decode()
 
     for path in [
         "/charity/",
@@ -30,13 +38,13 @@ def test_home_page_shows_nav_and_local_scripts(client):
 
 def test_logged_in_nav_shows_logout_instead_of_login(client):
     client.force_login(UserFactory())
-    html = client.get("/").content.decode()
+    html = client.get("/charity/").content.decode()
 
     assert 'action="/accounts/logout/"' in html
     assert 'href="/accounts/login/"' not in html
 
 
 def test_nav_is_pinned_to_the_top(client):
-    html = client.get("/").content.decode()
+    html = client.get("/charity/").content.decode()
 
     assert re.search(r"nav\s*\{[^}]*position:\s*sticky", html)

@@ -52,7 +52,18 @@ With Docker, use `docker exec maasermart-db dropdb -U postgres maasermart` and `
 ```bash
 uv run python manage.py runserver
 ```
-Open http://localhost:8000. The admin is at http://localhost:8000/django-admin/: log in as `admin` / `admin`. Every other seeded user (`member1`, `owner1`, `rabbi1`, ...) has the password `password`.
+Open http://localhost:8000. `/` redirects to the charity listing at `/charity/` (D-028). The admin is at http://localhost:8000/django-admin/: log in as `admin` / `admin`. Every other seeded user (`member1`, `owner1`, `rabbi1`, ...) has the password `password`.
+
+## The charity listing
+
+The listing lives in `apps/charities/` and is split into four layers, each with its own tests:
+
+- `contracts.py` — plain read models (`CharityCard`, `DomainTag`, `LocationTag`). No ORM behaviour, so the template cannot depend on how rows were fetched.
+- `repositories.py` — `CharityRepository` protocol and `DjangoCharityRepository`, the only code that queries Postgres.
+- `services.py` — the listing rules (order, page clamping, page size) plus `publish_charity` / `hide_charity` (D-038).
+- `views.py` / `urls.py` — `GET /charity/` takes `page` and `per_page`, clamping both.
+
+The listing currently shows every charity, including unpublished ones. Nothing publishes a charity yet, so reading `is_visible` would render an empty page; see D-042 for why, and what flips it back.
 
 ## Tests and lint
 

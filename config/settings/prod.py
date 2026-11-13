@@ -7,6 +7,14 @@ from .base import BASE_DIR, env
 
 DEBUG = False
 
+# Refuse to boot with a development secret or no allowed hosts. Checked here,
+# in production settings only, so local and test runs are unaffected.
+_INSECURE_KEY = "insecure-development-key-change-me"
+if SECRET_KEY == _INSECURE_KEY or len(SECRET_KEY) < 32:  # noqa: F405
+    raise RuntimeError("DJANGO_SECRET_KEY must be a real secret (32+ chars) in production.")
+if not ALLOWED_HOSTS:  # noqa: F405
+    raise RuntimeError("DJANGO_ALLOWED_HOSTS must be set in production.")
+
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=True)
 SESSION_COOKIE_SECURE = True
