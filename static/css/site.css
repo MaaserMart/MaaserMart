@@ -156,20 +156,20 @@ body {
 }
 
 /* Per-page control, top right of the listing */
-.per-page {
+.page-size {
   align-items: center;
   display: flex;
   gap: 0.5rem;
   margin-left: auto;
 }
 
-.per-page__label,
+.page-size__label,
 .jump__label {
   color: #555;
   font-size: 0.875rem;
 }
 
-.per-page__input,
+.page-size__input,
 .jump__input {
   border: 1px solid #ccc;
   border-radius: 0.25rem;
@@ -189,7 +189,7 @@ body {
   width: 3.5rem;
 }
 
-.per-page__submit,
+.page-size__submit,
 .jump__submit {
   background: #fff;
   border: 1px solid #ccc;
@@ -199,7 +199,7 @@ body {
   padding: 0.25rem 0.625rem;
 }
 
-.per-page__submit:hover,
+.page-size__submit:hover,
 .jump__submit:hover {
   background: #f2f2f2;
 }

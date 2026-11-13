@@ -46,7 +46,7 @@ class ListingPageTest(TestCase):
         for index in range(1, 26):
             Charity.objects.create(name=f"Charity {index:02d}")
 
-        response = self.client.get(self.url, {"page": 2, "per_page": 10})
+        response = self.client.get(self.url, {"page": 2, "page_size": 10})
 
         self.assertContains(response, "Charity 11")
         self.assertNotContains(response, "Charity 01")
@@ -54,17 +54,17 @@ class ListingPageTest(TestCase):
     def test_nonsense_page_parameter_falls_back_to_the_first_page(self) -> None:
         Charity.objects.create(name="Adas Chessed")
 
-        response = self.client.get(self.url, {"page": "abc", "per_page": "lots"})
+        response = self.client.get(self.url, {"page": "abc", "page_size": "lots"})
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Adas Chessed")
 
-    def test_per_page_is_capped(self) -> None:
+    def test_page_size_is_capped(self) -> None:
         Charity.objects.create(name="Adas Chessed")
 
-        response = self.client.get(self.url, {"per_page": 99999})
+        response = self.client.get(self.url, {"page_size": 99999})
 
-        self.assertEqual(response.context["page"].size, 100)
+        self.assertEqual(response.context["page"].page_size, 100)
 
     def test_pagination_links_appear_only_when_needed(self) -> None:
         Charity.objects.create(name="Adas Chessed")
@@ -77,24 +77,24 @@ class ListingPageTest(TestCase):
         for index in range(1, 26):
             Charity.objects.create(name=f"Charity {index:02d}")
 
-        response = self.client.get(self.url, {"per_page": 10})
+        response = self.client.get(self.url, {"page_size": 10})
 
-        self.assertContains(response, 'href="?page=2&amp;per_page=10"')
+        self.assertContains(response, 'href="?page=2&amp;page_size=10"')
         self.assertContains(response, 'aria-current="page"')
 
-    def test_per_page_input_shows_the_current_size(self) -> None:
+    def test_page_size_input_shows_the_current_size(self) -> None:
         Charity.objects.create(name="Adas Chessed")
 
-        response = self.client.get(self.url, {"per_page": 50})
+        response = self.client.get(self.url, {"page_size": 50})
 
-        self.assertContains(response, 'id="per-page"')
+        self.assertContains(response, 'id="page-size"')
         self.assertContains(response, 'value="50"')
 
-    def test_per_page_accepts_an_arbitrary_number(self) -> None:
+    def test_page_size_accepts_an_arbitrary_number(self) -> None:
         for index in range(1, 13):
             Charity.objects.create(name=f"Charity {index:02d}")
 
-        response = self.client.get(self.url, {"per_page": 7})
+        response = self.client.get(self.url, {"page_size": 7})
 
         self.assertEqual(len(response.context["page"].items), 7)
 
@@ -102,7 +102,7 @@ class ListingPageTest(TestCase):
         for index in range(1, 26):
             Charity.objects.create(name=f"Charity {index:02d}")
 
-        response = self.client.get(self.url, {"per_page": 10})
+        response = self.client.get(self.url, {"page_size": 10})
 
         self.assertContains(response, 'id="jump-page"')
 
@@ -140,16 +140,16 @@ class ListingPageTest(TestCase):
         for index in range(1, 4):
             Charity.objects.create(name=f"Charity {index:02d}")
 
-        response = self.client.get(self.url, {"per_page": 2})
+        response = self.client.get(self.url, {"page_size": 2})
 
-        self.assertContains(response, "?page=2&amp;per_page=2")
-        self.assertNotContains(response, "?page=2&amp;amp;per_page=2")
+        self.assertContains(response, "?page=2&amp;page_size=2")
+        self.assertNotContains(response, "?page=2&amp;amp;page_size=2")
 
     def test_first_page_has_next_but_no_previous_link(self) -> None:
         for index in range(1, 4):
             Charity.objects.create(name=f"Charity {index:02d}")
 
-        response = self.client.get(self.url, {"per_page": 2})
+        response = self.client.get(self.url, {"page_size": 2})
 
         self.assertContains(response, "Next")
         self.assertContains(response, 'aria-disabled="true">&larr; Prev</span>')
@@ -159,7 +159,7 @@ class ListingPageTest(TestCase):
         for index in range(1, 4):
             Charity.objects.create(name=f"Charity {index:02d}")
 
-        response = self.client.get(self.url, {"page": 2, "per_page": 2})
+        response = self.client.get(self.url, {"page": 2, "page_size": 2})
 
         self.assertContains(response, "Prev")
         self.assertContains(response, 'aria-disabled="true">Next &rarr;</span>')

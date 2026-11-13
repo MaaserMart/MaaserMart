@@ -27,6 +27,6 @@ def listing(request: HttpRequest) -> HttpResponse:
         # charities; see D-042.
         repository=DjangoCharityRepository(published_only=False),
         page=_positive_int(request.GET.get("page")),
-        page_size=_positive_int(request.GET.get("per_page")),
+        page_size=_positive_int(request.GET.get("page_size")),
     )
     return render(request, "charities/listing.html", {"page": page})
