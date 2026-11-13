@@ -1,5 +1,11 @@
-from django.urls import path  # noqa: F401
+"""URL table for the charities app."""
+
+from django.urls import path
+
+from . import views
 
 app_name = "charities"
 
-urlpatterns = []
+urlpatterns = [
+    path("", views.listing, name="listing"),
+]
