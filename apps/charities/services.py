@@ -10,7 +10,8 @@ from django.db import transaction
 
 from apps.events.services import record_event
 
-from .contracts import CharityCard
+from .contracts import CharityCard, DomainOption, LocationOption, RabbiOption
+from .filters import CharityFilters, FilterForm, query_pairs, query_string, sidebar_groups
 from .models import Charity
 from .repositories import CharityRepository
 
@@ -53,12 +54,19 @@ def page_count(total: int, page_size: int) -> int:
 
 @dataclass(frozen=True)
 class Page:
-    """One page of results, plus the links needed to move between pages."""
+    """One page of results, plus the links needed to move between pages.
+
+    `filters_query` is the query string a page link must repeat so the reader
+    keeps the filters they chose; empty when nothing is filtered.
+    """
 
     items: tuple[CharityCard, ...]
     total: int
     number: int
     page_size: int
+    filters_query: str = ""
+    # The same filters as (name, value) pairs, for replaying them as hidden inputs.
+    filter_pairs: tuple[tuple[str, object], ...] = ()
 
     @property
     def page_count(self) -> int:
@@ -74,7 +82,10 @@ class Page:
 
     def query(self, number: int) -> str:
         """Query string for another page of this same result set."""
-        return urlencode({"page": number, "page_size": self.page_size})
+        parts = {"page": number, "page_size": min(self.page_size, MAX_PAGE_SIZE)}
+        if self.filters_query:
+            return f"{urlencode(parts)}&{self.filters_query}"
+        return urlencode(parts)
 
     @property
     def previous_query(self) -> str:
@@ -102,17 +113,52 @@ def list_charities(
     repository: CharityRepository,
     page: int | None = 1,
     page_size: int | None = None,
+    filters: CharityFilters | None = None,
 ) -> Page:
-    """Return one page of charities, alphabetically by name."""
+    """Return one page of the charities `filters` keep, alphabetically by name."""
+    filters = filters or CharityFilters()
     page_size = clamp_page_size(page_size)
-    total = repository.count()
+    total = repository.count(filters)
     count = page_count(total, page_size)
     number = max(1, min(page or 1, count))
     offset = (number - 1) * page_size
 
     return Page(
-        items=repository.page(offset=offset, limit=page_size),
+        items=repository.page(offset=offset, limit=page_size, filters=filters),
         total=total,
         number=number,
         page_size=page_size,
+        filters_query=query_string(filters),
+        filter_pairs=query_pairs(filters),
     )
+
+
+# --- Filter sidebar ----------------------------------------------------------
+# The sidebar is data: a `FilterForm` holds the groups with their options, so the
+# template can render checkboxes and number inputs without knowing which group
+# repeats or what the parameter is called. The option lists are read through the
+# repository so the view could swap the source without changing this function.
+
+
+def list_domains(repository) -> tuple[DomainOption, ...]:
+    """The Domain filter group's choices (§5.2.11)."""
+    return repository.domains()
+
+
+def list_locations(repository) -> tuple[LocationOption, ...]:
+    """The Location filter group's choices (§5.2.10, D-045)."""
+    return repository.locations()
+
+
+def list_rabbis(repository) -> tuple[RabbiOption, ...]:
+    """The Haskamos filter group's choices (§6.1, D-045)."""
+    return repository.rabbis()
+
+
+def filter_form(
+    filters: CharityFilters,
+    options: dict[str, tuple],
+    requested: dict[str, int | None] | None = None,
+) -> FilterForm:
+    """Assemble the sidebar from the chosen filters and the option lists."""
+    return FilterForm(filters=filters, groups=sidebar_groups(filters, options, requested or {}))

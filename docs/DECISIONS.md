@@ -404,6 +404,54 @@ Rules for this file:
 
 ---
 
+## D-044: The listing shows each charity's average rating and review count
+
+- Date: 2026-11-13
+- Decided by: CEO (Yosef), asked for directly
+- Status: Active
+- Design doc ref: §5.2.15, §5.3, §6.2.3
+- Decision: Every card in the charity listing shows the charity's average rating and how many reviews it has. §5.3 has the listing page show "average rating", so that number is on the card, and the count goes with it because an average alone hides whether it is based on one review or fifty. Both are derived from REVIEW on read — nothing is stored, per §5.3's "derive data" rule — and a charity with no reviews shows "No reviews yet" instead of "0 out of 5", which would read as a rating of zero rather than no rating. The average is shown to one decimal. The repository annotates the page query with `Count`/`Avg` so the listing still costs no extra round trip, and the card carries the pair as `ReviewSummary(count, average)` where `average` is `None` when there are no reviews.
+- Why: §5.3 names an average rating on the list page but says nothing about a count, the empty state or rounding. Deriving both values keeps them from going stale when a review is written or edited.
+- Where in code: `apps/charities/contracts.py` (`ReviewSummary`), `apps/charities/repositories.py` (`DjangoCharityRepository.page`, `_to_card`), `apps/charities/templates/charities/listing.html`, `static/css/site.css`, `tests/unit/test_repositories.py`, `tests/unit/test_template_contract.py`
+
+## D-045: The charity listing filters by six groups, with the shape the doc gives them
+
+- Date: 2026-11-13
+- Decided by: CEO (Yosef), asked for directly; built by the filter branch
+- Status: Superseded by D-046 on 2026-11-13, for the parameter-name correction and the min_rating range rule
+- Design doc ref: §6.2.4 (Filter — FR 2), §8.5 (UC-03)
+- Decision: `charities.services.list_charities` takes an optional `filters` mapping and narrows the listing by **six** of §6.2.4's seven groups: `domain`, `location`, `haskama_rabbis`, `min_rating`, `min_reviews`, `min_approving_haskamas`, `max_disapproving_haskamas` — that is all seven, with `haskama_rabbis` present in shape but unpopulated (see the sub-decision below). Values repeat inside a group (OR) and groups combine (AND), exactly as §6.2.4 says; setting any filter returns page 1. The groups mean, precisely:
+  - `domain`, `location`, `haskama_rabbi`: repeatable **ids** (`?domain=2&domain=5`), not names. A raw value that names no row is ignored rather than rejected, the same way the listing already treats a junk `page`. Ids because names are not keys: D-032 makes LOCATION unique on (name, region, country), so a name alone can point at several locations.
+  - `min_rating`: a minimum **average star rating, 1–5 inclusive**, the scale `REVIEW.rating` holds and the one D-044 prints on the card ("4.5 out of 5"). There is no "no minimum" value: clearing the group is what clears it. A value off the scale is clamped into it and the sidebar says so (D-046). A charity with no reviews has no average, so it does not match a `min_rating` filter.
+  - `min_reviews`: minimum `ReviewSummary.count`, the number D-044 already shows on the card.
+  - `min_approving_haskamas` / `max_disapproving_haskamas`: minimum and maximum counts of `HASKAMA` rows with verdict `approve` / `disapprove`.
+  - `0` is a real value for `min_reviews`, `min_approving_haskamas` and `max_disapproving_haskamas` ("no reviews", "no disapprovals"). An absent `max_disapproving_haskamas` is no cap, because absence cannot mean zero without ruling out every charity that has one.
+- Sub-decision — `haskama_rabbis` returns nothing today: `HASKAMA` is queried in its real shape (`verdict`, `rabbi_user_id`), but the **option list** it needs is `accounts.services.search_rabbis`, which §6.2.4 names and which does not exist yet. Until it does, the group's options are empty and its parameter matches nothing; the query path is written and covered by a test with direct `HASKAMA` rows, so wiring the search in changes no other code. Asked for this way: "include whatever tables it needs in real form, but there happens to be no data, so you will have to give that result."
+- Sub-decision — no `is_visible` filtering while D-042 stands: as of 2026-11-13 the listing shows charities that are not yet admin-approved (D-042), and the CEO's instruction is that every filter applies the same way, so rating, review and haskama counts are read from all charities' rows, published or not. Repositories filter on `is_visible` only through their existing `published_only` argument, so the day the approval queue flips it, the filters narrow with the listing and nothing else changes.
+- Sub-decision — a location's label is its full identity: because a name is not unique, both the card chip and the filter checkbox label show name, region and country ("Lakewood, New Jersey, USA"), never the name alone.
+- Why: §6.2.4 fixes the groups, their URL parameter names and the OR/AND rule but leaves the rating scale, the meaning of zero, the identity of a domain/location/rabbi value and the empty-state behaviour unstated, and those choices decide the URL shape, which is expensive to change once links are shared. Picking ids and a 1–5 scale keeps the filter page, the cards and §5.2.15 saying the same thing.
+- Where in code: `apps/charities/contracts.py` (`CharityFilters`, `DomainOption`, `LocationOption`, `RabbiOption`), `apps/charities/services.py` (`list_charities`, `list_domains`, `list_locations`, `list_rabbis`), `apps/charities/repositories.py` (`CharityRepository`, `DjangoCharityRepository`), `apps/charities/views.py` (`_read_filters`), `apps/charities/templates/charities/filters.html`, `tests/unit/test_filter_service.py`
+
+---
+
+## D-046: Filter audit corrections: the rabbi parameter is singular, an out-of-range rating filters nothing, and a chosen zero still shows
+
+- Date: 2026-11-13
+- Decided by: CEO (Yosef) and Platform Lead, on the filter-branch audit
+- Status: Active
+- Design doc ref: §6.2.4 (Filter — FR 2)
+- Decision: Four corrections to D-045, three of which change what is built:
+  - The Haskamos group's URL parameter is `haskama_rabbi` — singular, exactly as §6.2.4 writes it — not `haskama_rabbis` as D-045 recorded. The group's internal name stays `haskama_rabbis` (one rabbi filters by their id, several filter by several); only the URL surface is the doc's spelling. D-045 is superseded for its parameter-name and rating-range text, and stays active for everything else.
+  - A `min_rating` outside 1–5 is **clamped into the scale, once, where the URL is read**, and the correction is shown instead of being silent: the sidebar's input displays the value actually applied and a note beside it says "Kept between 1 and 5; using 5." D-045's original clamp was invisible, which is what made `?min_rating=99` surprising; the problem was the silence, not the saturating.
+  - The Haskamos group's values are **ids**, not the usernames §6.2.4's parameter line mentions. Ids survive a rabbi renaming their public name, match the other repeatable groups, and are what `accounts.services.search_rabbis` will feed the sidebar; the doc's "username" was a design note, not a contract. Decided here because D-045 asserted ids without saying the doc names usernames.
+  - A chosen `0` in `max_disapproving_haskamas` (or any numeric group) renders as `0`, not as a blank box: the sidebar now carries an explicit `is_set` per group rather than inferring "set" from a truthy value.
+  - This entry first said an out-of-range rating would be *ignored* rather than clamped, and that was built and reviewed. The CEO then chose clamping: "clamp it, but make it clear." Clamping therefore stands, and the audit finding is answered by making the correction visible. `clamp_rating` in `filters.py` is the one place it happens, so the query, the sidebar's input and the page links cannot disagree, and `sidebar_groups` receives the raw numbers `requested_numbers` read so it can compare and say what changed.
+  - The repeatable groups' option lists scroll inside the panel (`.filters__options`, capped at 14rem) instead of growing without bound, so a real, thousands-row location list cannot push the Apply button off the page. The group table also collapsed into one `Group` entry per filter, keyed by URL parameter, so the code no longer keeps three lists that must agree.
+- Why: The audit found the parameter spelling diverging from the doc and two behaviours (the clamp, the blank-zero) that worked today but would break the moment rendering or clamping changed. The option lists were the one unbounded read on the page.
+- Where in code: `apps/charities/filters.py` (`GROUPS`, `Group`, `clamp_rating`, `requested_numbers`, `sidebar_groups`, `is_set`), `apps/charities/repositories.py` (`_narrowed`), `apps/charities/views.py`, `apps/charities/templates/charities/filters.html`, `static/css/site.css` (`.filters__options`), `tests/unit/test_filter_service.py`, `tests/unit/test_filter_repository.py`, `tests/unit/test_views.py`
+
+---
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1.
@@ -412,3 +460,6 @@ Rules for this file:
 - **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link.
 - **2026-11-12: One LINK per kind per charity?** §5.2.14 does not say, but EDIT_REQUEST.field (§5.2.8) has one `website_donate`/`website_about`/`website_contact` value with a single new_value, which implies one link per kind. `Link` has no (charity, kind) uniqueness. Adding it after data exists needs a cleanup migration, so decide before Phase 1 writes links. Resolved as D-036 on 2026-11-12.
 - **2026-11-12: Is the nav sticky?** §7.2 says the nav tab is "always visible": on every page (done, through `base.html`), or also fixed while scrolling (not done). Cheap either way. Resolved as D-037 on 2026-11-12.
+- **2026-11-13: Where is "one review per member per charity" enforced?** §8.6 and UC-05 say a member has one review per charity, but REVIEW has no unique (charity, author) constraint and `save_review` does not exist yet. Options: enforce it only in the upsert service, or add a unique constraint too (a schema change, so decide before the review form lands). See `docs/NOTES.md` N1.
+- **2026-11-13: Default statuses for APPROVAL_REQUEST and TICKET?** The doc (§5.2.5, §5.2.19) gives no default; the models default `ApprovalRequest.status` to `pending` and `Ticket.status` to `not_responded`. Those defaults are the only choices nobody has confirmed.
+- **2026-11-13: Can users pick a rabbi in the listing filter yet?** §6.2.4 makes `haskama_rabbi` repeatable by rabbi and names `accounts.services.search_rabbis`, which does not exist. The filter is wired end to end but its option list is empty, so it matches nothing. Resolved as D-045 (sub-decision) on 2026-11-13; it becomes usable when `search_rabbis` lands.
