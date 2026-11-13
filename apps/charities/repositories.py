@@ -20,11 +20,7 @@ from apps.charities.contracts import (
     RabbiOption,
     ReviewSummary,
 )
-from apps.charities.filters import (
-    MAX_STAR_RATING,
-    MIN_STAR_RATING,
-    CharityFilters,
-)
+from apps.charities.filters import CharityFilters
 from apps.charities.models import Charity, Domain, Haskama, Location
 
 
@@ -102,13 +98,10 @@ class DjangoCharityRepository:
             rows = rows.filter(locations__in=filters.locations)
         if filters.haskama_rabbis:
             rows = rows.filter(haskamas__rabbi_user__in=filters.haskama_rabbis)
-        if filters.min_rating is not None and (
-            MIN_STAR_RATING <= filters.min_rating <= MAX_STAR_RATING
-        ):
-            # The scale is stars (D-045). No reviews means no average, and a
-            # charity with no average cannot clear a minimum rating. A value off
-            # the scale is not saturating: it is unusable, so it filters nothing,
-            # like every other unusable value the URL parser lets through.
+        if filters.min_rating is not None:
+            # The scale is stars (D-045), and `from_query` has already clamped the
+            # value into it, so this compares like with like. No reviews means no
+            # average, and a charity with no average cannot clear a minimum rating.
             rows = rows.filter(review_count__gt=0, average_rating__gte=filters.min_rating)
         if filters.min_reviews is not None:
             rows = rows.filter(review_count__gte=filters.min_reviews)

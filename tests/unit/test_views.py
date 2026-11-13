@@ -303,3 +303,32 @@ class ListingFilterPageTest(TestCase):
 
         self.assertContains(response, 'class="listing__sidebar"')
         self.assertContains(response, "Apply filters")
+
+
+class RatingClampOnThePageTest(TestCase):
+    """D-046: an off-scale min_rating is clamped, and the page says so."""
+
+    def setUp(self) -> None:
+        self.url = reverse("charities:listing")
+        self.charity = Charity.objects.create(name="Keren L'Dugma")
+        author = User.objects.create_user(username="reviewer2", password="x")
+        Review.objects.create(charity=self.charity, author=author, rating=5)
+
+    def test_an_over_scale_rating_is_clamped_and_explained(self) -> None:
+        response = self.client.get(self.url, {"min_rating": 99})
+        body = response.content.decode()
+
+        self.assertEqual(response.context["page"].total, 1)
+        self.assertContains(response, "Kept between 1 and 5; using 5.")
+        # the sidebar shows the value actually applied, not the one asked for
+        self.assertRegex(body, r'name="min_rating"[\s\S]{0,200}?value="5"')
+
+    def test_an_under_scale_rating_is_clamped_and_explained(self) -> None:
+        response = self.client.get(self.url, {"min_rating": 0})
+
+        self.assertContains(response, "Kept between 1 and 5; using 1.")
+
+    def test_an_in_range_rating_has_no_note(self) -> None:
+        response = self.client.get(self.url, {"min_rating": 4})
+
+        self.assertNotContains(response, "Kept between")

@@ -111,15 +111,41 @@ def from_query(query) -> CharityFilters:
     """Build filters from request query parameters, ignoring anything unusable.
 
     A value that names no row is not an error: it is dropped, which is the same
-    treatment the listing already gives a junk `page`.
+    treatment the listing already gives a junk `page`. `min_rating` is the one
+    exception: it is clamped to the star scale rather than dropped, so a shared
+    `?min_rating=99` still means "the highest rating".
     """
     values: dict[str, tuple] = {}
     for group in GROUPS:
         if group.repeatable:
             values[group.attribute] = _token_ids(query.getlist(group.parameter))
+        elif group.parameter == "min_rating":
+            values[group.attribute] = clamp_rating(_number(query.get(group.parameter)))
         else:
             values[group.attribute] = _number(query.get(group.parameter))
     return CharityFilters(**values)
+
+
+def clamp_rating(rating: int | None) -> int | None:
+    """Hold `min_rating` inside the star scale, so the value is never off it.
+
+    Clamping happens once, at the edge where the URL is read, so everything
+    downstream — the query, the sidebar's input, the page links — sees the same
+    number. `?min_rating=99` therefore means "5 stars or more" and the sidebar
+    shows that 5, rather than the reader silently getting something else (D-046).
+    """
+    if rating is None:
+        return None
+    return max(MIN_STAR_RATING, min(rating, MAX_STAR_RATING))
+
+
+def requested_numbers(query) -> dict[str, int | None]:
+    """The numeric groups exactly as the URL asked, before any clamping."""
+    numbers: dict[str, int | None] = {}
+    for group in GROUPS:
+        if not group.repeatable:
+            numbers[group.parameter] = _number(query.get(group.parameter))
+    return numbers
 
 
 def _token_ids(raw_values) -> tuple[int, ...]:
@@ -197,6 +223,9 @@ class FilterGroup:
     max: int | None = None
     empty_note: str = ""
     none_note: str = ""
+    # Set when the value shown is not the one the URL asked for, so the reader is
+    # told the filter they got, not left to guess.
+    adjusted_note: str = ""
 
 
 # The legends and input labels, in the doc's order (§6.2.4). Kept beside the
@@ -230,13 +259,19 @@ EMPTY_NOTES: dict[str, str] = {
 }
 
 
-def sidebar_groups(filters: CharityFilters, options: dict[str, tuple]) -> tuple[FilterGroup, ...]:
+def sidebar_groups(
+    filters: CharityFilters,
+    options: dict[str, tuple],
+    requested: dict[str, int | None] | None = None,
+) -> tuple[FilterGroup, ...]:
     """Build the sidebar's groups from the URL's filters and the option lists.
 
     `options` is keyed by what a group draws its choices from (`domains`,
     `locations`, `rabbis`), not by URL parameter, so the view does not have to
-    know which parameter asks for which list.
+    know which parameter asks for which list. `requested` holds the raw numbers
+    the URL asked for, so a clamped value can be called out.
     """
+    requested = requested or {}
     groups: list[FilterGroup] = []
     for group in GROUPS:
         parameter = group.parameter
@@ -269,9 +304,18 @@ def sidebar_groups(filters: CharityFilters, options: dict[str, tuple]) -> tuple[
                 min=MIN_STAR_RATING if parameter == "min_rating" else 0,
                 max=MAX_STAR_RATING if parameter == "min_rating" else None,
                 none_note=NONE_NOTES.get(parameter, ""),
+                adjusted_note=_adjusted_note(parameter, requested, value),
             )
         )
     return tuple(groups)
+
+
+def _adjusted_note(parameter: str, requested: dict[str, int | None], value: int | None) -> str:
+    """Say so when the URL asked for a value the sidebar is not showing."""
+    asked = requested.get(parameter)
+    if asked is None or asked == value:
+        return ""
+    return f"Kept between {MIN_STAR_RATING} and {MAX_STAR_RATING}; using {value}."
 
 
 def _option_label(option) -> str:
