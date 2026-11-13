@@ -271,3 +271,40 @@ class FilterOptionsRepositoryTest(TestCase):
         from apps.charities.repositories import DjangoFilterOptionsRepository
 
         self.assertEqual(DjangoFilterOptionsRepository().rabbis(), ())
+
+
+class OutOfRangeRatingTest(TestCase):
+    """D-046: a min_rating outside 1-5 is ignored, not saturated to 5."""
+
+    def setUp(self) -> None:
+        self.rated = Charity.objects.create(name="Rated")
+        self.unrated = Charity.objects.create(name="Unrated")
+        author = UserFactory()
+        Review.objects.create(charity=self.rated, author=author, rating=5)
+
+    def test_below_the_scale_filters_nothing(self) -> None:
+        cards = DjangoCharityRepository().page(0, 10, CharityFilters(min_rating=0))
+
+        self.assertEqual([c.name for c in cards], ["Rated", "Unrated"])
+
+    def test_above_the_scale_filters_nothing(self) -> None:
+        cards = DjangoCharityRepository().page(0, 10, CharityFilters(min_rating=99))
+
+        self.assertEqual([c.name for c in cards], ["Rated", "Unrated"])
+
+    def test_inside_the_scale_still_filters(self) -> None:
+        cards = DjangoCharityRepository().page(0, 10, CharityFilters(min_rating=5))
+
+        self.assertEqual([c.name for c in cards], ["Rated"])
+
+
+class ScrollableOptionListTest(TestCase):
+    """D-046: the repeatable groups' options scroll instead of unrolling."""
+
+    def test_options_are_wrapped_in_a_scrollable_panel(self) -> None:
+        from django.test import Client
+
+        body = Client().get("/charity/").content.decode()
+
+        self.assertIn('class="filters__options"', body)
+        self.assertIn("tabindex", body)

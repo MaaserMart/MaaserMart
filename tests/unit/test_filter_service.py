@@ -131,7 +131,7 @@ class SidebarGroupsTest(SimpleTestCase):
             [
                 "domain",
                 "location",
-                "haskama_rabbis",
+                "haskama_rabbi",
                 "min_rating",
                 "min_reviews",
                 "min_approving_haskamas",
@@ -144,7 +144,7 @@ class SidebarGroupsTest(SimpleTestCase):
             id = 3
             name = "Free loans"
 
-        groups = sidebar_groups(CharityFilters(), {"domain": (Option(),)})
+        groups = sidebar_groups(CharityFilters(), {"domains": (Option(),)})
 
         domain = groups[0]
         self.assertEqual(domain.kind, "checkboxes")
@@ -155,7 +155,7 @@ class SidebarGroupsTest(SimpleTestCase):
             id = 3
             name = "Free loans"
 
-        groups = sidebar_groups(CharityFilters(domains=(3,)), {"domain": (Option(),)})
+        groups = sidebar_groups(CharityFilters(domains=(3,)), {"domains": (Option(),)})
 
         self.assertEqual(groups[0].selected, (3,))
 
@@ -163,7 +163,7 @@ class SidebarGroupsTest(SimpleTestCase):
         """D-045: the rabbi group is real but accounts cannot list rabbis yet."""
         groups = sidebar_groups(CharityFilters(), {})
 
-        rabbis = next(group for group in groups if group.parameter == "haskama_rabbis")
+        rabbis = next(group for group in groups if group.parameter == "haskama_rabbi")
         self.assertEqual(rabbis.options, ())
         self.assertTrue(rabbis.empty_note)
 
@@ -186,7 +186,7 @@ class SidebarGroupsTest(SimpleTestCase):
             def label(self) -> str:
                 return f"{self.name}, {self.region}, {self.country}"
 
-        groups = sidebar_groups(CharityFilters(), {"location": (Option(),)})
+        groups = sidebar_groups(CharityFilters(), {"locations": (Option(),)})
 
         location = next(group for group in groups if group.parameter == "location")
         self.assertEqual(location.options[0].label, "Lakewood, New Jersey, USA")
@@ -245,3 +245,73 @@ class BlankNumberTest(SimpleTestCase):
         self.assertIsNone(filters.min_rating)
         self.assertIsNone(filters.min_reviews)
         self.assertEqual(query_string(filters), "domain=3")
+
+
+class DocParameterNamesTest(SimpleTestCase):
+    """The URL surface is §6.2.4's, verbatim (D-046)."""
+
+    def test_the_parameters_are_the_docs_own_spelling(self) -> None:
+        from apps.charities.filters import GROUPS
+
+        self.assertEqual(
+            [group.parameter for group in GROUPS],
+            [
+                "domain",
+                "location",
+                "haskama_rabbi",
+                "min_rating",
+                "min_reviews",
+                "min_approving_haskamas",
+                "max_disapproving_haskamas",
+            ],
+        )
+
+    def test_the_rabbi_parameter_is_singular_like_the_doc(self) -> None:
+        filters = from_query(_Query({"haskama_rabbi": ["7"]}))
+
+        self.assertEqual(filters.haskama_rabbis, (7,))
+        self.assertEqual(query_string(filters), "haskama_rabbi=7")
+
+    def test_the_plural_spelling_is_not_accepted(self) -> None:
+        """D-045 used `haskama_rabbis`; D-046 replaced it, not aliased it."""
+        filters = from_query(_Query({"haskama_rabbis": ["7"]}))
+
+        self.assertEqual(filters.haskama_rabbis, ())
+
+
+class OutOfRangeRatingTest(SimpleTestCase):
+    """A rating off the 1-5 scale filters nothing, rather than saturating (D-046)."""
+
+    def test_a_rating_above_the_scale_is_no_filter(self) -> None:
+        groups = sidebar_groups(CharityFilters(min_rating=99), {})
+        rating = next(g for g in groups if g.parameter == "min_rating")
+
+        self.assertEqual(rating.max, MAX_STAR_RATING)
+        self.assertTrue(rating.is_set)  # it is still set; the repository ignores it
+
+
+class ZeroIsSetTest(SimpleTestCase):
+    """A chosen 0 is a filter, so the sidebar must not render it as blank (D-046)."""
+
+    def test_zero_reads_as_set(self) -> None:
+        groups = sidebar_groups(CharityFilters(max_disapproving_haskamas=0), {})
+        most = next(g for g in groups if g.parameter == "max_disapproving_haskamas")
+
+        self.assertTrue(most.is_set)
+        self.assertEqual(most.value, 0)
+
+    def test_absent_does_not_read_as_set(self) -> None:
+        groups = sidebar_groups(CharityFilters(), {})
+        most = next(g for g in groups if g.parameter == "max_disapproving_haskamas")
+
+        self.assertFalse(most.is_set)
+        self.assertIsNone(most.value)
+
+    def test_a_ticked_group_reads_as_set(self) -> None:
+        class Option:
+            id = 2
+            name = "Free loans"
+
+        groups = sidebar_groups(CharityFilters(domains=(2,)), {"domains": (Option(),)})
+
+        self.assertTrue(groups[0].is_set)

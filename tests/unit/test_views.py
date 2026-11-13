@@ -1,5 +1,7 @@
 """Tests for the listing page."""
 
+import re
+
 from django.test import TestCase
 from django.urls import reverse
 
@@ -218,8 +220,11 @@ class ListingFilterPageTest(TestCase):
 
     def test_a_chosen_box_stays_ticked(self) -> None:
         response = self.client.get(self.url, {"domain": [self.food.id]})
+        box = re.search(
+            rf'name="domain"\s*value="{self.food.id}"\s*checked', response.content.decode()
+        )
 
-        self.assertContains(response, f'value="{self.food.id}"\n              checked', count=1)
+        self.assertIsNotNone(box, "the chosen domain should render ticked")
 
     def test_filters_and_numbers_are_and(self) -> None:
         author = User.objects.create_user(username="reviewer", password="x")

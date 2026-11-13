@@ -14,17 +14,40 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from urllib.parse import urlencode
 
-# §6.2.4 Filter: the seven groups, in the order the sidebar shows them.
-# (parameter, repeatable?)
-GROUPS: tuple[tuple[str, bool], ...] = (
-    ("domain", True),
-    ("location", True),
-    ("haskama_rabbis", True),
-    ("min_rating", False),
-    ("min_reviews", False),
-    ("min_approving_haskamas", False),
-    ("max_disapproving_haskamas", False),
+
+@dataclass(frozen=True)
+class Group:
+    """One of §6.2.4's filter groups: its URL parameter and where it is stored.
+
+    One table for all three facts that must agree — the parameter the URL uses,
+    the attribute on `CharityFilters`, and whether the group repeats — so adding
+    or renaming a group is a single entry here.
+    """
+
+    parameter: str
+    attribute: str
+    repeatable: bool
+
+
+# §6.2.4 Filter: the seven groups, in the order the sidebar shows them. The
+# parameter names are the doc's, verbatim, including its singular
+# `haskama_rabbi` (D-046).
+GROUPS: tuple[Group, ...] = (
+    Group("domain", "domains", repeatable=True),
+    Group("location", "locations", repeatable=True),
+    Group("haskama_rabbi", "haskama_rabbis", repeatable=True),
+    Group("min_rating", "min_rating", repeatable=False),
+    Group("min_reviews", "min_reviews", repeatable=False),
+    Group("min_approving_haskamas", "min_approving_haskamas", repeatable=False),
+    Group("max_disapproving_haskamas", "max_disapproving_haskamas", repeatable=False),
 )
+
+# The parameter a repeatable group's option list is looked up under.
+OPTION_SOURCES: dict[str, str] = {
+    "domain": "domains",
+    "location": "locations",
+    "haskama_rabbi": "rabbis",
+}
 
 # §5.2.15 REVIEW.rating is 1–5, and D-044 prints the average out of 5.
 MIN_STAR_RATING, MAX_STAR_RATING = 1, 5
@@ -55,36 +78,27 @@ class CharityFilters:
         """
         return all(getattr(self, group.name) in ((), None) for group in fields(self))
 
-    def selected(self, name: str) -> tuple[int, ...]:
+    def selected(self, parameter: str) -> tuple[int, ...]:
         """The ids ticked in a repeatable group; empty for the numeric groups."""
-        group = next((g for g in GROUPS if g[0] == name), None)
-        if group is None or not group[1]:
+        group = next((g for g in GROUPS if g.parameter == parameter), None)
+        if group is None or not group.repeatable:
             return ()
-        return getattr(self, _attr(name))
+        return getattr(self, group.attribute)
 
     def active_count(self) -> int:
         """How many groups narrow the listing, for the sidebar's summary line."""
-        return sum(1 for group in GROUPS if getattr(self, _attr(group[0])) not in ((), None))
-
-
-def _attr(parameter: str) -> str:
-    """§6.2.4's parameter names are plural-free: `domain` reads `domains`."""
-    return {
-        "domain": "domains",
-        "location": "locations",
-        "haskama_rabbis": "haskama_rabbis",
-    }.get(parameter, parameter)
+        return sum(1 for group in GROUPS if getattr(self, group.attribute) not in ((), None))
 
 
 def query_pairs(filters: CharityFilters) -> tuple[tuple[str, object], ...]:
     """The filter groups as (parameter, value) pairs, in the doc's order."""
     parts: list[tuple[str, object]] = []
-    for parameter, repeatable in GROUPS:
-        value = getattr(filters, _attr(parameter))
-        if repeatable:
-            parts.extend((parameter, item) for item in value)
+    for group in GROUPS:
+        value = getattr(filters, group.attribute)
+        if group.repeatable:
+            parts.extend((group.parameter, item) for item in value)
         elif value is not None:
-            parts.append((parameter, value))
+            parts.append((group.parameter, value))
     return tuple(parts)
 
 
@@ -100,11 +114,11 @@ def from_query(query) -> CharityFilters:
     treatment the listing already gives a junk `page`.
     """
     values: dict[str, tuple] = {}
-    for parameter, repeatable in GROUPS:
-        if repeatable:
-            values[_attr(parameter)] = _token_ids(query.getlist(parameter))
+    for group in GROUPS:
+        if group.repeatable:
+            values[group.attribute] = _token_ids(query.getlist(group.parameter))
         else:
-            values[parameter] = _number(query.get(parameter))
+            values[group.attribute] = _number(query.get(group.parameter))
     return CharityFilters(**values)
 
 
@@ -175,6 +189,9 @@ class FilterGroup:
     options: tuple[FilterOption, ...] = ()
     selected: tuple[int, ...] = ()
     value: int | None = None
+    # True when this group narrows the listing. A chosen `0` is a real filter, so
+    # the template needs this rather than testing `value` for truthiness.
+    is_set: bool = False
     label: str = ""
     min: int | None = None
     max: int | None = None
@@ -184,10 +201,11 @@ class FilterGroup:
 
 # The legends and input labels, in the doc's order (§6.2.4). Kept beside the
 # groups so a new group cannot be added without saying what it is called.
+# Keyed by §6.2.4's parameter names, in the doc's order.
 LEGENDS: dict[str, str] = {
     "domain": "Domains",
     "location": "Locations",
-    "haskama_rabbis": "Haskamos",
+    "haskama_rabbi": "Haskamos",
     "min_rating": "Rating",
     "min_reviews": "Reviews",
     "min_approving_haskamas": "Approving haskamos",
@@ -208,18 +226,24 @@ NONE_NOTES: dict[str, str] = {
 EMPTY_NOTES: dict[str, str] = {
     # D-045: the group is real but its options come from accounts, which has no
     # rabbi search yet. Saying so beats an empty box that looks broken.
-    "haskama_rabbis": "Rabbi search is not available yet.",
+    "haskama_rabbi": "Rabbi search is not available yet.",
 }
 
 
 def sidebar_groups(filters: CharityFilters, options: dict[str, tuple]) -> tuple[FilterGroup, ...]:
-    """Build the sidebar's groups from the URL's filters and the option lists."""
+    """Build the sidebar's groups from the URL's filters and the option lists.
+
+    `options` is keyed by what a group draws its choices from (`domains`,
+    `locations`, `rabbis`), not by URL parameter, so the view does not have to
+    know which parameter asks for which list.
+    """
     groups: list[FilterGroup] = []
-    for parameter, repeatable in GROUPS:
-        if repeatable:
+    for group in GROUPS:
+        parameter = group.parameter
+        if group.repeatable:
             choices = tuple(
                 FilterOption(id=option.id, label=_option_label(option))
-                for option in options.get(parameter, ())
+                for option in options.get(OPTION_SOURCES[parameter], ())
             )
             groups.append(
                 FilterGroup(
@@ -228,16 +252,19 @@ def sidebar_groups(filters: CharityFilters, options: dict[str, tuple]) -> tuple[
                     kind="checkboxes",
                     options=choices,
                     selected=filters.selected(parameter),
+                    is_set=bool(filters.selected(parameter)),
                     empty_note=EMPTY_NOTES.get(parameter, "Nothing to choose from."),
                 )
             )
             continue
+        value = getattr(filters, group.attribute)
         groups.append(
             FilterGroup(
                 parameter=parameter,
                 legend=LEGENDS[parameter],
                 kind="number",
-                value=getattr(filters, parameter),
+                value=value,
+                is_set=value is not None,
                 label=NUMBER_LABELS[parameter],
                 min=MIN_STAR_RATING if parameter == "min_rating" else 0,
                 max=MAX_STAR_RATING if parameter == "min_rating" else None,
