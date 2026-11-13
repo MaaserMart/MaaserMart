@@ -10,7 +10,8 @@ from django.db import transaction
 
 from apps.events.services import record_event
 
-from .contracts import CharityCard
+from .contracts import CharityCard, DomainOption, LocationOption, RabbiOption
+from .filters import CharityFilters, FilterForm
 from .models import Charity
 from .repositories import CharityRepository
 
@@ -102,17 +103,49 @@ def list_charities(
     repository: CharityRepository,
     page: int | None = 1,
     page_size: int | None = None,
+    filters: CharityFilters | None = None,
 ) -> Page:
-    """Return one page of charities, alphabetically by name."""
+    """Return one page of the charities `filters` keep, alphabetically by name."""
+    filters = filters or CharityFilters()
     page_size = clamp_page_size(page_size)
-    total = repository.count()
+    total = repository.count(filters)
     count = page_count(total, page_size)
     number = max(1, min(page or 1, count))
     offset = (number - 1) * page_size
 
     return Page(
-        items=repository.page(offset=offset, limit=page_size),
+        items=repository.page(offset=offset, limit=page_size, filters=filters),
         total=total,
         number=number,
         page_size=page_size,
     )
+
+
+# --- Filter sidebar ----------------------------------------------------------
+# The sidebar is data: a `FilterForm` holds the groups with their options, so the
+# template can render checkboxes and number inputs without knowing which group
+# repeats or what the parameter is called. The option lists are read through the
+# repository so the view could swap the source without changing this function.
+
+
+def list_domains(repository) -> tuple[DomainOption, ...]:
+    """The Domain filter group's choices (§5.2.11)."""
+    return repository.domains()
+
+
+def list_locations(repository) -> tuple[LocationOption, ...]:
+    """The Location filter group's choices (§5.2.10, D-045)."""
+    return repository.locations()
+
+
+def list_rabbis(repository) -> tuple[RabbiOption, ...]:
+    """The Haskamos filter group's choices (§6.1, D-045)."""
+    return repository.rabbis()
+
+
+def filter_form(
+    filters: CharityFilters,
+    options: dict[str, tuple],
+) -> FilterForm:
+    """Assemble the sidebar from the chosen filters and the option lists."""
+    return FilterForm(filters=filters, options=options)
