@@ -1,4 +1,70 @@
 # MaaserMart
-Repo for MaaserMart.
-See MaaserMart.com.
-See Hosting info at: https://ap.www.namecheap.com/domains/domaincontrolpanel/maasermart.com/advancedns
+
+Charity discovery for maaser giving. See MaaserMart.com.
+
+A Django app with PostgreSQL, HTMX and Alpine.
+
+## Setup
+
+You need [uv](https://docs.astral.sh/uv/) and PostgreSQL 16. uv installs the right Python (3.13) for you.
+
+**1. Start Postgres 16**, either with Homebrew or with Docker.
+
+Homebrew:
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+createdb maasermart
+```
+On macOS, Postgres may refuse to start, with "postmaster became multithreaded" in `$(brew --prefix)/var/log/postgresql@16.log`. In that case, start it with a locale set (this lasts until you reboot):
+```bash
+LC_ALL=en_US.UTF-8 "$(brew --prefix postgresql@16)/bin/pg_ctl" -D "$(brew --prefix)/var/postgresql@16" -l "$(brew --prefix)/var/log/postgresql@16.log" start
+```
+
+Docker:
+```bash
+docker run -d --name maasermart-db -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=maasermart postgres:16
+```
+
+**2. Get the code and configure it:**
+```bash
+git clone https://github.com/BenjaminYazdi/MaaserMart.git
+cd MaaserMart
+cp .env.example .env
+```
+If you use Docker, change `DATABASE_URL` in `.env` to `postgres://postgres:postgres@localhost:5432/maasermart`.
+
+**3. Install, create the tables, and add fake data:**
+```bash
+uv sync
+uv run python manage.py migrate
+uv run python manage.py seed
+```
+`seed` adds about 200 fake charities, with users, reviews, haskamas and events. It only runs on an empty database and refuses otherwise. To start over with Homebrew Postgres:
+```bash
+dropdb maasermart && createdb maasermart
+uv run python manage.py migrate
+uv run python manage.py seed
+```
+With Docker, use `docker exec maasermart-db dropdb -U postgres maasermart` and `docker exec maasermart-db createdb -U postgres maasermart` for the first line.
+
+**4. Run it:**
+```bash
+uv run python manage.py runserver
+```
+Open http://localhost:8000. The admin is at http://localhost:8000/django-admin/: log in as `admin` / `admin`. Every other seeded user (`member1`, `owner1`, `rabbi1`, ...) has the password `password`.
+
+## Tests and lint
+
+CI runs these on every pull request; run them before you push:
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run python manage.py makemigrations --check --dry-run
+uv run pytest
+```
+`uv run ruff format .` fixes formatting.
+
+## Working on the code
+
+Read [CLAUDE.md](CLAUDE.md) for the project rules, and [docs/DECISIONS.md](docs/DECISIONS.md) for the decisions that override or fill gaps in the design doc.

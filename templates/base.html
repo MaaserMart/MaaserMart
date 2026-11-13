@@ -1,0 +1,43 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MaaserMart{% endblock %}</title>
+  <script src="{% static 'vendor/htmx-2.0.4.min.js' %}"></script>
+  <script defer src="{% static 'vendor/alpinejs-3.14.8.min.js' %}"></script>
+  <style>
+    /* Pinned to the top on every screen size (D-037); sticky stays in the flow, so it never covers content. */
+    nav { position: sticky; top: 0; z-index: 10; background: #fff; }
+    nav ul { display: flex; flex-wrap: wrap; gap: 1rem; list-style: none; margin: 0; padding: 0.5rem 0; }
+    nav form { display: inline; }
+  </style>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  {# Nav bar from design doc §7.2. Paths follow D-009; pages arrive with their features. #}
+  <nav>
+    <ul>
+      <li><a href="/charity/">Charities</a></li>
+      <li><a href="/charity/add/">Request a charity</a></li>
+      <li><a href="/support/report/">Report a charity</a></li>
+      <li><a href="/tools/">Maaser tools</a></li>
+      <li><a href="/dashboard/">Dashboard</a></li>
+      <li><a href="/support/help/">Help</a></li>
+      {% if user.is_authenticated %}
+        <li>
+          <form method="post" action="/accounts/logout/">
+            {% csrf_token %}
+            <button type="submit">Log out</button>
+          </form>
+        </li>
+      {% else %}
+        <li><a href="/accounts/login/">Log in</a></li>
+        <li><a href="/accounts/signup/">Sign up</a></li>
+      {% endif %}
+    </ul>
+  </nav>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
