@@ -24,3 +24,6 @@ docs/design/
 
 # Local-only session roster
 .team/
+
+# Local Postgres data directory (a live cluster, never committed)
+.pgdata/
