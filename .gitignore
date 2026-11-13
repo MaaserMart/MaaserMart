@@ -27,3 +27,6 @@ docs/design/
 
 # Local Postgres data directory (a live cluster, never committed)
 .pgdata/
+
+# Generated local secret for dev.sh; never committed
+.env.local-key
