@@ -115,3 +115,58 @@ class ListingTemplateContractTest(TestCase):
         body = self._render_single_charity()
 
         self.assertNotIn("chip-divider", body)
+
+
+class FilterSidebarContractTest(TestCase):
+    """The sidebar template reads only fields `FilterForm` guarantees (D-045).
+
+    Django templates fail silently, so a group that loses its `legend` or
+    `kind` would render an empty panel with no error. These pin the contract.
+    """
+
+    def setUp(self) -> None:
+        self.url = reverse("charities:listing")
+
+    def test_every_group_renders_a_legend(self) -> None:
+        body = self.client.get(self.url).content.decode()
+
+        for legend in [
+            "Domains",
+            "Locations",
+            "Haskamos",
+            "Rating",
+            "Reviews",
+            "Approving haskamos",
+            "Disapproving haskamos",
+        ]:
+            self.assertIn(legend, body)
+
+    def test_checkbox_groups_render_inputs_named_by_their_parameter(self) -> None:
+        Domain.objects.create(name="Free loans")
+        Location.objects.create(name="Lakewood", region="NJ", country="USA")
+
+        body = self.client.get(self.url).content.decode()
+
+        self.assertIn('type="checkbox"', body)
+        self.assertIn('name="domain"', body)
+        self.assertIn('name="location"', body)
+
+    def test_number_groups_render_one_bounded_input_each(self) -> None:
+        body = self.client.get(self.url).content.decode()
+
+        self.assertIn('name="min_rating"', body)
+        self.assertIn('min="1"', body)
+        self.assertIn('max="5"', body)
+        self.assertIn('name="max_disapproving_haskamas"', body)
+
+    def test_the_form_is_a_get(self) -> None:
+        """Filters live in the URL, so the form must not post (UC-03)."""
+        body = self.client.get(self.url).content.decode()
+
+        self.assertIn('<form class="filters" method="get"', body)
+
+    def test_no_template_comment_leaks_into_the_page(self) -> None:
+        body = self.client.get(self.url).content.decode()
+
+        self.assertNotIn("{#", body)
+        self.assertNotIn("{%", body)
