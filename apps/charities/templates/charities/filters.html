@@ -54,7 +54,9 @@ and the browser's Back button works (UC-03's implementation constraints).
             >
             <span class="filters__option-label">{{ group.label }}</span>
           </label>
-          {% if group.none_note %}
+          {% if group.adjusted_note %}
+            <p class="filters__adjusted" role="status">{{ group.adjusted_note }}</p>
+          {% elif group.none_note %}
             <p class="filters__none">{{ group.none_note }}</p>
           {% endif %}
         </div>

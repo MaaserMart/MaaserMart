@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
-from .filters import from_query
+from .filters import from_query, requested_numbers
 from .repositories import DjangoCharityRepository, DjangoFilterOptionsRepository
 from .services import (
     Page,
@@ -48,5 +48,7 @@ def listing(request: HttpRequest) -> HttpResponse:
             "locations": list_locations(options_repository),
             "rabbis": list_rabbis(options_repository),
         },
+        # Passed so the sidebar can say when a value was clamped into range.
+        requested=requested_numbers(request.GET),
     )
     return render(request, "charities/listing.html", {"page": page, "form": form})

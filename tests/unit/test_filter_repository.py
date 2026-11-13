@@ -5,9 +5,10 @@ become one query — the OR within a group, the AND between groups, and the coun
 a card shows next to the numbers a filter compares.
 """
 
+from django.http import QueryDict
 from django.test import TestCase
 
-from apps.charities.filters import CharityFilters
+from apps.charities.filters import CharityFilters, from_query
 from apps.charities.models import Charity, Domain, Haskama, Location, Review
 from apps.charities.repositories import DjangoCharityRepository
 from tests.factories.accounts import UserFactory
@@ -273,8 +274,12 @@ class FilterOptionsRepositoryTest(TestCase):
         self.assertEqual(DjangoFilterOptionsRepository().rabbis(), ())
 
 
-class OutOfRangeRatingTest(TestCase):
-    """D-046: a min_rating outside 1-5 is ignored, not saturated to 5."""
+class RatingClampTest(TestCase):
+    """D-046: min_rating is clamped into the 1-5 scale, and the clamp is visible.
+
+    The repository compares what it is given; the clamp happens where the URL is
+    read, so these tests exercise `from_query` and the sidebar's correction note.
+    """
 
     def setUp(self) -> None:
         self.rated = Charity.objects.create(name="Rated")
@@ -282,20 +287,23 @@ class OutOfRangeRatingTest(TestCase):
         author = UserFactory()
         Review.objects.create(charity=self.rated, author=author, rating=5)
 
-    def test_below_the_scale_filters_nothing(self) -> None:
-        cards = DjangoCharityRepository().page(0, 10, CharityFilters(min_rating=0))
+    def test_from_query_clamps_above_the_scale_to_five(self) -> None:
+        filters = from_query(QueryDict("min_rating=99"))
 
-        self.assertEqual([c.name for c in cards], ["Rated", "Unrated"])
-
-    def test_above_the_scale_filters_nothing(self) -> None:
-        cards = DjangoCharityRepository().page(0, 10, CharityFilters(min_rating=99))
-
-        self.assertEqual([c.name for c in cards], ["Rated", "Unrated"])
-
-    def test_inside_the_scale_still_filters(self) -> None:
-        cards = DjangoCharityRepository().page(0, 10, CharityFilters(min_rating=5))
-
+        self.assertEqual(filters.min_rating, 5)
+        cards = DjangoCharityRepository().page(0, 10, filters)
         self.assertEqual([c.name for c in cards], ["Rated"])
+
+    def test_from_query_clamps_below_the_scale_to_one(self) -> None:
+        filters = from_query(QueryDict("min_rating=0"))
+
+        self.assertEqual(filters.min_rating, 1)
+        # min_rating=1 still excludes the unreviewed charity: it has no average.
+        cards = DjangoCharityRepository().page(0, 10, filters)
+        self.assertEqual([c.name for c in cards], ["Rated"])
+
+    def test_inside_the_scale_is_untouched(self) -> None:
+        self.assertEqual(from_query(QueryDict("min_rating=4")).min_rating, 4)
 
 
 class ScrollableOptionListTest(TestCase):

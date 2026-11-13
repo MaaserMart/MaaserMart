@@ -158,6 +158,7 @@ def list_rabbis(repository) -> tuple[RabbiOption, ...]:
 def filter_form(
     filters: CharityFilters,
     options: dict[str, tuple],
+    requested: dict[str, int | None] | None = None,
 ) -> FilterForm:
     """Assemble the sidebar from the chosen filters and the option lists."""
-    return FilterForm(filters=filters, groups=sidebar_groups(filters, options))
+    return FilterForm(filters=filters, groups=sidebar_groups(filters, options, requested or {}))

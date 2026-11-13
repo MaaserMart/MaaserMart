@@ -280,14 +280,22 @@ class DocParameterNamesTest(SimpleTestCase):
 
 
 class OutOfRangeRatingTest(SimpleTestCase):
-    """A rating off the 1-5 scale filters nothing, rather than saturating (D-046)."""
+    """A rating off the 1-5 scale is clamped, and the correction is visible (D-046)."""
 
-    def test_a_rating_above_the_scale_is_no_filter(self) -> None:
-        groups = sidebar_groups(CharityFilters(min_rating=99), {})
+    def test_a_rating_above_the_scale_is_clamped_and_flagged(self) -> None:
+        groups = sidebar_groups(CharityFilters(min_rating=5), {}, requested={"min_rating": 99})
         rating = next(g for g in groups if g.parameter == "min_rating")
 
-        self.assertEqual(rating.max, MAX_STAR_RATING)
-        self.assertTrue(rating.is_set)  # it is still set; the repository ignores it
+        self.assertEqual(rating.value, 5)
+        self.assertTrue(rating.is_set)
+        self.assertIn("Kept between 1 and 5", rating.adjusted_note)
+
+    def test_an_in_range_rating_has_no_correction_note(self) -> None:
+        groups = sidebar_groups(CharityFilters(min_rating=4), {}, requested={"min_rating": 4})
+
+        rating = next(g for g in groups if g.parameter == "min_rating")
+
+        self.assertEqual(rating.adjusted_note, "")
 
 
 class ZeroIsSetTest(SimpleTestCase):
