@@ -6,7 +6,7 @@ from django.db.models.functions import Lower
 
 
 class User(AbstractUser):
-    """§5.2.1 USER. Admin status is is_staff, read as is_admin (D-YOSEF-accounts-login)."""
+    """§5.2.1 USER. Admin status is is_superuser, read as is_admin (D-YOSEF-admin-superuser)."""
 
     email = models.EmailField()
 
@@ -19,8 +19,11 @@ class User(AbstractUser):
 
     @property
     def is_admin(self):
-        """A MaaserMart admin. Same flag that opens /django-admin/ (D-YOSEF-accounts-login)."""
-        return self.is_staff
+        """A MaaserMart admin: a superuser, the highest level (D-YOSEF-admin-superuser).
+
+        is_staff alone only opens /django-admin/, limited to the permissions given.
+        """
+        return self.is_superuser
 
 
 class RoleAssignment(models.Model):
