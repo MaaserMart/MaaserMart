@@ -5,14 +5,9 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
-from .login import (
-    DASHBOARD_URL_NAMES,
-    LoginResult,
-    _url_or_home,
-    attempt_login,
-    redirect_after_login,
-)
-from .services import find_role
+from .login import LoginResult, attempt_login, dashboard_url, redirect_after_login
+from .models import RoleAssignment
+from .services import ADMIN, find_role
 
 MESSAGES = {
     LoginResult.MISSING_CREDENTIALS: "Enter your username and password.",
@@ -21,13 +16,9 @@ MESSAGES = {
     LoginResult.RATE_LIMITED: "Too many tries from your connection. Wait a minute and try again.",
 }
 
-ROLE_LABELS = {
-    "member": "Member",
-    "rabbi": "Rabbi",
-    "charity_owner": "Charity owner",
-    "technical_supporter": "Technical supporter",
-    "admin": "Admin",
-}
+
+def role_label(role):
+    return "Admin" if role == ADMIN else RoleAssignment.Role(role).label
 
 
 @require_http_methods(["GET", "POST"])
@@ -56,8 +47,5 @@ def logout_view(request):
 
 @login_required
 def choose_dashboard_view(request):
-    choices = [
-        (ROLE_LABELS[role], _url_or_home(DASHBOARD_URL_NAMES[role]))
-        for role in find_role(request.user)
-    ]
+    choices = [(role_label(role), dashboard_url(role)) for role in find_role(request.user)]
     return render(request, "accounts/choose_dashboard.html", {"choices": choices})

@@ -132,5 +132,5 @@ def test_without_dashboard_pages_one_role_goes_home():
     assert go(user_with(Role.MEMBER)) == reverse("home")
 
 
-def test_without_a_chooser_page_several_roles_go_home():
-    assert go(user_with(Role.MEMBER, Role.RABBI)) == reverse("home")
+def test_several_roles_go_to_the_real_chooser_page():
+    assert go(user_with(Role.MEMBER, Role.RABBI)) == "/accounts/choose-dashboard/"
