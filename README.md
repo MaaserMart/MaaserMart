@@ -38,12 +38,14 @@ If you use Docker, change `DATABASE_URL` in `.env` to `postgres://postgres:postg
 ```bash
 uv sync
 uv run python manage.py migrate
+uv run python manage.py createcachetable
 uv run python manage.py seed
 ```
 `seed` adds about 200 fake charities, with users, reviews, haskamas and events. It only runs on an empty database and refuses otherwise. To start over with Homebrew Postgres:
 ```bash
 dropdb maasermart && createdb maasermart
 uv run python manage.py migrate
+uv run python manage.py createcachetable
 uv run python manage.py seed
 ```
 With Docker, use `docker exec maasermart-db dropdb -U postgres maasermart` and `docker exec maasermart-db createdb -U postgres maasermart` for the first line.

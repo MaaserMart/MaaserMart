@@ -416,6 +416,15 @@ Rules for this file:
 - Why: A query built from text the user typed can be turned into a different query (SQL injection), e.g. a username of `' OR 1=1 --`. Parameters make the input data, never code.
 - Where in code: `pyproject.toml` (`[tool.ruff.lint] select`), `tests/unit/test_auth_backend.py` (injection-shaped usernames are refused)
 
+## D-YOSEF-shared-cache: Django's cache lives in PostgreSQL
+- Date: 2026-11-15
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.2.1.8 (lockout); not otherwise in design doc
+- Decision: The default cache is `DatabaseCache` in the table `django_cache`. That table is made by `manage.py createcachetable`, not by a migration, so every database (local, CI, production) needs that command run once after `migrate`. Django's test runner runs it on the test database automatically.
+- Why: The login lockout and rate limit (D-YOSEF-accounts-login) keep counters in the cache. Django's default per-process memory cache would give each Gunicorn worker its own counters and lose them on restart, multiplying the allowed tries. PostgreSQL is already in the stack; Redis would add a service. Switching later is one settings change.
+- Where in code: `config/settings/base.py` (`CACHES`), `README.md` (setup steps), `tests/unit/test_cache.py`
+
 ---
 
 ## D-043: Seeded charity images use the artwork already in the repo
