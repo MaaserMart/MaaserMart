@@ -297,6 +297,26 @@ class ListingFilterPageTest(TestCase):
         self.assertContains(response, "Pantry")
         self.assertContains(response, "School")
 
+    def test_a_domain_id_that_names_no_row_is_ignored(self) -> None:
+        """D-045: a value naming no row is ignored, not a filter that matches nothing."""
+        response = self.client.get(self.url, {"domain": 999999})
+
+        self.assertContains(response, "Pantry")
+        self.assertContains(response, "School")
+        self.assertNotContains(response, "group on")
+
+    def test_a_stale_id_does_not_override_a_real_one(self) -> None:
+        response = self.client.get(self.url, {"domain": [999999, self.food.id]})
+
+        self.assertContains(response, "Pantry")
+        self.assertNotContains(response, "School")
+
+    def test_a_rabbi_id_cannot_filter_while_the_group_offers_nothing(self) -> None:
+        response = self.client.get(self.url, {"haskama_rabbi": 4})
+
+        self.assertContains(response, "Pantry")
+        self.assertContains(response, "School")
+
     def test_the_sidebar_is_on_the_page_for_every_visitor(self) -> None:
         """Filtering needs no account (§6.2.4 Permissions)."""
         response = self.client.get(self.url)
