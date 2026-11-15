@@ -64,14 +64,23 @@ TEMPLATES = [
 DATABASES = {"default": env.db("DATABASE_URL")}
 DATABASES["default"]["CONN_MAX_AGE"] = env.int("DATABASE_CONN_MAX_AGE", default=60)
 
-# One cache shared by every Gunicorn worker, so login lockout and rate-limit counters
+# Caches shared by every Gunicorn worker, so login lockout and rate-limit counters
 # hold across workers and restarts. Needs `manage.py createcachetable` once per
-# database (D-YOSEF-shared-cache).
+# database, which makes both tables (D-YOSEF-shared-cache).
+# A DatabaseCache over MAX_ENTRIES deletes its alphabetically lowest keys, live or
+# not. Login failures and locks get their own table, so a flood of other keys
+# (e.g. one rate-limit bucket per IP) can never delete a lock.
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
         "LOCATION": "django_cache",
-    }
+        "OPTIONS": {"MAX_ENTRIES": 100_000},
+    },
+    "login": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "login_cache",
+        "OPTIONS": {"MAX_ENTRIES": 1_000_000},
+    },
 }
 
 # Addresses whose X-Forwarded-For header is believed: Caddy on the same machine.
