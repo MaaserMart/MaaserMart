@@ -433,6 +433,29 @@ Rules for this file:
 - Decision: `User.is_admin` is `is_superuser`, Django's highest level: every permission, everywhere. The founders (Yosef, Shaul, Benjamin) are superusers. `is_staff` alone only lets someone into `/django-admin/`, limited to the permissions they are given, and does not make them a MaaserMart admin. So a helper, such as a technical supporter, can be given `is_staff` to fix data without seeing the approval queue or the admin dashboard.
 - Why: Asked during review of PR #12. With `is_staff`, giving anyone access to `/django-admin/` would also have made them a full admin in the app.
 - Where in code: `apps/accounts/models.py` (`User.is_admin`), `tests/unit/test_find_role.py`
+## D-YOSEF-member-signup: Member signup checks everything first, then confirms the email with a typed 6-digit code
+- Date: 2026-11-15
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.2.2, §8.4 (resolves the open question "Email verification method": typed code, not a link)
+- Decision:
+  - `/accounts/signup/` takes username, email, password and a terms tick. `/accounts/signup/verify/` takes the code. The account does not exist until the right code is typed; then it is created with the `member` role (both rows or neither) and the user is logged in and sent where login would send them.
+  - Step 1 checks, cheapest first, with nothing written or sent until all pass: 5 signups an hour per client network; the fields and Django's password rules; username and email not taken ignoring capitals (D-032); 3 code emails an hour per address. The page says when a username or email is taken, as §6.2.2.8 asks.
+  - The code is 6 digits from `secrets`, lasts 15 minutes and allows 5 tries; the fifth wrong try throws it away. A new code resets both and counts toward the 3 emails an hour.
+  - The pending signup (username, email, password hash, code) waits in the session, which is stored in the database (§8.4: "Verification code lives in Django session"). The plain password is never kept.
+  - The email goes through a Celery task (§4.14). The terms paragraph is a placeholder until real terms are written.
+- Why: A typed code keeps the user on one tab and matches §6.2.2. Checking first means a refused signup costs no email and no password hash. The limits stop guessing codes and stop anyone using signup to flood an inbox. These emails are account (transactional) emails, so no separate email consent is asked; marketing email would need its own opt-in.
+- Where in code: `apps/accounts/signup.py`, `apps/accounts/services.py` (`submit_member_signup`, `enqueue_signup_code`), `apps/accounts/tasks.py`, `apps/accounts/views.py`, `templates/accounts/signup*.html`, `tests/integration/test_signup.py`
+
+## D-042: The listing shows every charity until something can publish one
+
+- Date: 2026-11-12
+- Decided by: builder, pending CEO/COO confirmation
+- Status: Active
+- Design doc ref: §6.2.3
+- Decision: `charities.repositories.DjangoCharityRepository` takes `published_only`, default `False`, so the listing reads all charities. It flips to `True` when the admin approval queue lands, since that queue is what calls `publish_charity` (D-038). The option is a constructor argument, not a setting or a class attribute, so the behaviour is explicit at the call site and testable in both directions.
+- Why: D-038 makes `is_visible` the visibility switch and gives every charity `False` by default. Nothing calls `publish_charity` yet, because the admin approval queue is not built. Reading `is_visible` literally would render an empty listing and make the tracer bullet unverifiable. This is a deliberate, temporary departure from D-038 and it is undone by one argument when the queue exists.
+- Where in code: `apps/charities/repositories.py` (`published_only`), `apps/charities/views.py` (`listing`)
 
 ---
 
@@ -805,7 +828,7 @@ Rules for this file:
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.
 - **2026-11-11: Default charity listing order.** §6.2.3 says alphabetical; UC-03 (§8.5) says "no particular order". Resolved as D-048 on 2026-11-14: alphabetical A→Z is the default sort.
 - **2026-11-12: How the charities listing learns visibility without depending on approvals.** D-023 makes visibility depend on approvals' tables, but §6.1 has approvals depending on charities, not the reverse, and D-006 limits calls to listed dependencies. To be decided before the Phase 1 listing. Resolved as D-038 on 2026-11-12.
-- **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link.
+- **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link. Resolved as D-YOSEF-member-signup on 2026-11-15 (typed code).
 - **2026-11-12: One LINK per kind per charity?** §5.2.14 does not say, but EDIT_REQUEST.field (§5.2.8) has one `website_donate`/`website_about`/`website_contact` value with a single new_value, which implies one link per kind. `Link` has no (charity, kind) uniqueness. Adding it after data exists needs a cleanup migration, so decide before Phase 1 writes links. Resolved as D-036 on 2026-11-12.
 - **2026-11-12: Is the nav sticky?** §7.2 says the nav tab is "always visible": on every page (done, through `base.html`), or also fixed while scrolling (not done). Cheap either way. Resolved as D-037 on 2026-11-12.
 - **2026-11-13: Where is "one review per member per charity" enforced?** §8.6 and UC-05 say a member has one review per charity, but REVIEW has no unique (charity, author) constraint and `save_review` does not exist yet. Options: enforce it only in the upsert service, or add a unique constraint too (a schema change, so decide before the review form lands). See `docs/NOTES.md` N1. **Half answered on 2026-11-17 as D-055:** the database now enforces it (`review_charity_author_uniq`), so the "only in the service" option is gone. What is still open is the second half — when a member submits a review for a charity they already reviewed, does `save_review` **overwrite** their review (the reading of UC-05's "edit your review") or **refuse** with a message? To be decided when the review form is built; filed as comtai#12.

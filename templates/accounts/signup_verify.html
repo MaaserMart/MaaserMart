@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Enter your code · MaaserMart{% endblock %}
+{% block content %}
+<section class="auth">
+  <h1 class="auth__title">Check your email</h1>
+  <p class="empty">We sent a {{ code_length }}-digit code to <strong>{{ email }}</strong>. It works for 15 minutes.</p>
+  {% if error %}<p class="auth__error" role="alert">{{ error }}{% if tries_left and tries_left < 5 %} {{ tries_left }} tr{{ tries_left|pluralize:"y,ies" }} left.{% endif %}</p>{% endif %}
+  {% if notice %}<p class="auth__notice" role="status">{{ notice }}</p>{% endif %}
+  <form class="auth__form" method="post" action="{% url 'accounts:signup_verify' %}" x-data="codeBoxes({{ code_length }})" x-ref="form">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    {# Without JavaScript this one box is the form. With it, the six boxes take over. #}
+    <label class="auth__field" x-show="false">
+      <span class="auth__label">Code</span>
+      <input class="auth__input" name="code" x-ref="code" inputmode="numeric" autocomplete="one-time-code" maxlength="12" autofocus>
+    </label>
+    <div class="code" hidden x-bind:hidden="false" role="group" aria-label="{{ code_length }}-digit code">
+      <template x-for="(digit, i) in digits" :key="i">
+        <input class="code__box" type="text" inputmode="numeric"
+               :autocomplete="i === 0 ? 'one-time-code' : 'off'"
+               :aria-label="`Digit ${i + 1}`"
+               :value="digit"
+               @input="type(i, $event)" @keydown="key(i, $event)" @paste.prevent="paste(i, $event)" @focus="$event.target.select()">
+      </template>
+    </div>
+    <button class="filters__apply auth__submit" type="submit">Create account</button>
+  </form>
+  <form class="auth__resend" method="post" action="{% url 'accounts:signup_verify' %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="auth__link" type="submit" name="resend" value="1">Send a new code</button>
+  </form>
+</section>
+<script>
+  // Six boxes like a one-time-code field: typing moves on, backspace moves back,
+  // pasting "482917" fills them all, and a full code submits itself.
+  function codeBoxes(length) {
+    return {
+      digits: Array(length).fill(""),
+      init() {
+        this.$refs.code.removeAttribute("autofocus");
+        this.$nextTick(() => this.box(0)?.focus());
+      },
+      box(i) { return this.$root.querySelectorAll(".code__box")[i]; },
+      fill(start, text) {
+        const found = text.replace(/\D/g, "").slice(0, length - start).split("");
+        found.forEach((d, n) => { this.digits[start + n] = d; });
+        this.$refs.code.value = this.digits.join("");
+        const next = Math.min(start + found.length, length - 1);
+        this.$nextTick(() => this.box(next)?.focus());
+        if (this.digits.every((d) => d !== "")) this.$nextTick(() => this.$refs.form.requestSubmit());
+      },
+      type(i, event) {
+        const value = event.target.value;
+        this.digits[i] = "";
+        event.target.value = "";
+        if (/\d/.test(value)) this.fill(i, value);
+        else this.$refs.code.value = this.digits.join("");
+      },
+      key(i, event) {
+        if (event.key === "Backspace" && !this.digits[i] && i > 0) {
+          this.digits[i - 1] = "";
+          this.$refs.code.value = this.digits.join("");
+          this.box(i - 1).focus();
+          event.preventDefault();
+        } else if (event.key === "ArrowLeft" && i > 0) this.box(i - 1).focus();
+        else if (event.key === "ArrowRight" && i < length - 1) this.box(i + 1).focus();
+      },
+      paste(i, event) { this.fill(i, event.clipboardData.getData("text")); },
+    };
+  }
+</script>
+{% endblock %}
