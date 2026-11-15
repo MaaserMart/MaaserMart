@@ -114,3 +114,45 @@ class ListingTemplateContractTest(TestCase):
         body = self._render_single_charity()
 
         self.assertNotIn("chip-divider", body)
+
+
+class SortControlContractTest(TestCase):
+    """The sort partial reads only fields `SortForm` guarantees (D-048).
+
+    Django templates fail silently, so an option list or direction label that
+    stops reaching the page would leave a working-looking control that does
+    nothing. These pin the shape the partial depends on.
+    """
+
+    def setUp(self) -> None:
+        self.url = reverse("charities:listing")
+
+    def _sort_form(self, body: str) -> str:
+        start = body.index('<form class="sort"')
+        return body[start : body.index("</form>", start)]
+
+    def test_every_mechanism_reaches_the_dropdown(self) -> None:
+        body = self.client.get(self.url).content.decode()
+        form = self._sort_form(body)
+
+        for value in (
+            "alphabetical",
+            "trending",
+            "popular",
+            "rating",
+            "haskamos",
+            "newest",
+            "updated",
+        ):
+            with self.subTest(value=value):
+                self.assertIn(f'<option value="{value}"', form)
+
+    def test_the_direction_labels_come_from_the_chosen_mechanism(self) -> None:
+        alphabetical = self._sort_form(
+            self.client.get(self.url, {"direction": "desc"}).content.decode()
+        )
+        counted = self._sort_form(self.client.get(self.url, {"sort": "rating"}).content.decode())
+
+        self.assertIn("Z to A", alphabetical)
+        self.assertIn("High to low", counted)
+        self.assertIn("Low to high", counted)

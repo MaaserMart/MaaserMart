@@ -1,0 +1,30 @@
+{% comment %}
+The listing's sort control (§6.2.5, D-048): one dropdown and two direction
+buttons, all in a plain GET form, so the order lives in the URL like the rest of
+the page state. No `page` field is sent, so changing the order starts at page 1.
+{% endcomment %}
+<form class="sort" method="get" action="{% url 'charities:listing' %}">
+  <input type="hidden" name="page_size" value="{{ page.page_size }}">
+
+  <label class="sort__label" for="sort">Sort</label>
+  <select class="sort__select" id="sort" name="sort">
+    {% for option in sort_form.options %}
+      <option value="{{ option.value }}"{% if option.value == sort_form.selected %} selected{% endif %}>{{ option.label }}</option>
+    {% endfor %}
+  </select>
+
+  <button
+    class="sort__direction{% if not sort_form.descending %} sort__direction--current{% endif %}"
+    type="submit"
+    name="direction"
+    value="asc"
+    {% if not sort_form.descending %}aria-current="true"{% endif %}
+  >{{ sort_form.low_label }}</button>
+  <button
+    class="sort__direction{% if sort_form.descending %} sort__direction--current{% endif %}"
+    type="submit"
+    name="direction"
+    value="desc"
+    {% if sort_form.descending %}aria-current="true"{% endif %}
+  >{{ sort_form.high_label }}</button>
+</form>
