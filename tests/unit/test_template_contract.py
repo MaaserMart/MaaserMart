@@ -187,6 +187,12 @@ class SortControlContractTest(TestCase):
 
         self.assertIn(f'name="domain" value="{domain.id}"', self._sort_form(body))
 
+    def test_the_dropdown_applies_its_choice_when_it_changes(self) -> None:
+        """The labels must never describe the mechanism that is no longer chosen."""
+        body = self.client.get(self.url).content.decode()
+
+        self.assertIn('onchange="this.form.submit()"', self._sort_form(body))
+
 
 class FilterSidebarContractTest(TestCase):
     """The sidebar template reads only fields `FilterForm` guarantees (D-045).
