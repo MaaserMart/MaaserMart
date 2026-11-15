@@ -1,4 +1,4 @@
-"""accounts.services.find_role and User.is_admin (§6.2.1.5, D-YOSEF-accounts-login)."""
+"""accounts.services.find_role and User.is_admin (§6.2.1.5, D-YOSEF-admin-superuser)."""
 
 import pytest
 from django.contrib.auth.models import AnonymousUser
@@ -24,16 +24,25 @@ def give(user, *roles):
 # --- is_admin --------------------------------------------------------------
 
 
-def test_staff_user_is_admin():
-    assert UserFactory(is_staff=True).is_admin is True
+def test_superuser_is_admin():
+    assert UserFactory(is_superuser=True, is_staff=True).is_admin is True
+
+
+def test_superuser_is_admin_even_without_staff():
+    assert UserFactory(is_superuser=True, is_staff=False).is_admin is True
 
 
 def test_regular_user_is_not_admin():
     assert UserFactory().is_admin is False
 
 
-def test_superuser_without_staff_is_not_admin():
-    assert UserFactory(is_superuser=True, is_staff=False).is_admin is False
+def test_staff_alone_is_not_admin():
+    """A helper given is_staff to reach /django-admin/ is not a MaaserMart admin."""
+    assert UserFactory(is_staff=True).is_admin is False
+
+
+def test_staff_alone_gets_no_admin_role():
+    assert find_role(UserFactory(is_staff=True)) == []
 
 
 # --- find_role: what a user should get --------------------------------------
@@ -49,16 +58,16 @@ def test_several_roles_in_a_fixed_order():
 
 
 def test_admin_is_listed_after_other_roles():
-    user = give(UserFactory(is_staff=True), Role.MEMBER)
+    user = give(UserFactory(is_superuser=True), Role.MEMBER)
     assert find_role(user) == ["member", "admin"]
 
 
 def test_admin_with_no_role_rows():
-    assert find_role(UserFactory(is_staff=True)) == ["admin"]
+    assert find_role(UserFactory(is_superuser=True)) == ["admin"]
 
 
 def test_every_role_at_once():
-    user = give(UserFactory(is_staff=True), *Role.values)
+    user = give(UserFactory(is_superuser=True), *Role.values)
     assert find_role(user) == [
         "member",
         "rabbi",
@@ -98,7 +107,7 @@ def test_rejected_rabbi_request_is_not_a_role():
 
 def test_another_users_roles_are_not_included():
     me = give(UserFactory(), Role.MEMBER)
-    give(UserFactory(is_staff=True), Role.RABBI, Role.CHARITY_OWNER)
+    give(UserFactory(is_superuser=True), Role.RABBI, Role.CHARITY_OWNER)
     assert find_role(me) == ["member"]
 
 
@@ -112,7 +121,7 @@ def test_visitor_who_is_not_logged_in_has_no_roles_and_costs_no_query():
 
 
 def test_one_query_however_many_roles():
-    user = give(UserFactory(is_staff=True), *Role.values)
+    user = give(UserFactory(is_superuser=True), *Role.values)
     with CaptureQueriesContext(connection) as queries:
         find_role(user)
     assert len(queries) == 1
