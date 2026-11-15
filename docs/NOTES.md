@@ -58,3 +58,13 @@ check is load-bearing against dev data, not just against requests.
 annotates `Count`/`Avg` over REVIEW. It costs no extra query and benefits from the existing
 `charities_review_charity_id` index, but it does mean the charity listing — the site's front door —
 cannot render if REVIEW is unavailable.
+
+## 2026-11-13 — Findings while building the §6.2.4 filter (none decided yet)
+
+**N5. The filter sidebar resets a page correctly, but only because the form omits `page`.** The doc says "setting a filter resets page to 1", and it works: the sidebar form has no `page` input, so a fresh Apply always lands on page 1. A URL that *does* carry `?page=3&domain=2` keeps page 3, which is the faithful reading of UC-03 ("everything is stored in URL parameters"). Both behaviours are tested in `tests/unit/test_views.py`.
+
+**N6. Two separate "no results" states exist and should not be confused.** A filtered listing with no matches shows "No charities match those filters."; an empty database shows "No charities found.". They are the same template line conditionally worded. §6.2.4 asks only for the first; the second predates the filter.
+
+**N7. `min_rating` on an unreviewed charity behaves exactly like the card reads it.** A charity with no reviews has no average (D-044 shows "No reviews yet", and `ReviewSummary.average` is `None`), so `min_rating` simply never matches it. The alternative — treating "no reviews" as a rating of 0 — was considered and rejected in D-045.
+
+**N8. The seeded database has no rabbi rows to tick.** The Haskamos group's options are empty until `accounts.services.search_rabbis` exists, so it is wired but returns nothing (D-045). To see the group work in a browser, a developer must add `HASKAMA` rows by hand, which is why the unit tests create them directly.

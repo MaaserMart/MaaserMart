@@ -30,3 +30,4 @@ docs/design/
 
 # Generated local secret for dev.sh; never committed
 .env.local-key
+.tmp-shots/
