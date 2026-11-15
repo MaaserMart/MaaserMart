@@ -7,12 +7,33 @@ template relies on, so that renaming or reshaping a value breaks a test rather
 than quietly emptying the page.
 """
 
+import re
+
+from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
 
 from apps.charities.contracts import CharityCard, DomainTag, LocationTag, ReviewSummary
 from apps.charities.models import Charity, Domain, Location, Review
 from tests.factories.accounts import UserFactory
+
+
+class FilterSidebarCssTest(TestCase):
+    """D-047: the panel is bounded to the viewport and scrolls on its own.
+
+    Like the nav's sticky rule, this reads the stylesheet the page loads: a
+    deleted `max-height` or `overflow-y` would otherwise only show up by eye.
+    """
+
+    def test_the_sidebar_is_bounded_and_scrolls(self) -> None:
+        css = (settings.BASE_DIR / "static" / "css" / "site.css").read_text(encoding="utf-8")
+        rule = re.search(r"\.listing__sidebar\s*\{([^}]*)\}", css)
+
+        self.assertIsNotNone(rule, "the sidebar rule is missing from site.css")
+        declarations = rule.group(1)
+        self.assertIn("max-height", declarations)
+        self.assertIn("overflow-y: auto", declarations)
+        self.assertIn("position: sticky", declarations)
 
 
 class ListingTemplateContractTest(TestCase):

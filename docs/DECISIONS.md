@@ -489,6 +489,18 @@ Rules for this file:
 
 ---
 
+## D-047: The filter sidebar scrolls as a whole, so its last groups stay reachable
+
+- Date: 2026-11-14
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.2.4 (Filter — FR 2)
+- Decision: The sidebar is bounded to the viewport and scrolls inside itself: `max-height: calc(100vh - 5.5rem)` with `overflow-y: auto` on `.listing__sidebar`. D-045 and D-046 bounded each option list (`.filters__options`, 14rem), but the seven groups together are taller than a viewport, so reaching the bottom groups meant scrolling the results off the page while the pinned panel stayed where it was. Below 48rem the sidebar sits above the results, so its own scroll and its pinning are both switched off there.
+- Why: the panel's last groups were unreachable for a reader who was reading the results, and the only way to them was to scroll away from the page.
+- Where in code: `static/css/site.css` (`.listing__sidebar`, and the 48rem reset), `tests/unit/test_template_contract.py` (the rule is read from the stylesheet the page loads, as D-037's nav test does)
+
+---
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1.
