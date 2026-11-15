@@ -129,6 +129,11 @@ def _url_or_home(name):
         return reverse("home")
 
 
+def dashboard_url(role):
+    """The dashboard a role lands on, or home while that dashboard doesn't exist."""
+    return _url_or_home(DASHBOARD_URL_NAMES[role])
+
+
 def safe_next_url(request):
     """The ?next= address, if it stays on this site; otherwise None."""
     next_url = request.POST.get("next") or request.GET.get("next")
@@ -152,5 +157,5 @@ def redirect_after_login(request, user):
     if len(roles) > 1:
         return _url_or_home(CHOOSER_URL_NAME)
     if len(roles) == 1:
-        return _url_or_home(DASHBOARD_URL_NAMES[roles[0]])
+        return dashboard_url(roles[0])
     return reverse("home")
