@@ -84,6 +84,9 @@ CACHES = {
 }
 
 # Addresses whose X-Forwarded-For header is believed: Caddy on the same machine.
+# Gunicorn must listen on TCP (e.g. 127.0.0.1:8000), not a unix socket: over a
+# socket REMOTE_ADDR is empty, every visitor would share one rate-limit bucket,
+# and 20 logins a minute would be the limit for the whole site.
 TRUSTED_PROXY_IPS = env.list("DJANGO_TRUSTED_PROXY_IPS", default=["127.0.0.1", "::1"])
 
 AUTH_USER_MODEL = "accounts.User"
