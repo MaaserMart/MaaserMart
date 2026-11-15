@@ -144,6 +144,25 @@ def test_changing_the_case_does_not_reset_the_count(yosef):
     assert try_login("yosef") is LOCKED
 
 
+def test_a_spelling_postgres_matches_to_the_same_account_shares_its_lock():
+    """Python lowercases "İ" to "i" plus a dot; PostgreSQL's LOWER() gives plain "i".
+
+    Review of PR #12, B2: keyed on Python's lower(), "lİn" got 5 fresh tries
+    while logging in to the same account as "lin".
+    """
+    UserFactory(username="lin")
+    fail("lin", 5)
+    assert try_login("lİn") is LOCKED
+    assert try_login("LİN") is LOCKED
+
+
+def test_failures_under_different_spellings_add_up_for_one_account():
+    UserFactory(username="lin")
+    for typed in ["lin", "lİn", "LİN", "LIN"]:
+        try_login(typed, "wrong")
+    assert try_login("Lİn", "wrong") is LOCKED
+
+
 def test_wrong_password_does_not_start_a_session(yosef):
     request = new_request()
     attempt_login(request, "yosef", "wrong")

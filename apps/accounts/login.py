@@ -1,9 +1,10 @@
 """Logging in, with the 5-tries lockout (§6.2.1.8, D-YOSEF-accounts-login).
 
 Failure counts and locks live in their own shared cache, "login"
-(D-YOSEF-shared-cache), keyed by the lowercased username, so "Yosef" and
-"YOSEF" share one count. A username that
-doesn't exist is counted too, so the response never reveals which usernames exist.
+(D-YOSEF-shared-cache). They are kept per account: whichever user PostgreSQL
+matches, so "Yosef", "YOSEF" and any other spelling that logs in to the same
+account share one count. A username that doesn't exist is counted too, by its
+lowercased text, so the response never reveals which usernames exist.
 """
 
 import enum
@@ -14,6 +15,7 @@ from django.core.cache import caches
 from django.urls import NoReverseMatch, reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from .backends import find_user
 from .ratelimit import client_ip, take_token
 from .services import find_role
 
@@ -39,23 +41,33 @@ def _store():
     return caches["login"]
 
 
-def _key(kind, username):
+def _account(username):
+    """What a lock applies to: the account this username logs in to, else the text."""
+    user = find_user(username)
+    return f"user:{user.pk}" if user else f"name:{username.lower()}"
+
+
+def _key(kind, account):
     # Hashed so any username, even a 10,000-character one, makes a short fixed-size key.
-    digest = hashlib.sha256(username.lower().encode()).hexdigest()
-    return f"login:{kind}:{digest}"
+    return f"login:{kind}:{hashlib.sha256(account.encode()).hexdigest()}"
+
+
+def _locked(account):
+    return _store().get(_key("locked", account)) is not None
 
 
 def is_locked_out(username):
-    return _store().get(_key("locked", username)) is not None
+    return _locked(_account(username))
 
 
-def _record_failure(username):
-    """Count one failed try. Return True if this try locks the username."""
+def _record_failure(account):
+    """Count one failed try. Return True if this try locks the account."""
     cache = _store()
-    key = _key("failures", username)
+    key = _key("failures", account)
     cache.add(key, 0, timeout=FAILURE_WINDOW_SECONDS)
-    # Not atomic on DatabaseCache: two failures at the same instant may count once.
-    # The per-IP rate limit bounds how much that can matter.
+    # Not atomic on DatabaseCache: failures that arrive together may count once,
+    # and requests already past the lock check still get their password checked.
+    # Either way the extra tries are bounded by how many requests run at once.
     try:
         failures = cache.incr(key)
     except ValueError:  # The count expired between add() and incr(): this is the first.
@@ -63,13 +75,13 @@ def _record_failure(username):
         failures = 1
     if failures < MAX_FAILURES:
         return False
-    cache.set(_key("locked", username), True, timeout=LOCKOUT_SECONDS)
+    cache.set(_key("locked", account), True, timeout=LOCKOUT_SECONDS)
     cache.delete(key)
     return True
 
 
-def _clear_failures(username):
-    _store().delete(_key("failures", username))
+def _clear_failures(account):
+    _store().delete(_key("failures", account))
 
 
 def attempt_login(request, username, password):
@@ -84,14 +96,15 @@ def attempt_login(request, username, password):
         return LoginResult.MISSING_CREDENTIALS, None
     if not take_token(f"login:{client_ip(request)}", RATE_CAPACITY, RATE_REFILL_SECONDS):
         return LoginResult.RATE_LIMITED, None
-    if is_locked_out(username):
+    account = _account(username)
+    if _locked(account):
         return LoginResult.LOCKED_OUT, None
     user = authenticate(request, username=username, password=password)
     if user is None:
-        if _record_failure(username):
+        if _record_failure(account):
             return LoginResult.LOCKED_OUT, None
         return LoginResult.WRONG_CREDENTIALS, None
-    _clear_failures(username)
+    _clear_failures(account)
     login(request, user)
     return LoginResult.OK, user
 
