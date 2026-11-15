@@ -13,7 +13,7 @@
     </label>
     <label class="auth__field">
       <span class="auth__label">Password</span>
-      <input class="auth__input" type="password" name="password" required autocomplete="current-password">
+      {% include "accounts/_password_input.html" with autocomplete="current-password" %}
     </label>
     <button class="filters__apply auth__submit" type="submit">Log in</button>
   </form>
