@@ -1,7 +1,8 @@
 """Logging in, with the 5-tries lockout (§6.2.1.8, D-YOSEF-accounts-login).
 
-Failure counts live in the shared cache (D-YOSEF-shared-cache), keyed by the
-lowercased username, so "Yosef" and "YOSEF" share one count. A username that
+Failure counts and locks live in their own shared cache, "login"
+(D-YOSEF-shared-cache), keyed by the lowercased username, so "Yosef" and
+"YOSEF" share one count. A username that
 doesn't exist is counted too, so the response never reveals which usernames exist.
 """
 
@@ -9,7 +10,7 @@ import enum
 import hashlib
 
 from django.contrib.auth import authenticate, login
-from django.core.cache import cache
+from django.core.cache import caches
 from django.urls import NoReverseMatch, reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
@@ -34,6 +35,10 @@ class LoginResult(enum.Enum):
     LOCKED_OUT = "locked_out"
 
 
+def _store():
+    return caches["login"]
+
+
 def _key(kind, username):
     # Hashed so any username, even a 10,000-character one, makes a short fixed-size key.
     digest = hashlib.sha256(username.lower().encode()).hexdigest()
@@ -41,11 +46,12 @@ def _key(kind, username):
 
 
 def is_locked_out(username):
-    return cache.get(_key("locked", username)) is not None
+    return _store().get(_key("locked", username)) is not None
 
 
 def _record_failure(username):
     """Count one failed try. Return True if this try locks the username."""
+    cache = _store()
     key = _key("failures", username)
     cache.add(key, 0, timeout=FAILURE_WINDOW_SECONDS)
     # Not atomic on DatabaseCache: two failures at the same instant may count once.
@@ -63,7 +69,7 @@ def _record_failure(username):
 
 
 def _clear_failures(username):
-    cache.delete(_key("failures", username))
+    _store().delete(_key("failures", username))
 
 
 def attempt_login(request, username, password):

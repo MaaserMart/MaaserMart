@@ -421,7 +421,7 @@ Rules for this file:
 - Decided by: CEO (Yosef)
 - Status: Active
 - Design doc ref: §6.2.1.8 (lockout); not otherwise in design doc
-- Decision: The default cache is `DatabaseCache` in the table `django_cache`. That table is made by `manage.py createcachetable`, not by a migration, so every database (local, CI, production) needs that command run once after `migrate`. Django's test runner runs it on the test database automatically.
+- Decision: The caches are `DatabaseCache`: `default` in the table `django_cache` (rate-limit buckets), and `login` in `login_cache` (login failures and locks). A DatabaseCache over its MAX_ENTRIES deletes its alphabetically lowest keys whether or not they have expired, so locks get their own table, where a flood of other keys can't delete them. Both tables are made by one `manage.py createcachetable`, not by a migration, so every database (local, CI, production) needs that command run once after `migrate`. Django's test runner runs it on the test database automatically.
 - Why: The login lockout and rate limit (D-YOSEF-accounts-login) keep counters in the cache. Django's default per-process memory cache would give each Gunicorn worker its own counters and lose them on restart, multiplying the allowed tries. PostgreSQL is already in the stack; Redis would add a service. Switching later is one settings change.
 - Where in code: `config/settings/base.py` (`CACHES`), `README.md` (setup steps), `tests/unit/test_cache.py`
 

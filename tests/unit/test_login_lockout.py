@@ -7,10 +7,12 @@ from unittest import mock
 import pytest
 from django.contrib.auth import SESSION_KEY
 from django.contrib.sessions.backends.db import SessionStore
-from django.test import RequestFactory
+from django.core.cache import caches
+from django.test import RequestFactory, override_settings
 from django.utils import timezone
 
 from apps.accounts.login import LoginResult, attempt_login, is_locked_out
+from apps.accounts.ratelimit import take_token
 from tests.factories import UserFactory
 from tests.factories.accounts import DEFAULT_PASSWORD
 
@@ -89,7 +91,7 @@ def test_failures_older_than_an_hour_are_forgotten(yosef):
 
 
 def test_a_count_that_expires_mid_update_restarts_at_one(yosef):
-    with mock.patch("apps.accounts.login.cache.incr", side_effect=ValueError):
+    with mock.patch.object(caches["login"], "incr", side_effect=ValueError):
         assert fail("yosef", 1) == [WRONG]
     assert fail("yosef", 3) == [WRONG] * 3
     assert try_login("yosef") is OK
@@ -174,3 +176,32 @@ def test_an_unknown_username_is_counted_the_same_way():
 
 def test_a_huge_username_is_counted_without_crashing():
     assert fail("y" * 10_000, 5) == [WRONG] * 4 + [LOCKED]
+
+
+# --- a full cache must never delete a lock (review of PR #12, B1) ------------
+
+
+def tiny_caches():
+    """Same tables, but culled after 10 entries, so a flood is quick to simulate."""
+    from django.conf import settings
+
+    shrunk = {
+        alias: {**conf, "OPTIONS": {"MAX_ENTRIES": 10}} for alias, conf in settings.CACHES.items()
+    }
+    return override_settings(CACHES=shrunk)
+
+
+def test_a_flood_of_rate_limit_buckets_does_not_lift_a_lock(yosef):
+    with tiny_caches():
+        fail("yosef", 5)
+        for n in range(400):
+            take_token(f"login:2001:db8::{n:x}", 20, 3)
+        assert try_login("yosef") is LOCKED
+
+
+def test_a_flood_of_other_usernames_failing_does_not_lift_a_lock(yosef):
+    with tiny_caches(), mock.patch("apps.accounts.login.take_token", return_value=True):
+        fail("yosef", 5)
+        for n in range(100):
+            try_login(f"stranger{n}", "wrong")
+        assert try_login("yosef") is LOCKED
