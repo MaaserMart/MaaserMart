@@ -9,7 +9,15 @@ The active filters ride along as hidden inputs, so sorting never drops them.
   {% include "charities/filter_state.html" %}
 
   <label class="sort__label" for="{{ sort_form.parameter }}">Sort</label>
-  <select class="sort__select" id="{{ sort_form.parameter }}" name="{{ sort_form.parameter }}">
+  {% comment %}Submitting here sends no direction, so the new mechanism starts in
+  its default direction; that also refreshes the two buttons' labels, which
+  describe the order they will apply.{% endcomment %}
+  <select
+    class="sort__select"
+    id="{{ sort_form.parameter }}"
+    name="{{ sort_form.parameter }}"
+    onchange="this.form.submit()"
+  >
     {% for option in sort_form.options %}
       <option value="{{ option.value }}"{% if option.value == sort_form.selected %} selected{% endif %}>{{ option.label }}</option>
     {% endfor %}

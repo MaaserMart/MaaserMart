@@ -206,7 +206,9 @@ class ListingSortPageTest(TestCase):
                 self.assertIn(f'<option value="{value}"', body)
                 self.assertIn(label, body)
 
-        self.assertIn('<select class="sort__select" id="sort" name="sort">', body)
+        self.assertIn('class="sort__select"', body)
+        self.assertIn('id="sort"', body)
+        self.assertIn('name="sort"', body)
         self.assertIn('name="direction"', body)
 
     def test_name_a_to_z_is_the_default_state(self) -> None:
