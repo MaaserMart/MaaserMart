@@ -64,6 +64,16 @@ TEMPLATES = [
 DATABASES = {"default": env.db("DATABASE_URL")}
 DATABASES["default"]["CONN_MAX_AGE"] = env.int("DATABASE_CONN_MAX_AGE", default=60)
 
+# One cache shared by every Gunicorn worker, so login lockout and rate-limit counters
+# hold across workers and restarts. Needs `manage.py createcachetable` once per
+# database (D-YOSEF-shared-cache).
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "django_cache",
+    }
+}
+
 AUTH_USER_MODEL = "accounts.User"
 AUTHENTICATION_BACKENDS = ["apps.accounts.backends.CaseInsensitiveModelBackend"]
 
