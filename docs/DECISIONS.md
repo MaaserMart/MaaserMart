@@ -380,6 +380,24 @@ Rules for this file:
 - Why: A charity_updated event moves the derived "last updated" date (§5.2.21), so it must mean a real change. The admin form must not bypass the services, or changes would skip the event that D-039 relies on.
 - Where in code: `apps/charities/services.py` (`_set_visible`), `apps/charities/admin.py` (`CharityAdmin`), `apps/dashboards/management/commands/seed.py`, `tests/unit/test_charity_services.py`, `tests/integration/test_charity_admin.py`
 
+## D-YOSEF-accounts-login: Accounts: one signup, roles requested after, and how login is protected
+- Date: 2026-11-14
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.2.1, §6.2.2, §7.1.1, §8.3, §8.4
+- Decision:
+  - Sign-in is username and password through Django's built-in auth. Google sign-in may be added later alongside it.
+  - There is one signup for everyone, at `/accounts/signup/`. It creates the user and the `member` role, so every account is a member. There is no "pick a role" page and no guest version of the rabbi or owner forms.
+  - A logged-in user asks for an extra role at `/accounts/rabbi-signup/` or `/accounts/owner-signup/`. Both require login, take no user id in the URL (the user comes from the session), and end pending until an admin approves.
+  - The other accounts URLs are `/accounts/login/`, `/accounts/logout/`, `/accounts/pending/` and `/accounts/choose-dashboard/`. These are flat, hyphenated names under the D-009 prefix.
+  - "Admin" means `User.is_staff`, read through a `User.is_admin` property. It is not a role row and not a new column.
+  - Login looks usernames up with `LOWER(username)`, which uses the `user_username_ci_uniq` index (D-032). Django's `iexact` compiles to `UPPER(...)` on PostgreSQL and scans the whole table.
+  - Five failed logins for a username lock that username for one hour. Until then the message is only "wrong username or password". During the lock even the right password is refused.
+  - Login is rate limited per client IP with a token bucket: 20 tokens, one added every 3 seconds. Over the limit the request gets 429 before any password check. The client IP comes from `X-Forwarded-For` only when the request arrives through Caddy.
+  - Every page or service that takes an object id checks that the current user may access that object, with a test showing another user is refused. Access is checked in code, not with PostgreSQL row-level security.
+- Why: One signup keeps the email check in a single place and drops the guest/logged-in duplicates of each form. Roles added later go through the same pending approval as the doc describes. Password hashing is deliberately slow (about 0.07 s per try in local testing), so refusing over-limit requests before the check protects the server. The lockout protects each account from guessing.
+- Where in code: `docs/DECISIONS.md` (this entry); later `apps/accounts/` (backend, services, views, urls), `config/settings/base.py`, `config/urls.py`
+
 ---
 
 ## Open questions
