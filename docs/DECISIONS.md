@@ -489,6 +489,18 @@ Rules for this file:
 
 ---
 
+## D-049: Seeded charities get distinct names
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active
+- Design doc ref: not in design doc (§5.2.2's name field, D-013)
+- Decision: The dev seed samples a prefix/word pair without replacement from the full 8 × 26 grid, so all 200 seeded charities have different names. `CHARITY.name` stays non-unique in the schema (D-013); the pool only guarantees the sample is large enough (208 pairs for 200 rows) and `random.sample` fails loudly if the counts ever outgrow it, rather than quietly repeating a name.
+- Why: the old seed drew each part independently, so the local database held six "Lev Chaim" and five "Tomchei Torah". Paging a rating-ordered listing then repeated a name on two pages, which reads as a paging bug until you check the ids, and ties across 185 rows made the alphabetical tiebreak look broken. Names are also the only thing a developer eyeballs while working on the listing.
+- Where in code: `apps/dashboards/management/commands/seed.py` (`NAME_WORDS`, `NAMES`), `tests/integration/test_seed.py`
+
+---
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1.
