@@ -2,9 +2,11 @@
 The listing's sort control (§6.2.5, D-048): one dropdown and two direction
 buttons, all in a plain GET form, so the order lives in the URL like the rest of
 the page state. No `page` field is sent, so changing the order starts at page 1.
+The active filters ride along as hidden inputs, so sorting never drops them.
 {% endcomment %}
 <form class="sort" method="get" action="{% url 'charities:listing' %}">
   <input type="hidden" name="page_size" value="{{ page.page_size }}">
+  {% include "charities/filter_state.html" %}
 
   <label class="sort__label" for="sort">Sort</label>
   <select class="sort__select" id="sort" name="sort">

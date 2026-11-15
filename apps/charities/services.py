@@ -10,12 +10,13 @@ from django.db import transaction
 
 from apps.events.services import record_event
 
-from .contracts import CharityCard
+from .contracts import CharityCard, DomainOption, LocationOption, RabbiOption
+from .filters import CharityFilters, FilterForm, sidebar_groups
+from .filters import query_pairs as filter_query_pairs
 from .models import Charity
 from .repositories import CharityRepository
 from .sorting import DEFAULT_SORT, CharitySort
 from .sorting import query_pairs as sort_query_pairs
-from .sorting import query_string as sort_query_string
 
 
 def publish_charity(charity_id, by_user_id=None):
@@ -42,8 +43,8 @@ def _set_visible(charity_id, visible, by_user_id):
 
 
 # --- Listing -----------------------------------------------------------------
-# The rules below are the listing's: order, page clamping, page sizes. They know
-# nothing about where the rows come from; the repository is injected.
+# The rules below are the listing's: filters, order, page clamping, page sizes.
+# They know nothing about where the rows come from; the repository is injected.
 
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
@@ -58,8 +59,9 @@ def page_count(total: int, page_size: int) -> int:
 class Page:
     """One page of results, plus the links needed to move between pages.
 
-    `sort` is part of the result set, not of one page: every link the page
-    builds repeats it, or moving to page 2 would silently reorder the list.
+    The chosen filters and sort belong to the result set, not to one page: every
+    link the page builds repeats both, or moving to page 2 would silently drop a
+    filter or reorder the list.
     """
 
     items: tuple[CharityCard, ...]
@@ -67,6 +69,8 @@ class Page:
     number: int
     page_size: int
     sort: CharitySort = DEFAULT_SORT
+    # The filters as (parameter, value) pairs, for replaying them as hidden inputs.
+    filter_pairs: tuple[tuple[str, object], ...] = ()
 
     @property
     def page_count(self) -> int:
@@ -85,11 +89,15 @@ class Page:
         """The sort as hidden-input pairs; empty for the default order."""
         return sort_query_pairs(self.sort)
 
+    def _state_query(self, **parts: int) -> str:
+        """A query string of `parts`, followed by the active filters and sort."""
+        base = urlencode(parts)
+        state = urlencode(self.filter_pairs + self.sort_pairs)
+        return f"{base}&{state}" if state else base
+
     def query(self, number: int) -> str:
         """Query string for another page of this same result set."""
-        query = urlencode({"page": number, "page_size": self.page_size})
-        sort = sort_query_string(self.sort)
-        return f"{query}&{sort}" if sort else query
+        return self._state_query(page=number, page_size=min(self.page_size, MAX_PAGE_SIZE))
 
     @property
     def previous_query(self) -> str:
@@ -98,6 +106,11 @@ class Page:
     @property
     def next_query(self) -> str:
         return self.query(self.number + 1)
+
+    @property
+    def clear_filters_query(self) -> str:
+        """The page with its size and order kept, but no filters (§6.2.4)."""
+        return self._state_query(page_size=self.page_size)
 
     def numbers(self, window: int = 2) -> list[tuple[int, str]]:
         """(page number, query string) pairs to render as links."""
@@ -115,26 +128,61 @@ def clamp_page_size(requested: int | None) -> int:
 
 def list_charities(
     repository: CharityRepository,
+    filters: CharityFilters | None = None,
     sort: CharitySort = DEFAULT_SORT,
     page: int | None = 1,
     page_size: int | None = None,
 ) -> Page:
-    """Return one page of charities, ordered by `sort`.
+    """Return one page of the charities `filters` keep, ordered by `sort`.
 
     §6.2.5: choosing an order shows page 1, which the view gets by not passing a
     `page` for a sort change; an explicit page in the URL is still honoured so a
-    shared link keeps its whole state (UC-03).
+    shared link keeps its whole state (UC-03). A filter change works the same
+    way (§6.2.4).
     """
+    filters = filters or CharityFilters()
     page_size = clamp_page_size(page_size)
-    total = repository.count()
+    total = repository.count(filters)
     count = page_count(total, page_size)
     number = max(1, min(page or 1, count))
     offset = (number - 1) * page_size
 
     return Page(
-        items=repository.page(offset=offset, limit=page_size, sort=sort),
+        items=repository.page(offset=offset, limit=page_size, filters=filters, sort=sort),
         total=total,
         number=number,
         page_size=page_size,
         sort=sort,
+        filter_pairs=filter_query_pairs(filters),
     )
+
+
+# --- Filter sidebar ----------------------------------------------------------
+# The sidebar is data: a `FilterForm` holds the groups with their options, so the
+# template can render checkboxes and number inputs without knowing which group
+# repeats or what the parameter is called. The option lists are read through the
+# repository so the view could swap the source without changing this function.
+
+
+def list_domains(repository) -> tuple[DomainOption, ...]:
+    """The Domain filter group's choices (§5.2.11)."""
+    return repository.domains()
+
+
+def list_locations(repository) -> tuple[LocationOption, ...]:
+    """The Location filter group's choices (§5.2.10, D-045)."""
+    return repository.locations()
+
+
+def list_rabbis(repository) -> tuple[RabbiOption, ...]:
+    """The Haskamos filter group's choices (§6.1, D-045)."""
+    return repository.rabbis()
+
+
+def filter_form(
+    filters: CharityFilters,
+    options: dict[str, tuple],
+    requested: dict[str, int | None] | None = None,
+) -> FilterForm:
+    """Assemble the sidebar from the chosen filters and the option lists."""
+    return FilterForm(filters=filters, groups=sidebar_groups(filters, options, requested or {}))

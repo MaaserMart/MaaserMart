@@ -7,12 +7,33 @@ template relies on, so that renaming or reshaping a value breaks a test rather
 than quietly emptying the page.
 """
 
+import re
+
+from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
 
 from apps.charities.contracts import CharityCard, DomainTag, LocationTag, ReviewSummary
 from apps.charities.models import Charity, Domain, Location, Review
 from tests.factories.accounts import UserFactory
+
+
+class FilterSidebarCssTest(TestCase):
+    """D-047: the panel is bounded to the viewport and scrolls on its own.
+
+    Like the nav's sticky rule, this reads the stylesheet the page loads: a
+    deleted `max-height` or `overflow-y` would otherwise only show up by eye.
+    """
+
+    def test_the_sidebar_is_bounded_and_scrolls(self) -> None:
+        css = (settings.BASE_DIR / "static" / "css" / "site.css").read_text(encoding="utf-8")
+        rule = re.search(r"\.listing__sidebar\s*\{([^}]*)\}", css)
+
+        self.assertIsNotNone(rule, "the sidebar rule is missing from site.css")
+        declarations = rule.group(1)
+        self.assertIn("max-height", declarations)
+        self.assertIn("overflow-y: auto", declarations)
+        self.assertIn("position: sticky", declarations)
 
 
 class ListingTemplateContractTest(TestCase):
@@ -83,7 +104,8 @@ class ListingTemplateContractTest(TestCase):
         """Guards the shape the template iterates over.
 
         The template reads .name, .tagline, .image, .domains, .locations and
-        each tag's .name, plus .reviews.count and .reviews.average. If a card
+        each tag's .name (and .label for a location), plus .reviews.count and
+        .reviews.average. If a card
         stops exposing one of those, or exposes a manager instead of a
         sequence, this fails loudly.
         """
@@ -93,7 +115,7 @@ class ListingTemplateContractTest(TestCase):
             tagline="t",
             image="i.svg",
             domains=(DomainTag(name="Free loans"),),
-            locations=(LocationTag(name="Lakewood"),),
+            locations=(LocationTag(name="Lakewood", region="NJ", country="USA"),),
             reviews=ReviewSummary(count=2, average=4.5),
         )
 
@@ -103,7 +125,7 @@ class ListingTemplateContractTest(TestCase):
         # The template iterates these directly, so they must be iterable and
         # must not be ORM managers left over from the old contract.
         self.assertEqual(list(card.domains)[0].name, "Free loans")
-        self.assertEqual(list(card.locations)[0].name, "Lakewood")
+        self.assertEqual(list(card.locations)[0].label, "Lakewood, NJ, USA")
         self.assertFalse(hasattr(card.domains, "all"))
         self.assertEqual(card.reviews.count, 2)
         self.assertEqual(card.reviews.average, 4.5)
@@ -156,3 +178,66 @@ class SortControlContractTest(TestCase):
         self.assertIn("Z to A", alphabetical)
         self.assertIn("High to low", counted)
         self.assertIn("Low to high", counted)
+
+    def test_the_sort_form_repeats_the_active_filters(self) -> None:
+        """Sorting must not drop the sidebar's choices (D-045, D-048)."""
+        domain = Domain.objects.create(name="Free loans")
+
+        body = self.client.get(self.url, {"domain": domain.id}).content.decode()
+
+        self.assertIn(f'name="domain" value="{domain.id}"', self._sort_form(body))
+
+
+class FilterSidebarContractTest(TestCase):
+    """The sidebar template reads only fields `FilterForm` guarantees (D-045).
+
+    Django templates fail silently, so a group that loses its `legend` or
+    `kind` would render an empty panel with no error. These pin the contract.
+    """
+
+    def setUp(self) -> None:
+        self.url = reverse("charities:listing")
+
+    def test_every_group_renders_a_legend(self) -> None:
+        body = self.client.get(self.url).content.decode()
+
+        for legend in [
+            "Domains",
+            "Locations",
+            "Haskamos",
+            "Rating",
+            "Reviews",
+            "Approving haskamos",
+            "Disapproving haskamos",
+        ]:
+            self.assertIn(legend, body)
+
+    def test_checkbox_groups_render_inputs_named_by_their_parameter(self) -> None:
+        Domain.objects.create(name="Free loans")
+        Location.objects.create(name="Lakewood", region="NJ", country="USA")
+
+        body = self.client.get(self.url).content.decode()
+
+        self.assertIn('type="checkbox"', body)
+        self.assertIn('name="domain"', body)
+        self.assertIn('name="location"', body)
+
+    def test_number_groups_render_one_bounded_input_each(self) -> None:
+        body = self.client.get(self.url).content.decode()
+
+        self.assertIn('name="min_rating"', body)
+        self.assertIn('min="1"', body)
+        self.assertIn('max="5"', body)
+        self.assertIn('name="max_disapproving_haskamas"', body)
+
+    def test_the_form_is_a_get(self) -> None:
+        """Filters live in the URL, so the form must not post (UC-03)."""
+        body = self.client.get(self.url).content.decode()
+
+        self.assertIn('<form class="filters" method="get"', body)
+
+    def test_no_template_comment_leaks_into_the_page(self) -> None:
+        body = self.client.get(self.url).content.decode()
+
+        self.assertNotIn("{#", body)
+        self.assertNotIn("{%", body)

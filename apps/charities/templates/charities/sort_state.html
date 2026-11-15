@@ -1,0 +1,6 @@
+{% comment %}
+The active sort as hidden inputs. A form that changes the filters, page size or
+page number includes this so it cannot silently reorder the list (§6.2.5).
+{% endcomment %}
+{% for name, value in page.sort_pairs %}<input type="hidden" name="{{ name }}" value="{{ value }}">
+{% endfor %}

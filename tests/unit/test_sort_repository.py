@@ -52,7 +52,7 @@ class SortTest(TestCase):
         self.repository = DjangoCharityRepository()
 
     def names(self, sort: CharitySort) -> list[str]:
-        return [card.name for card in self.repository.page(0, 20, sort)]
+        return [card.name for card in self.repository.page(0, 20, sort=sort)]
 
     def sorted_names(self, mechanism, *, descending: bool) -> list[str]:
         return self.names(CharitySort(mechanism=mechanism, descending=descending))
@@ -81,7 +81,7 @@ class AlphabeticalSortTest(SortTest):
         first = make_charity("Same Name")
         second = make_charity("Same Name")
 
-        cards = self.repository.page(0, 20, DEFAULT_SORT)
+        cards = self.repository.page(0, 20, sort=DEFAULT_SORT)
         same_name = [card.id for card in cards if card.name == "Same Name"]
 
         self.assertEqual(same_name, [first.id, second.id])
@@ -186,7 +186,8 @@ class PopularSortTest(SortTest):
 
     def test_a_charity_is_listed_once_however_many_events_it_has(self) -> None:
         self.assertEqual(
-            len(self.repository.page(0, 10, CharitySort(mechanism=POPULAR, descending=True))), 3
+            len(self.repository.page(0, 10, sort=CharitySort(mechanism=POPULAR, descending=True))),
+            3,
         )
 
 
@@ -281,7 +282,7 @@ class SortCountTest(SortTest):
             with self.subTest(mechanism=mechanism.value):
                 sort = CharitySort(mechanism=mechanism, descending=True)
                 self.assertEqual(self.repository.count(), 2)
-                self.assertEqual(len(self.repository.page(0, 20, sort)), 2)
+                self.assertEqual(len(self.repository.page(0, 20, sort=sort)), 2)
 
     def test_every_mechanism_has_an_order_column(self) -> None:
         """Adding a mechanism without an ORDER BY fails here, not on the page."""
@@ -294,4 +295,6 @@ class SortCountTest(SortTest):
         for mechanism in (POPULAR, TRENDING, UPDATED):
             with self.subTest(mechanism=mechanism.value):
                 with self.assertNumQueries(3):  # page, domains, locations
-                    self.repository.page(0, 10, CharitySort(mechanism=mechanism, descending=True))
+                    self.repository.page(
+                        0, 10, sort=CharitySort(mechanism=mechanism, descending=True)
+                    )
