@@ -19,6 +19,7 @@ FAILURE_WINDOW_SECONDS = 60 * 60
 
 class LoginResult(enum.Enum):
     OK = "ok"
+    MISSING_CREDENTIALS = "missing_credentials"
     WRONG_CREDENTIALS = "wrong_credentials"
     LOCKED_OUT = "locked_out"
 
@@ -58,9 +59,13 @@ def _clear_failures(username):
 def attempt_login(request, username, password):
     """Check the credentials and, if they're right, log the user in.
 
-    Returns (LoginResult, user or None). While a username is locked, even the
-    right password is refused, and the password is never checked.
+    Returns (LoginResult, user or None). Checks run cheapest first, and nothing
+    is written until all of them pass: blank input is refused before anything
+    is counted, and while a username is locked even the right password is
+    refused without being checked.
     """
+    if not username or not password:
+        return LoginResult.MISSING_CREDENTIALS, None
     if is_locked_out(username):
         return LoginResult.LOCKED_OUT, None
     user = authenticate(request, username=username, password=password)
