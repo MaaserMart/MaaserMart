@@ -398,6 +398,15 @@ Rules for this file:
 - Why: One signup keeps the email check in a single place and drops the guest/logged-in duplicates of each form. Roles added later go through the same pending approval as the doc describes. Password hashing is deliberately slow (about 0.07 s per try in local testing), so refusing over-limit requests before the check protects the server. The lockout protects each account from guessing.
 - Where in code: `docs/DECISIONS.md` (this entry); later `apps/accounts/` (backend, services, views, urls), `config/settings/base.py`, `config/urls.py`
 
+## D-YOSEF-sql-params: Queries take user input only as parameters
+- Date: 2026-11-14
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: not in design doc
+- Decision: Database queries go through the Django ORM, which sends user input to PostgreSQL as separate parameters, never pasted into the SQL text. If raw SQL is ever needed, it uses `cursor.execute(sql, params)` or `QuerySet.raw(sql, params)` with placeholders (`%s`), never f-strings, `+` or `%` formatting. `QuerySet.extra()` and `RawSQL` are not used. Ruff enforces this with rules S608, S610 and S611; as of 2026-11-14 no app code uses raw SQL.
+- Why: A query built from text the user typed can be turned into a different query (SQL injection), e.g. a username of `' OR 1=1 --`. Parameters make the input data, never code.
+- Where in code: `pyproject.toml` (`[tool.ruff.lint] select`), `tests/unit/test_auth_backend.py` (injection-shaped usernames are refused)
+
 ---
 
 ## Open questions
