@@ -1,4 +1,4 @@
-"""Plain login, logout and chooser pages. Local only, for trying login in a browser."""
+"""Login, logout and the dashboard chooser (§6.2.1, D-YOSEF-accounts-login)."""
 
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
