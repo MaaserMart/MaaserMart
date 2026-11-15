@@ -505,12 +505,12 @@ Rules for this file:
 
 - Date: 2026-11-14
 - Decided by: builder, pending CEO/COO confirmation
-- Status: Active (amended by D-050 for the trending formula)
+- Status: Active (amended by D-050 for the trending formula and D-053 for how a changed dropdown is applied)
 - Design doc ref: §6.2.5 (Sort — SRS FR 3), §5.2.21 (Derived Values), §6.4.3 (Trending), §6.1 (dependencies)
 - Decision: The listing's sort is a `CharitySort` value — a mechanism plus a direction — read from the URL and passed to `charities.services.list_charities(repository, filters, sort, page, page_size)`. §6.2.5 fixes the mechanisms and that each has both directions, but not the parameter values, the default direction, or what several of the orders count, so those are settled here:
   - The URL is `?sort=<mechanism>&direction=<asc|desc>`. The mechanisms, in dropdown order, are `alphabetical`, `trending`, `popular`, `rating`, `haskamos`, `newest` and `updated`. `direction` is `asc` or `desc`.
   - `alphabetical` starts A→Z and is the default; every other mechanism starts high→low. When `sort` is absent the mechanism is alphabetical. When `sort` is present but names no mechanism, the whole choice falls back to alphabetical A→Z, which is §6.2.5's "when nothing recognizable is input, or when nothing is input, it defaults to alphabetical a->z". A `direction` that is absent or not `asc`/`desc` falls back to the chosen mechanism's default direction, the same way §6.2.4's filter groups ignore junk values.
-  - The dropdown is a GET form that carries `page_size` and the active filters but never `page`, so choosing a sort lands on page 1 (§6.2.5). Changing the dropdown submits it immediately with no `direction`, so the new mechanism starts in its default direction and the two buttons' labels always describe the order they will apply. The two direction buttons are submits named `direction`, so they pick the mechanism shown in the dropdown and the clicked direction in one action. Pagination links, the page-size form, the jump form and the filter form carry the sort, so neither control silently drops the other; the filter protocol keeps the sort and vice versa (D-045).
+  - The dropdown is a GET form that carries `page_size` and the active filters but never `page`, so choosing a sort lands on page 1 (§6.2.5). Changing the dropdown submits it immediately with no `direction` (D-053), so the new mechanism starts in its default direction and the two buttons' labels always describe the order they will apply. The two direction buttons are submits named `direction`, so they pick the mechanism shown in the dropdown and the clicked direction in one action. Pagination links, the page-size form, the jump form and the filter form carry the sort, so neither control silently drops the other; the filter protocol keeps the sort and vice versa (D-045).
   - The default sort adds no parameters to a URL. `alphabetical` ascending is treated as the default even when written out, so a page-size form or pagination link round-trips to the shortest equivalent address.
   - Ties break alphabetically, A→Z, as §6.2.5's failure path says, then by id so a page boundary cannot repeat or skip a row. The tiebreak is not reversed when the primary order is descending: "latest first" with two equal timestamps still reads A→Z.
   - `trending` is §6.4.3's score, with the two windows read as non-overlapping: 3 × the charity's EVENT rows in the last 7 days plus 2 × its EVENT rows 8–30 days ago. "Past" is measured from the request time, in UTC (D-010). D-050 settled the buckets; this entry first recorded the literal double count.
@@ -571,6 +571,18 @@ Rules for this file:
 - Why: D-048's "most recently updated" order and §5.2.21's derived date read the latest `charity_updated` EVENT, and nothing else — charities cannot read EDIT_REQUEST (D-006). The audit's issue #10 asked only about approved edits, but confirming that alone would still leave admin and owner saves invisible to the order. Making every save use one service gives the later edit flow a single, audited write path instead of a rule it has to remember.
 - Known gap: a change to a charity's domains or locations through the admin form's multi-selects still saves without an event, because those rows are written by the through tables after `save_model`. The edit-request flow (§5.2.8) is field-based, so no product path does this today; it is filed as a task for the edit-flow work, together with whether `update_charity` should accept membership changes.
 - Where in code: `apps/charities/services.py` (`EDITABLE_FIELDS`, `update_charity`, `_set_visible`), `apps/charities/admin.py` (`CharityAdmin.save_model`), `tests/unit/test_charity_services.py`, `tests/integration/test_charity_admin.py`
+
+---
+
+## D-053: A changed sort dropdown applies at once, and Enter takes the same path
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active (amends D-048's dropdown paragraph)
+- Design doc ref: §6.2.5 (Sort — SRS FR 3)
+- Decision: The sort form carries `data-sort-form`, and `static/js/sort.js` submits it both on `change` and on Enter in the dropdown. Both paths call `form.submit()` with no submitter, so no `direction` value is sent and the server uses the chosen mechanism's default direction. The inline `onchange` handler is gone. With JavaScript off, the form still works as before: the visitor picks a mechanism and clicks a direction button, while Enter in the dropdown would still take the first button (ascending) — that fallback is inherent to the form's button order and is not worth a hidden control.
+- Why: the dropdown alone submitted nothing, so picking a mechanism looked broken until the visitor also clicked the highlighted "current" direction; and Enter in a `<select>` activates the first submit button, giving trending, popularity, rating, haskamos, newest and updated ascending — the opposite of their documented default. §6.2.5 only requires the dropdown and two direction buttons, so a small script on the existing controls fits the doc; `form.submit()` rather than an Apply button keeps the control at two parts.
+- Where in code: `apps/charities/templates/charities/sort.html`, `static/js/sort.js`, `tests/unit/test_template_contract.py`
 
 ---
 
