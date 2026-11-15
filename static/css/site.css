@@ -66,8 +66,24 @@ body {
 }
 
 .listing__sidebar {
+  /* Seven groups make the panel taller than the viewport, and the option lists
+     can grow. Bounding it here means the panel scrolls on its own, so its bottom
+     groups stay reachable without scrolling the results off the page. */
+  max-height: calc(100vh - 5.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   position: sticky;
   top: 4.5rem;
+}
+
+/* Below 48rem the sidebar sits above the results; a pinned, scrolling panel
+   there would trap the page, so it becomes ordinary page content. */
+@media (max-width: 48rem) {
+  .listing__sidebar {
+    max-height: none;
+    overflow: visible;
+    position: static;
+  }
 }
 
 .listing__results {
