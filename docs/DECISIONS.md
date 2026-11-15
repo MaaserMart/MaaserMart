@@ -380,6 +380,42 @@ Rules for this file:
 - Why: A charity_updated event moves the derived "last updated" date (§5.2.21), so it must mean a real change. The admin form must not bypass the services, or changes would skip the event that D-039 relies on.
 - Where in code: `apps/charities/services.py` (`_set_visible`), `apps/charities/admin.py` (`CharityAdmin`), `apps/dashboards/management/commands/seed.py`, `tests/unit/test_charity_services.py`, `tests/integration/test_charity_admin.py`
 
+## D-YOSEF-accounts-login: Accounts: one signup, roles requested after, and how login is protected
+- Date: 2026-11-14
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.2.1, §6.2.2, §7.1.1, §8.3, §8.4
+- Decision:
+  - Sign-in is username and password through Django's built-in auth. Google sign-in may be added later alongside it.
+  - There is one signup for everyone, at `/accounts/signup/`. It creates the user and the `member` role, so every account is a member. There is no "pick a role" page and no guest version of the rabbi or owner forms.
+  - A logged-in user asks for an extra role at `/accounts/rabbi-signup/` or `/accounts/owner-signup/`. Both require login, take no user id in the URL (the user comes from the session), and end pending until an admin approves.
+  - The other accounts URLs are `/accounts/login/`, `/accounts/logout/`, `/accounts/pending/` and `/accounts/choose-dashboard/`. These are flat, hyphenated names under the D-009 prefix.
+  - "Admin" means `User.is_staff`, read through a `User.is_admin` property. It is not a role row and not a new column.
+  - Login looks usernames up with `LOWER(username)`, which uses the `user_username_ci_uniq` index (D-032). Django's `iexact` compiles to `UPPER(...)` on PostgreSQL and scans the whole table.
+  - Five failed logins for a username lock that username for one hour. Until then the message is only "wrong username or password". During the lock even the right password is refused.
+  - Login is rate limited per client IP with a token bucket: 20 tokens, one added every 3 seconds. Over the limit the request gets 429 before any password check. The client IP comes from `X-Forwarded-For` only when the request arrives through Caddy.
+  - Every page or service that takes an object id checks that the current user may access that object, with a test showing another user is refused. Access is checked in code, not with PostgreSQL row-level security.
+- Why: One signup keeps the email check in a single place and drops the guest/logged-in duplicates of each form. Roles added later go through the same pending approval as the doc describes. Password hashing is deliberately slow (about 0.07 s per try in local testing), so refusing over-limit requests before the check protects the server. The lockout protects each account from guessing.
+- Where in code: `docs/DECISIONS.md` (this entry); later `apps/accounts/` (backend, services, views, urls), `config/settings/base.py`, `config/urls.py`
+
+## D-YOSEF-sql-params: Queries take user input only as parameters
+- Date: 2026-11-14
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: not in design doc
+- Decision: Database queries go through the Django ORM, which sends user input to PostgreSQL as separate parameters, never pasted into the SQL text. If raw SQL is ever needed, it uses `cursor.execute(sql, params)` or `QuerySet.raw(sql, params)` with placeholders (`%s`), never f-strings, `+` or `%` formatting. `QuerySet.extra()` and `RawSQL` are not used. Ruff enforces this with rules S608, S610 and S611; as of 2026-11-14 no app code uses raw SQL.
+- Why: A query built from text the user typed can be turned into a different query (SQL injection), e.g. a username of `' OR 1=1 --`. Parameters make the input data, never code.
+- Where in code: `pyproject.toml` (`[tool.ruff.lint] select`), `tests/unit/test_auth_backend.py` (injection-shaped usernames are refused)
+
+## D-YOSEF-shared-cache: Django's cache lives in PostgreSQL
+- Date: 2026-11-15
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.2.1.8 (lockout); not otherwise in design doc
+- Decision: The caches are `DatabaseCache`: `default` in the table `django_cache` (rate-limit buckets), and `login` in `login_cache` (login failures and locks). A DatabaseCache over its MAX_ENTRIES deletes its alphabetically lowest keys whether or not they have expired, so locks get their own table, where a flood of other keys can't delete them. Both tables are made by one `manage.py createcachetable`, not by a migration, so every database (local, CI, production) needs that command run once after `migrate`. Django's test runner runs it on the test database automatically.
+- Why: The login lockout and rate limit (D-YOSEF-accounts-login) keep counters in the cache. Django's default per-process memory cache would give each Gunicorn worker its own counters and lose them on restart, multiplying the allowed tries. PostgreSQL is already in the stack; Redis would add a service. Switching later is one settings change.
+- Where in code: `config/settings/base.py` (`CACHES`), `README.md` (setup steps), `tests/unit/test_cache.py`
+
 ---
 
 ## Open questions
