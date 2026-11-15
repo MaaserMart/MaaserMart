@@ -4,12 +4,16 @@ These need a database, unlike the rule tests, because the thing under test is
 the mapping between rows and cards.
 """
 
+from datetime import timedelta
+
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.charities.contracts import CharityCard, ReviewSummary
 from apps.charities.filters import CharityFilters
-from apps.charities.models import Charity, Domain, Location, Review
+from apps.charities.models import Charity, Domain, Haskama, Location, Review
 from apps.charities.repositories import DjangoCharityRepository
+from apps.events.models import Event
 from tests.factories.accounts import UserFactory
 
 
@@ -98,6 +102,35 @@ class DjangoCharityRepositoryTest(TestCase):
         card = self.repository.page(filters=self.no_filters, offset=0, limit=1)[0]
 
         self.assertEqual(card.reviews, ReviewSummary(count=0, average=None))
+
+    def test_maps_activity_values(self) -> None:
+        """D-051: every card carries the counts and date the activity orders read."""
+        charity = Charity.objects.create(name="Keren L'Dugma")
+        for _ in range(2):
+            Event.objects.create(charity=charity, action=Event.Action.VIEW)
+        Haskama.objects.create(
+            rabbi_user=UserFactory(), charity=charity, verdict=Haskama.Verdict.APPROVE
+        )
+        Haskama.objects.create(
+            rabbi_user=UserFactory(), charity=charity, verdict=Haskama.Verdict.DISAPPROVE
+        )
+
+        card = self.repository.page(filters=self.no_filters, offset=0, limit=1)[0]
+
+        self.assertEqual(card.activity.events, 2)
+        self.assertEqual(card.activity.approving_haskamas, 1)
+        # No charity_updated event yet, so the charity's own creation is its last change.
+        self.assertEqual(card.activity.last_changed, charity.created)
+
+    def test_last_changed_is_the_latest_charity_update(self) -> None:
+        charity = Charity.objects.create(name="Keren L'Dugma")
+        event = Event.objects.create(charity=charity, action=Event.Action.CHARITY_UPDATED)
+        stamp = timezone.now() + timedelta(days=1)
+        Event.objects.filter(pk=event.pk).update(created=stamp)
+
+        card = self.repository.page(filters=self.no_filters, offset=0, limit=1)[0]
+
+        self.assertEqual(card.activity.last_changed, stamp)
 
     def test_reviews_do_not_add_queries_per_charity(self) -> None:
         author = UserFactory()
