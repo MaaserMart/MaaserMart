@@ -19,7 +19,7 @@
     </label>
     <label class="auth__field">
       <span class="auth__label">Password</span>
-      <input class="auth__input" type="password" name="password" required autocomplete="new-password">
+      {% include "accounts/_password_input.html" with autocomplete="new-password" %}
       {% for e in form.password.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
     </label>
     <div class="auth__terms">

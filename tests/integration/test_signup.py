@@ -548,3 +548,28 @@ def test_service_leaves_no_user_if_the_role_cannot_be_written():
 )
 def test_masked_email(email, shown):
     assert signup.masked_email(email) == shown
+
+
+# --- show-password eye (login and signup) ------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("page", "autocomplete"),
+    [(SIGNUP, "new-password"), ("/accounts/login/", "current-password")],
+)
+def test_password_box_starts_hidden_with_an_eye_to_show_it(client, page, autocomplete):
+    html = client.get(page).content.decode()
+    box = re.search(r'<input[^>]*name="password"[^>]*>', html).group()
+    assert 'type="password"' in box
+    assert 'type="text"' not in box  # only Alpine may switch it, after a click
+    assert f'autocomplete="{autocomplete}"' in box
+    assert 'class="password__toggle" type="button"' in html
+    assert 'aria-label="Show password"' in html
+
+
+def test_the_eye_never_submits_the_form(client):
+    """type="button": clicking the eye must not send the form."""
+    html = client.get(SIGNUP).content.decode()
+    toggle = re.search(r'<button class="password__toggle"[^>]*>', html).group()
+    assert 'type="button"' in toggle
+    assert 'type="submit"' not in toggle
