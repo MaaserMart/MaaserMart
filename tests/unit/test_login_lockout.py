@@ -148,6 +148,25 @@ def test_wrong_password_does_not_start_a_session(yosef):
     assert SESSION_KEY not in request.session
 
 
+@pytest.mark.parametrize(("username", "password"), [("", "x"), ("yosef", ""), ("", "")])
+def test_blank_input_is_refused_before_any_other_work(yosef, username, password):
+    with (
+        mock.patch("apps.accounts.login.is_locked_out") as locked,
+        mock.patch("apps.accounts.login.authenticate") as authenticate,
+        mock.patch("apps.accounts.login._record_failure") as record,
+    ):
+        assert try_login(username, password) is LoginResult.MISSING_CREDENTIALS
+    locked.assert_not_called()
+    authenticate.assert_not_called()
+    record.assert_not_called()
+
+
+def test_blank_passwords_do_not_count_toward_the_lock(yosef):
+    for _ in range(10):
+        try_login("yosef", "")
+    assert try_login("yosef") is OK
+
+
 def test_an_unknown_username_is_counted_the_same_way():
     """Otherwise "never locks" would reveal that the username doesn't exist."""
     assert fail("nobody", 5) == [WRONG] * 4 + [LOCKED]
