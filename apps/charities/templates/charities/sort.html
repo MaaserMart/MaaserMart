@@ -1,10 +1,13 @@
+{% load static %}
 {% comment %}
 The listing's sort control (§6.2.5, D-048): one dropdown and two direction
 buttons, all in a plain GET form, so the order lives in the URL like the rest of
 the page state. No `page` field is sent, so changing the order starts at page 1.
 The active filters ride along as hidden inputs, so sorting never drops them.
+`js/sort.js` applies a changed dropdown and Enter, sending no direction so the
+mechanism starts in its default one (D-053).
 {% endcomment %}
-<form class="sort" method="get" action="{% url 'charities:listing' %}">
+<form class="sort" method="get" action="{% url 'charities:listing' %}" data-sort-form>
   <input type="hidden" name="page_size" value="{{ page.page_size }}">
   {% include "charities/filter_state.html" %}
 
@@ -16,7 +19,6 @@ The active filters ride along as hidden inputs, so sorting never drops them.
     class="sort__select"
     id="{{ sort_form.parameter }}"
     name="{{ sort_form.parameter }}"
-    onchange="this.form.submit()"
   >
     {% for option in sort_form.options %}
       <option value="{{ option.value }}"{% if option.value == sort_form.selected %} selected{% endif %}>{{ option.label }}</option>
@@ -38,3 +40,4 @@ The active filters ride along as hidden inputs, so sorting never drops them.
     {% if sort_form.descending %}aria-current="true"{% endif %}
   >{{ sort_form.high_label }}</button>
 </form>
+<script src="{% static 'js/sort.js' %}" defer></script>

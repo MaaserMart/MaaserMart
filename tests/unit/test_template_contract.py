@@ -220,10 +220,30 @@ class SortControlContractTest(TestCase):
         self.assertIn(f'name="domain" value="{domain.id}"', self._sort_form(body))
 
     def test_the_dropdown_applies_its_choice_when_it_changes(self) -> None:
-        """The labels must never describe the mechanism that is no longer chosen."""
+        """The labels must never describe the mechanism that is no longer chosen (D-053)."""
         body = self.client.get(self.url).content.decode()
+        form = self._sort_form(body)
 
-        self.assertIn('onchange="this.form.submit()"', self._sort_form(body))
+        self.assertIn("data-sort-form", form)
+        # The behaviour lives in the script, not in an inline handler that a
+        # Content-Security-Policy would have to allow.
+        self.assertNotIn("onchange=", form)
+        self.assertIn('<script src="', body)
+        self.assertIn("js/sort.js", body)
+
+    def test_enter_in_the_dropdown_takes_the_same_path_as_a_change(self) -> None:
+        """Both listeners submit with no submitter, so the default direction wins.
+
+        There is no browser here to press the key, so the check is on the script
+        the page loads: losing either listener would bring back the asc-first
+        implicit submit.
+        """
+        script = (settings.BASE_DIR / "static" / "js" / "sort.js").read_text(encoding="utf-8")
+
+        self.assertIn('addEventListener("change"', script)
+        self.assertIn('addEventListener("keydown"', script)
+        self.assertIn('event.key === "Enter"', script)
+        self.assertIn("form.submit()", script)
 
 
 class FilterSidebarContractTest(TestCase):
