@@ -16,7 +16,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .backends import find_user
-from .ratelimit import client_ip, take_token
+from .ratelimit import client_network, take_token
 from .services import find_role
 
 # Per client IP: a burst of 20 tries, then one every 3 seconds (20 a minute).
@@ -94,7 +94,7 @@ def attempt_login(request, username, password):
     """
     if not username or not password:
         return LoginResult.MISSING_CREDENTIALS, None
-    if not take_token(f"login:{client_ip(request)}", RATE_CAPACITY, RATE_REFILL_SECONDS):
+    if not take_token(f"login:{client_network(request)}", RATE_CAPACITY, RATE_REFILL_SECONDS):
         return LoginResult.RATE_LIMITED, None
     account = _account(username)
     if _locked(account):

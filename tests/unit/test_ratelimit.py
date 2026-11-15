@@ -8,7 +8,7 @@ from django.contrib.sessions.backends.db import SessionStore
 from django.test import RequestFactory
 
 from apps.accounts.login import LoginResult, attempt_login, is_locked_out
-from apps.accounts.ratelimit import client_ip, take_token
+from apps.accounts.ratelimit import client_ip, client_network, take_token
 from tests.factories import UserFactory
 from tests.factories.accounts import DEFAULT_PASSWORD
 
@@ -135,6 +135,31 @@ def test_through_caddy_without_a_header_uses_caddys_address():
 
 def test_through_caddy_a_garbage_header_is_ignored():
     assert client_ip(request_from(CADDY, "not-an-ip")) == CADDY
+
+
+# --- IPv6 is limited per /64 (review of PR #12, S2) ----------------------------
+
+
+def test_ipv4_is_its_own_key():
+    assert client_network(request_from(CADDY, "198.51.100.7")) == "198.51.100.7"
+
+
+def test_ipv6_addresses_in_one_slash_64_share_a_key():
+    a = client_network(request_from(CADDY, "2001:db8:0:1::a"))
+    b = client_network(request_from(CADDY, "2001:db8:0:1:ffff:ffff:ffff:ffff"))
+    assert a == b == "2001:db8:0:1::/64"
+
+
+def test_ipv6_addresses_in_different_slash_64s_do_not_share_a_key():
+    a = client_network(request_from(CADDY, "2001:db8:0:1::a"))
+    b = client_network(request_from(CADDY, "2001:db8:0:2::a"))
+    assert a != b
+
+
+def test_rotating_ipv6_addresses_in_one_slash_64_hit_the_limit(clock):
+    UserFactory(username="yosef")
+    results = [login_from(f"2001:db8:0:1::{n:x}") for n in range(21)]
+    assert results[-1] is LoginResult.RATE_LIMITED
 
 
 # --- inside attempt_login ----------------------------------------------------
