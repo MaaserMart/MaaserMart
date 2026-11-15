@@ -46,7 +46,7 @@ def record_event(charity_id, action, link_id=None, user_id=None):
 
 
 def event_count(charity_ref: OuterRef) -> Expression:
-    """How many EVENT rows reference one charity (§5.2.21's visit count).
+    """How many EVENT rows reference one charity (§6.2.5's "most events").
 
     Every action counts: a view, a link click, a rejection and a charity update
     are all activity. A charity with no events has no row to aggregate, so the

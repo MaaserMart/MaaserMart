@@ -7,9 +7,21 @@ Swapping the store later means adding an implementation, not editing callers.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Protocol
 
-from django.db.models import Avg, Count, F, OuterRef, Q, QuerySet
+from django.db.models import (
+    Avg,
+    Count,
+    Exists,
+    Expression,
+    F,
+    IntegerField,
+    OuterRef,
+    QuerySet,
+    Subquery,
+    Value,
+)
 from django.db.models.functions import Coalesce
 
 from apps.charities.contracts import (
@@ -22,7 +34,7 @@ from apps.charities.contracts import (
     ReviewSummary,
 )
 from apps.charities.filters import CharityFilters
-from apps.charities.models import Charity, Domain, Haskama, Location
+from apps.charities.models import Charity, CharityDomain, CharityLocation, Domain, Haskama, Location
 from apps.charities.sorting import (
     ALPHABETICAL,
     DEFAULT_SORT,
@@ -36,6 +48,21 @@ from apps.charities.sorting import (
     Mechanism,
 )
 from apps.events import services as events
+
+
+@dataclass(frozen=True)
+class OrderKey:
+    """How one sort mechanism becomes an ORDER BY.
+
+    `column` is the annotated value the mechanism orders by. `tiebreak` follows
+    the primary order and is never reversed, which is what makes a result set
+    with equal values total and pageable. `nulls_last` marks a value where NULL
+    means "none" rather than "low" (D-048).
+    """
+
+    column: str
+    tiebreak: tuple[str, ...] = ("name", "pk")
+    nulls_last: bool = False
 
 
 class CharityRepository(Protocol):
@@ -72,17 +99,17 @@ class DjangoCharityRepository:
     same annotations and cannot disagree (D-045, D-048).
     """
 
-    # §6.2.5's mechanisms, and the annotated column each one orders by. The
-    # event annotations are added only when their mechanism is chosen, so a
-    # plain listing page pays for no activity subquery (D-048).
-    ORDER_COLUMNS: dict[Mechanism, str] = {
-        ALPHABETICAL: "name",
-        TRENDING: "trending_score",
-        POPULAR: "event_count",
-        RATING: "average_rating",
-        HASKAMOS: "approving_haskamas",
-        NEWEST: "created",
-        UPDATED: "last_changed",
+    # §6.2.5's mechanisms mapped to their ORDER BY. The event annotations are
+    # added only when their mechanism is chosen, so a plain listing page pays
+    # for no activity subquery (D-048).
+    ORDER_KEYS: dict[Mechanism, OrderKey] = {
+        ALPHABETICAL: OrderKey("name", tiebreak=("pk",)),
+        TRENDING: OrderKey("trending_score"),
+        POPULAR: OrderKey("event_count"),
+        RATING: OrderKey("average_rating", nulls_last=True),
+        HASKAMOS: OrderKey("approving_haskamas"),
+        NEWEST: OrderKey("created"),
+        UPDATED: OrderKey("last_changed"),
     }
 
     def __init__(self, *, published_only: bool = False) -> None:
@@ -95,23 +122,46 @@ class DjangoCharityRepository:
             rows = rows.filter(is_visible=True)
         return rows
 
-    def _counted(self) -> QuerySet[Charity]:
-        """Rows annotated with the review and haskama numbers the filters read.
+    def _counted(self, *, approving: bool = False, disapproving: bool = False) -> QuerySet[Charity]:
+        """Rows annotated with the review numbers the cards show.
 
         The counts are over all of a charity's rows, not just published ones:
         while D-042 lists unpublished charities, the filters treat them the same.
-        The distinct counts keep one review or haskama from being counted once
-        per row a joining filter adds (D-045).
+        A haskama count is added only when a filter or the chosen order reads it,
+        and comes from a subquery, so it never multiplies the rows the review
+        aggregate sees (D-045, D-048).
         """
-        return self._rows().annotate(
-            review_count=Count("reviews", distinct=True),
+        rows = self._rows().annotate(
+            review_count=Count("reviews"),
             average_rating=Avg("reviews__rating"),
-            approving_haskamas=Count(
-                "haskamas", filter=Q(haskamas__verdict=Haskama.Verdict.APPROVE), distinct=True
+        )
+        if approving:
+            rows = rows.annotate(approving_haskamas=self._haskama_count(Haskama.Verdict.APPROVE))
+        if disapproving:
+            rows = rows.annotate(
+                disapproving_haskamas=self._haskama_count(Haskama.Verdict.DISAPPROVE)
+            )
+        return rows
+
+    @staticmethod
+    def _haskama_count(verdict: str) -> Expression:
+        """How many of a charity's haskamas carry `verdict`, as a count expression.
+
+        HASKAMA is this app's table, so the subquery is read here rather than
+        through another app's services. Coalescing to 0 keeps "no haskamas" a
+        countable zero instead of NULL, which no filter or order can compare.
+        """
+        return Coalesce(
+            Subquery(
+                Haskama.objects.filter(charity=OuterRef("pk"), verdict=verdict)
+                .order_by()
+                .values("charity")
+                .annotate(total=Count("pk"))
+                .values("total"),
+                output_field=IntegerField(),
             ),
-            disapproving_haskamas=Count(
-                "haskamas", filter=Q(haskamas__verdict=Haskama.Verdict.DISAPPROVE), distinct=True
-            ),
+            Value(0),
+            output_field=IntegerField(),
         )
 
     def page(
@@ -121,23 +171,55 @@ class DjangoCharityRepository:
         filters: CharityFilters | None = None,
         sort: CharitySort = DEFAULT_SORT,
     ) -> tuple[CharityCard, ...]:
-        rows = self._ordered(self._with_sort_values(self._narrowed(filters), sort), sort)
+        rows = self._narrowed(filters, sort=sort)
+        rows = self._with_event_values(rows, sort)
+        rows = self._ordered(rows, sort)
         rows = rows.prefetch_related("domains", "locations")[offset : offset + limit]
         return tuple(self._to_card(row) for row in rows)
 
     def count(self, filters: CharityFilters | None = None) -> int:
         return self._narrowed(filters).count()
 
-    def _narrowed(self, filters: CharityFilters | None) -> QuerySet[Charity]:
-        """Apply §6.2.4's groups: OR inside a group, AND between groups."""
+    def _narrowed(
+        self, filters: CharityFilters | None, *, sort: CharitySort | None = None
+    ) -> QuerySet[Charity]:
+        """Apply §6.2.4's groups: OR inside a group, AND between groups.
+
+        A repeatable group is one EXISTS, not a join: a charity with three
+        matching domains is still one row, so no DISTINCT is needed and the
+        review count cannot be multiplied by a filter. The two haskama counts
+        are read only when a filter (or the chosen order) needs them.
+        """
         filters = filters or CharityFilters()
-        rows = self._counted()
+        needs_approving = (
+            sort is not None and sort.mechanism == HASKAMOS
+        ) or filters.min_approving_haskamas is not None
+        rows = self._counted(
+            approving=needs_approving,
+            disapproving=filters.max_disapproving_haskamas is not None,
+        )
         if filters.domains:
-            rows = rows.filter(domains__in=filters.domains)
+            rows = rows.filter(
+                Exists(
+                    CharityDomain.objects.filter(charity=OuterRef("pk"), domain__in=filters.domains)
+                )
+            )
         if filters.locations:
-            rows = rows.filter(locations__in=filters.locations)
+            rows = rows.filter(
+                Exists(
+                    CharityLocation.objects.filter(
+                        charity=OuterRef("pk"), location__in=filters.locations
+                    )
+                )
+            )
         if filters.haskama_rabbis:
-            rows = rows.filter(haskamas__rabbi_user__in=filters.haskama_rabbis)
+            rows = rows.filter(
+                Exists(
+                    Haskama.objects.filter(
+                        charity=OuterRef("pk"), rabbi_user__in=filters.haskama_rabbis
+                    )
+                )
+            )
         if filters.min_rating is not None:
             # The scale is stars (D-045), and `from_query` has already clamped the
             # value into it, so this compares like with like. No reviews means no
@@ -149,21 +231,17 @@ class DjangoCharityRepository:
             rows = rows.filter(approving_haskamas__gte=filters.min_approving_haskamas)
         if filters.max_disapproving_haskamas is not None:
             rows = rows.filter(disapproving_haskamas__lte=filters.max_disapproving_haskamas)
-        return rows.distinct() if self._joins_rows(filters) else rows
+        return rows
 
     @staticmethod
-    def _joins_rows(filters: CharityFilters) -> bool:
-        """True when a filter multiplies rows, so DISTINCT is needed to count charities."""
-        return bool(filters.domains or filters.locations or filters.haskama_rabbis)
+    def _with_event_values(rows: QuerySet[Charity], sort: CharitySort) -> QuerySet[Charity]:
+        """Annotate the EVENT-derived value the chosen order reads, if any.
 
-    @staticmethod
-    def _with_sort_values(rows: QuerySet[Charity], sort: CharitySort) -> QuerySet[Charity]:
-        """Annotate the activity value the chosen order reads, if it has one.
-
-        The haskama count is already on the rows because the sidebar filters by
-        it, so the sort reuses that annotation rather than joining HASKAMA a
-        second time. EVENT is another app's table, so those expressions come
-        from its services.py; charities never imports the model (D-006).
+        The haskama count is not added here: `_narrowed` already knows it is
+        needed for this order (or for a haskama filter), and reusing that one
+        annotation keeps the query from counting the same rows twice. EVENT is
+        another app's table, so these expressions come from its services.py;
+        charities never imports the model (D-006).
         """
         if sort.mechanism == POPULAR:
             return rows.annotate(event_count=events.event_count(OuterRef("pk")))
@@ -184,19 +262,16 @@ class DjangoCharityRepository:
         A rating of `None` is no rating, not a low one, so those rows stay last
         in both directions (D-048).
         """
-        column = cls.ORDER_COLUMNS[sort.mechanism]
-        if column == "name":
-            primary = F("name").desc() if sort.descending else F("name").asc()
-            return rows.order_by(primary, "pk")
-        if column == "average_rating":
-            primary = (
-                F(column).desc(nulls_last=True)
-                if sort.descending
-                else F(column).asc(nulls_last=True)
-            )
-            return rows.order_by(primary, "name", "pk")
-        primary = F(column).desc() if sort.descending else F(column).asc()
-        return rows.order_by(primary, "name", "pk")
+        key = cls.ORDER_KEYS[sort.mechanism]
+        primary = F(key.column)
+        # Django wants None, not False, when NULLS LAST is not requested.
+        nulls_last = True if key.nulls_last else None
+        ordered = (
+            primary.desc(nulls_last=nulls_last)
+            if sort.descending
+            else primary.asc(nulls_last=nulls_last)
+        )
+        return rows.order_by(ordered, *key.tiebreak)
 
     @staticmethod
     def _to_card(row: Charity) -> CharityCard:

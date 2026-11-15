@@ -10,7 +10,8 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.charities.models import Charity, Haskama, Review
+from apps.charities.filters import CharityFilters
+from apps.charities.models import Charity, Domain, Haskama, Review
 from apps.charities.repositories import DjangoCharityRepository
 from apps.charities.sorting import (
     ALPHABETICAL,
@@ -159,6 +160,22 @@ class HaskamaCountSortTest(SortTest):
             ["Gamma", "Beta", "Alpha"],
         )
 
+    def test_the_join_does_not_list_a_charity_once_per_haskama(self) -> None:
+        self.assertEqual(len(self.repository.page(0, 20, sort=CharitySort(HASKAMOS, True))), 3)
+
+    def test_the_haskama_order_does_not_change_the_review_summary(self) -> None:
+        """A sort must not multiply the review aggregate it shares a query with."""
+        for charity, rating in ((self.alpha, 5), (self.alpha, 3), (self.beta, 4)):
+            Review.objects.create(charity=charity, author=UserFactory(), rating=rating)
+
+        cards = {
+            card.name: card
+            for card in self.repository.page(0, 20, sort=CharitySort(HASKAMOS, True))
+        }
+
+        self.assertEqual((cards["Alpha"].reviews.count, cards["Alpha"].reviews.average), (2, 4.0))
+        self.assertEqual((cards["Beta"].reviews.count, cards["Beta"].reviews.average), (1, 4.0))
+
 
 class PopularSortTest(SortTest):
     """`popular` counts every EVENT action (D-048)."""
@@ -273,6 +290,62 @@ class UpdatedSortTest(SortTest):
         )
 
 
+class FilteredSortTest(SortTest):
+    """A filter chooses the set and a sort orders it, in the same query (D-045, D-048)."""
+
+    def test_a_filter_and_a_sort_narrow_and_order_together(self) -> None:
+        food = Domain.objects.create(name="Food")
+        education = Domain.objects.create(name="Education")
+        alpha = make_charity("Alpha")
+        alpha.domains.add(food)
+        zeta = make_charity("Zeta")
+        zeta.domains.add(education)
+        make_event(alpha)
+        make_event(zeta)
+        make_event(zeta)
+
+        cards = self.repository.page(
+            0,
+            20,
+            CharityFilters(domains=(food.id,)),
+            CharitySort(mechanism=POPULAR, descending=True),
+        )
+
+        self.assertEqual([card.name for card in cards], ["Alpha"])
+
+    def test_a_repeatable_filter_keeps_the_review_count_exact(self) -> None:
+        """Two matching domains must not turn two reviews into four (D-045)."""
+        first = Domain.objects.create(name="Food")
+        second = Domain.objects.create(name="Education")
+        charity = make_charity("Alpha")
+        charity.domains.add(first, second)
+        for rating in (5, 3):
+            Review.objects.create(charity=charity, author=UserFactory(), rating=rating)
+
+        filters = CharityFilters(domains=(first.id,))
+        cards = self.repository.page(0, 20, filters)
+
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(cards[0].reviews.count, 2)
+        self.assertEqual(cards[0].reviews.average, 4.0)
+        self.assertEqual(self.repository.count(filters), 1)
+
+    def test_a_haskama_rabbi_filter_cannot_multiply_the_page(self) -> None:
+        """A repeatable filter is one EXISTS, not a join (D-045)."""
+        charity = make_charity("Alpha")
+        rabbis = [UserFactory(), UserFactory()]
+        for rabbi in rabbis:
+            Haskama.objects.create(
+                rabbi_user=rabbi, charity=charity, verdict=Haskama.Verdict.APPROVE
+            )
+
+        cards = self.repository.page(
+            0, 20, CharityFilters(haskama_rabbis=tuple(r.id for r in rabbis))
+        )
+
+        self.assertEqual([card.name for card in cards], ["Alpha"])
+
+
 class SortCountTest(SortTest):
     def test_the_total_does_not_depend_on_the_order(self) -> None:
         for name in ("Alpha", "Beta"):
@@ -284,15 +357,15 @@ class SortCountTest(SortTest):
                 self.assertEqual(self.repository.count(), 2)
                 self.assertEqual(len(self.repository.page(0, 20, sort=sort)), 2)
 
-    def test_every_mechanism_has_an_order_column(self) -> None:
+    def test_every_mechanism_has_an_order_key(self) -> None:
         """Adding a mechanism without an ORDER BY fails here, not on the page."""
-        self.assertEqual(set(DjangoCharityRepository.ORDER_COLUMNS), set(MECHANISMS))
+        self.assertEqual(set(DjangoCharityRepository.ORDER_KEYS), set(MECHANISMS))
 
-    def test_activity_sorts_do_not_add_a_query_per_charity(self) -> None:
+    def test_activity_and_haskama_sorts_do_not_add_a_query_per_charity(self) -> None:
         charity = make_charity("Alpha")
         make_event(charity)
 
-        for mechanism in (POPULAR, TRENDING, UPDATED):
+        for mechanism in (POPULAR, TRENDING, UPDATED, HASKAMOS):
             with self.subTest(mechanism=mechanism.value):
                 with self.assertNumQueries(3):  # page, domains, locations
                     self.repository.page(
