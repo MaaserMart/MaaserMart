@@ -6,12 +6,13 @@ with a `CharityFilters` and what the URL parser accepts.
 
 from django.test import SimpleTestCase
 
-from apps.charities.contracts import CharityCard, RabbiOption
+from apps.charities.contracts import CharityCard, DomainOption, LocationOption, RabbiOption
 from apps.charities.filters import (
     MAX_STAR_RATING,
     MIN_STAR_RATING,
     CharityFilters,
     from_query,
+    keep_known_ids,
     query_pairs,
     query_string,
     sidebar_groups,
@@ -225,6 +226,56 @@ class ListCharitiesPassesFiltersTest(SimpleTestCase):
         list_charities(repository)
 
         self.assertEqual(repository.seen[0], CharityFilters())
+
+
+class KeepKnownIdsTest(SimpleTestCase):
+    """An id that names no row is not a filter: D-045 says it is ignored."""
+
+    def setUp(self) -> None:
+        self.options = {
+            "domains": (
+                DomainOption(id=1, name="Education"),
+                DomainOption(id=2, name="Food security"),
+            ),
+            "locations": (LocationOption(id=3, name="Lakewood", region="NJ", country="USA"),),
+            "rabbis": (RabbiOption(id=4, display_name="R. Cohen", title=None),),
+        }
+
+    def test_an_id_that_names_no_row_is_dropped(self) -> None:
+        filters = keep_known_ids(from_query(_Query({"domain": ["1", "999"]})), self.options)
+
+        self.assertEqual(filters.domains, (1,))
+
+    def test_a_stale_id_alone_means_no_filters(self) -> None:
+        filters = keep_known_ids(from_query(_Query({"domain": ["999"]})), self.options)
+
+        self.assertEqual(filters, CharityFilters())
+        self.assertTrue(filters.is_empty)
+
+    def test_known_ids_keep_their_order(self) -> None:
+        filters = keep_known_ids(from_query(_Query({"domain": ["2", "1"]})), self.options)
+
+        self.assertEqual(filters.domains, (2, 1))
+
+    def test_locations_and_rabbis_are_checked_against_their_own_lists(self) -> None:
+        filters = keep_known_ids(
+            from_query(_Query({"location": ["3", "999"], "haskama_rabbi": ["4", "999"]})),
+            self.options,
+        )
+
+        self.assertEqual(filters.locations, (3,))
+        self.assertEqual(filters.haskama_rabbis, (4,))
+
+    def test_an_empty_option_list_drops_every_id(self) -> None:
+        """The rabbi list is empty until accounts can search rabbis (D-045)."""
+        filters = keep_known_ids(from_query(_Query({"haskama_rabbi": ["4"]})), {"rabbis": ()})
+
+        self.assertTrue(filters.is_empty)
+
+    def test_numbers_are_left_alone(self) -> None:
+        filters = keep_known_ids(from_query(_Query({"min_rating": ["4"]})), self.options)
+
+        self.assertEqual(filters.min_rating, 4)
 
 
 class _Query:

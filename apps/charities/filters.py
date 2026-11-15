@@ -11,7 +11,7 @@ alone ambiguous, and a name in a URL would break the moment a row is renamed.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from urllib.parse import urlencode
 
 
@@ -124,6 +124,30 @@ def from_query(query) -> CharityFilters:
         else:
             values[group.attribute] = _number(query.get(group.parameter))
     return CharityFilters(**values)
+
+
+def keep_known_ids(filters: CharityFilters, options: dict[str, tuple]) -> CharityFilters:
+    """Drop ticked ids that name no row, so a stale address filters nothing.
+
+    D-045: "A raw value that names no row is ignored rather than rejected." The
+    option lists are the authority — an id the sidebar does not offer is not a
+    filter, and keeping it would empty the page with no box the reader could
+    untick. `options` is keyed as `OPTION_SOURCES` names it (`domains`,
+    `locations`, `rabbis`), so this runs after the lists are read and before
+    anything counts or links a page.
+    """
+    changes: dict[str, tuple[int, ...]] = {}
+    for group in GROUPS:
+        if not group.repeatable:
+            continue
+        chosen = getattr(filters, group.attribute)
+        if not chosen:
+            continue
+        known = {option.id for option in options.get(OPTION_SOURCES[group.parameter], ())}
+        kept = tuple(value for value in chosen if value in known)
+        if kept != chosen:
+            changes[group.attribute] = kept
+    return replace(filters, **changes) if changes else filters
 
 
 def clamp_rating(rating: int | None) -> int | None:
