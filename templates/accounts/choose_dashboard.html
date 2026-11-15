@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Choose a dashboard · MaaserMart{% endblock %}
+{% block content %}
+<section class="auth">
+  <h1 class="auth__title">Choose a dashboard</h1>
+  <p class="empty">You have more than one role. Pick where to go.</p>
+  <ul class="charity-list">
+    {% for label, url in choices %}
+      <li><a class="charity-card auth__choice" href="{{ url }}">{{ label }}</a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

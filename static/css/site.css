@@ -1,0 +1,559 @@
+/* Minimal site styling; the templates are thin and server-rendered. */
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+}
+
+/* Top bar (D-037). The bar spans the full viewport; the rail inside it keeps the
+   links aligned with the page content so a wide screen does not look empty. */
+.nav {
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.nav__list {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  list-style: none;
+  margin: 0 auto;
+  max-width: 56rem;
+  padding: 0.75rem 1.5rem;
+}
+
+.nav__list a,
+.nav__list button {
+  background: none;
+  border: 0;
+  color: #1a4d8f;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: none;
+}
+
+.nav__list a:hover,
+.nav__list button:hover {
+  text-decoration: underline;
+}
+
+.nav form {
+  display: inline;
+}
+
+/* Charity listing. §6.2.4 puts the filters in checkboxes on the side of the
+   listing page, so the page is a sidebar beside the results. Below 48rem the
+   sidebar moves above the results instead of squeezing the cards. */
+.listing {
+  align-items: start;
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: 14rem minmax(0, 1fr);
+  margin: 0 auto;
+  max-width: 72rem;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+@media (max-width: 48rem) {
+  .listing {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.listing__sidebar {
+  /* Seven groups make the panel taller than the viewport, and the option lists
+     can grow. Bounding it here means the panel scrolls on its own, so its bottom
+     groups stay reachable without scrolling the results off the page. */
+  max-height: calc(100vh - 5.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  position: sticky;
+  top: 4.5rem;
+}
+
+/* Below 48rem the sidebar sits above the results; a pinned, scrolling panel
+   there would trap the page, so it becomes ordinary page content. */
+@media (max-width: 48rem) {
+  .listing__sidebar {
+    max-height: none;
+    overflow: visible;
+    position: static;
+  }
+}
+
+.listing__results {
+  min-width: 0;
+}
+
+/* Filter sidebar (§6.2.4, D-045) */
+.filters {
+  background: #fafafa;
+  border: 1px solid #e2e2e2;
+  border-radius: 0.5rem;
+  display: block;
+  padding: 0.875rem 1rem;
+}
+
+.filters__head {
+  align-items: baseline;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.filters__title {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.filters__count {
+  color: #777;
+  font-size: 0.8125rem;
+}
+
+.filters__group {
+  border-top: 1px solid #e7e7e7;
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+}
+
+.filters__summary {
+  cursor: pointer;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  padding: 0.25rem 0;
+}
+
+/* A bounded, scrolling list of choices. The domain and location lists are
+   managed on their own and can grow without limit, so the panel must not. */
+.filters__options {
+  max-height: 14rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.filters__options:focus-visible {
+  outline: 2px solid #1a4d8f;
+  outline-offset: 2px;
+}
+
+.filters__option {
+  align-items: baseline;
+  color: #333;
+  display: flex;
+  font-size: 0.875rem;
+  gap: 0.5rem;
+  padding: 0.1875rem 0;
+}
+
+.filters__option input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.filters__option input[type="number"] {
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  font: inherit;
+  padding: 0.1875rem 0.375rem;
+  width: 4.5rem;
+}
+
+.filters__option-label {
+  min-width: 0;
+}
+
+.filters__none {
+  color: #777;
+  font-size: 0.8125rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
+/* A value the URL asked for that had to be clamped into range (D-046). */
+.filters__adjusted {
+  color: #8a5300;
+  font-size: 0.8125rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.filters__actions {
+  align-items: center;
+  border-top: 1px solid #e7e7e7;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.875rem;
+  padding-top: 0.75rem;
+}
+
+.filters__apply {
+  background: #1a4d8f;
+  border: 1px solid #1a4d8f;
+  border-radius: 0.25rem;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.3125rem 0.75rem;
+}
+
+.filters__apply:hover {
+  background: #16427a;
+}
+
+.filters__clear {
+  color: #1a4d8f;
+  font-size: 0.875rem;
+}
+
+.listing__header {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
+}
+
+/* Sort and page size sit together at the right of the header; on a narrow
+   screen they wrap below the heading instead of squeezing it. */
+.listing__controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-left: auto;
+}
+
+.listing__header h1 {
+  font-size: 1.75rem;
+  margin: 0;
+}
+
+.charity-list {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.charity-card {
+  align-items: flex-start;
+  border: 1px solid #ddd;
+  border-radius: 0.5rem;
+  color: inherit;
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem;
+  text-decoration: none;
+}
+
+.charity-card:hover,
+.charity-card:focus-visible {
+  background: #f7f7f7;
+  border-color: #bbb;
+}
+
+.charity-card__image {
+  border-radius: 0.375rem;
+  flex: 0 0 6rem;
+  height: 6rem;
+  object-fit: cover;
+  width: 6rem;
+}
+
+.charity-card__image--empty {
+  background: #eee;
+}
+
+.charity-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.charity-card__name {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.charity-card__tagline {
+  color: #444;
+}
+
+.charity-card__rating {
+  color: #444;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  gap: 0.25rem;
+}
+
+.charity-card__rating--empty,
+.rating__count {
+  color: #777;
+}
+
+.rating__value {
+  font-weight: 600;
+}
+
+.charity-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.25rem;
+}
+
+/* D-051: the values the activity orders sort by, shown on every card. */
+.charity-card__activity {
+  color: #555;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  gap: 0.25rem 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.chip {
+  background: #eef2f7;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  padding: 0.125rem 0.625rem;
+}
+
+.chip--location {
+  background: #f2f0e6;
+}
+
+.chip-divider {
+  align-self: center;
+  border-left: 1px solid #ccc;
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 1rem;
+  margin: 0 0.375rem;
+}
+
+.pagination {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 2.5rem;
+}
+
+.pagination__pages {
+  display: flex;
+  flex-direction: row;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pagination__item {
+  display: block;
+}
+
+.pagination__page,
+.pagination__step {
+  border-radius: 0.25rem;
+  color: #1a4f8a;
+  display: inline-block;
+  padding: 0.375rem 0.75rem;
+  text-decoration: none;
+}
+
+.pagination__page {
+  min-width: 2.25rem;
+  text-align: center;
+}
+
+.pagination__page:hover,
+.pagination__step:hover {
+  background: #f2f2f2;
+}
+
+.pagination__page--current {
+  background: #1a4f8a;
+  color: #fff;
+  font-weight: 600;
+}
+
+.pagination__step[aria-disabled="true"] {
+  color: #bbb;
+  pointer-events: none;
+}
+
+/* Sort control (§6.2.5, D-048): a dropdown and two direction buttons */
+.sort {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.sort__label {
+  color: #555;
+  font-size: 0.875rem;
+}
+
+.sort__select {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  font: inherit;
+  padding: 0.25rem 0.375rem;
+}
+
+.sort__direction {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.sort__direction:hover {
+  background: #f2f2f2;
+}
+
+.sort__direction--current,
+.sort__direction--current:hover {
+  background: #1a4f8a;
+  border-color: #1a4f8a;
+  color: #fff;
+}
+
+/* Per-page control, top right of the listing */
+.page-size {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.page-size__label,
+.jump__label {
+  color: #555;
+  font-size: 0.875rem;
+}
+
+.page-size__input,
+.jump__input {
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  font: inherit;
+  padding: 0.25rem 0.375rem;
+  width: 4.5rem;
+}
+
+.jump {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  margin-left: 0.5rem;
+}
+
+.jump__input {
+  width: 3.5rem;
+}
+
+.page-size__submit,
+.jump__submit {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.25rem 0.625rem;
+}
+
+.page-size__submit:hover,
+.jump__submit:hover {
+  background: #f2f2f2;
+}
+
+.empty {
+  color: #555;
+}
+
+/* ===== Login pages (accounts) =====================================
+   Appended by accounts; the rules above are Shaul's and unchanged.
+   A narrow centred card in the listing's colours. The submit button
+   reuses .filters__apply and the chooser reuses .charity-list and
+   .charity-card, so only layout lives here. */
+.auth {
+  margin: 0 auto;
+  max-width: 24rem;
+  padding: 3rem 1.5rem 4rem;
+}
+
+.auth__title {
+  font-size: 1.75rem;
+  margin: 0 0 1.25rem;
+}
+
+.auth__form {
+  background: #fafafa;
+  border: 1px solid #e2e2e2;
+  border-radius: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.auth__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.auth__label {
+  color: #555;
+  font-size: 0.875rem;
+}
+
+.auth__input {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  font: inherit;
+  padding: 0.5rem 0.625rem;
+}
+
+.auth__input:focus-visible {
+  border-color: #1a4d8f;
+  outline: 2px solid #1a4d8f;
+  outline-offset: 1px;
+}
+
+.auth__submit {
+  align-self: stretch;
+  padding: 0.5rem 0.75rem;
+}
+
+.auth__error {
+  background: #fdf3f2;
+  border: 1px solid #e6b8b3;
+  border-radius: 0.375rem;
+  color: #8a1f11;
+  font-size: 0.875rem;
+  margin: 0 0 1rem;
+  padding: 0.625rem 0.75rem;
+}
+
+.auth__choice {
+  font-weight: 600;
+}
+/* ===== End login pages ============================================ */
