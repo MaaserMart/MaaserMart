@@ -6,7 +6,7 @@ with a `CharityFilters` and what the URL parser accepts.
 
 from django.test import SimpleTestCase
 
-from apps.charities.contracts import CharityCard
+from apps.charities.contracts import CharityCard, RabbiOption
 from apps.charities.filters import (
     MAX_STAR_RATING,
     MIN_STAR_RATING,
@@ -190,6 +190,16 @@ class SidebarGroupsTest(SimpleTestCase):
 
         location = next(group for group in groups if group.parameter == "location")
         self.assertEqual(location.options[0].label, "Lakewood, New Jersey, USA")
+
+    def test_a_rabbi_option_is_labelled_by_title_and_name(self) -> None:
+        """D-045: RABBI_PROFILE's two parts, joined here, with a title optional."""
+        with_title = RabbiOption(id=1, display_name="Yosef Cohen", title="Rabbi")
+        without_title = RabbiOption(id=2, display_name="Yosef Cohen", title=None)
+
+        groups = sidebar_groups(CharityFilters(), {"rabbis": (with_title, without_title)})
+
+        rabbis = next(group for group in groups if group.parameter == "haskama_rabbi")
+        self.assertEqual([o.label for o in rabbis.options], ["Rabbi Yosef Cohen", "Yosef Cohen"])
 
     def test_an_empty_maximum_has_no_cap(self) -> None:
         groups = sidebar_groups(CharityFilters(), {})
