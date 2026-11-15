@@ -18,6 +18,10 @@ from .repositories import CharityRepository
 from .sorting import DEFAULT_SORT, CharitySort
 from .sorting import query_pairs as sort_query_pairs
 
+# The charity fields a save may change. `is_visible` stays out: it changes only
+# through publish/hide, so a caller cannot flip visibility by passing it here.
+EDITABLE_FIELDS = ("name", "tagline", "description", "image")
+
 
 def publish_charity(charity_id, by_user_id=None):
     """Make a charity visible to the public. Approvals calls this once a charity is approved."""
@@ -27,6 +31,32 @@ def publish_charity(charity_id, by_user_id=None):
 def hide_charity(charity_id, by_user_id=None):
     """Hide a charity from the public, for example to review it again after many reports."""
     _set_visible(charity_id, False, by_user_id)
+
+
+def update_charity(charity_id, by_user_id=None, **changes):
+    """Save field changes to a charity, recording one `charity_updated` EVENT.
+
+    Every save of a charity goes through here or `_set_visible` (D-052), so the
+    "most recently updated" order and §5.2.21's derived date cannot go stale.
+    Only `EDITABLE_FIELDS` are accepted; anything else is a programming error,
+    not a value to ignore. A call that changes nothing writes nothing and
+    records no event (D-041's rule for an unchanged state).
+    """
+    unknown = set(changes) - set(EDITABLE_FIELDS)
+    if unknown:
+        raise ValueError(f"Not an editable charity field: {', '.join(sorted(unknown))}")
+    with transaction.atomic():
+        charity = Charity.objects.select_for_update().filter(pk=charity_id).first()
+        if charity is None:
+            raise Charity.DoesNotExist(f"No charity with id {charity_id}")
+        changed = [field for field, value in changes.items() if getattr(charity, field) != value]
+        if not changed:
+            return
+        for field in changed:
+            setattr(charity, field, changes[field])
+        charity.save(update_fields=changed)
+        # Every change to a charity is recorded as a charity_updated EVENT (§6.1, D-039).
+        record_event(charity_id, "charity_updated", user_id=by_user_id)
 
 
 def _set_visible(charity_id, visible, by_user_id):
