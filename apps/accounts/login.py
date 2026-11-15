@@ -11,6 +11,12 @@ import hashlib
 from django.contrib.auth import authenticate, login
 from django.core.cache import cache
 
+from .ratelimit import client_ip, take_token
+
+# Per client IP: a burst of 20 tries, then one every 3 seconds (20 a minute).
+RATE_CAPACITY = 20
+RATE_REFILL_SECONDS = 3
+
 MAX_FAILURES = 5
 LOCKOUT_SECONDS = 60 * 60
 # Failures older than this are forgotten, so 4 typos a day never add up to a lockout.
@@ -19,6 +25,7 @@ FAILURE_WINDOW_SECONDS = 60 * 60
 
 class LoginResult(enum.Enum):
     OK = "ok"
+    RATE_LIMITED = "rate_limited"
     MISSING_CREDENTIALS = "missing_credentials"
     WRONG_CREDENTIALS = "wrong_credentials"
     LOCKED_OUT = "locked_out"
@@ -59,13 +66,15 @@ def _clear_failures(username):
 def attempt_login(request, username, password):
     """Check the credentials and, if they're right, log the user in.
 
-    Returns (LoginResult, user or None). Checks run cheapest first, and nothing
-    is written until all of them pass: blank input is refused before anything
-    is counted, and while a username is locked even the right password is
-    refused without being checked.
+    Returns (LoginResult, user or None). Checks run cheapest first, and the
+    expensive password hash runs only after all the others pass: blank input,
+    then the per-IP rate limit, then the lockout. While a username is locked,
+    even the right password is refused without being checked.
     """
     if not username or not password:
         return LoginResult.MISSING_CREDENTIALS, None
+    if not take_token(f"login:{client_ip(request)}", RATE_CAPACITY, RATE_REFILL_SECONDS):
+        return LoginResult.RATE_LIMITED, None
     if is_locked_out(username):
         return LoginResult.LOCKED_OUT, None
     user = authenticate(request, username=username, password=password)
