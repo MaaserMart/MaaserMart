@@ -32,6 +32,9 @@ ROLE_LABELS = {
 
 @require_http_methods(["GET", "POST"])
 def login_view(request):
+    if request.method == "GET" and request.user.is_authenticated:
+        # Already logged in: skip the form and go where a fresh login would.
+        return redirect(redirect_after_login(request, request.user))
     next_url = request.POST.get("next") or request.GET.get("next", "")
     context = {"next": next_url, "username": ""}
     if request.method == "POST":
