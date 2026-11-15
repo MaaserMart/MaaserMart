@@ -2,6 +2,7 @@
 
 import pytest
 from django.contrib.auth import authenticate
+from django.contrib.auth.hashers import make_password
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
@@ -15,6 +16,41 @@ pytestmark = pytest.mark.django_db
 def test_any_case_of_the_username_logs_in(typed):
     user = UserFactory(username="Yosef")
     assert authenticate(username=typed, password=DEFAULT_PASSWORD) == user
+
+
+@pytest.mark.parametrize(
+    "typed",
+    [
+        "yoosef",  # extra letter
+        "yose",  # missing letter
+        "yosef1",  # extra digit
+        " yosef",  # leading space
+        "yosef ",  # trailing space
+        "yos ef",  # space inside
+        "yosеf",  # Cyrillic "е" that looks like a Latin "e"
+        "",  # empty
+        "y" * 10_000,  # absurdly long
+        "' OR 1=1 --",  # SQL injection attempt
+        "%",  # SQL wildcard
+        "yos_f",  # SQL single-character wildcard
+    ],
+)
+def test_a_username_that_only_looks_close_does_not_log_in(typed):
+    UserFactory(username="Yosef")
+    assert authenticate(username=typed, password=DEFAULT_PASSWORD) is None
+
+
+def test_each_username_logs_in_to_its_own_account():
+    yosef = UserFactory(username="Yosef")
+    yosef2 = UserFactory(username="yosef2")
+    assert authenticate(username="YOSEF", password=DEFAULT_PASSWORD) == yosef
+    assert authenticate(username="YOSEF2", password=DEFAULT_PASSWORD) == yosef2
+
+
+def test_right_username_with_another_users_password_fails():
+    UserFactory(username="yosef")
+    UserFactory(username="shaul", password=make_password("shauls-password"))
+    assert authenticate(username="yosef", password="shauls-password") is None
 
 
 def test_wrong_password_fails():
