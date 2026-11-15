@@ -486,3 +486,74 @@ body {
 .empty {
   color: #555;
 }
+
+/* ===== Login pages (accounts) =====================================
+   Appended by accounts; the rules above are Shaul's and unchanged.
+   A narrow centred card in the listing's colours. The submit button
+   reuses .filters__apply and the chooser reuses .charity-list and
+   .charity-card, so only layout lives here. */
+.auth {
+  margin: 0 auto;
+  max-width: 24rem;
+  padding: 3rem 1.5rem 4rem;
+}
+
+.auth__title {
+  font-size: 1.75rem;
+  margin: 0 0 1.25rem;
+}
+
+.auth__form {
+  background: #fafafa;
+  border: 1px solid #e2e2e2;
+  border-radius: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.auth__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.auth__label {
+  color: #555;
+  font-size: 0.875rem;
+}
+
+.auth__input {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 0.25rem;
+  font: inherit;
+  padding: 0.5rem 0.625rem;
+}
+
+.auth__input:focus-visible {
+  border-color: #1a4d8f;
+  outline: 2px solid #1a4d8f;
+  outline-offset: 1px;
+}
+
+.auth__submit {
+  align-self: stretch;
+  padding: 0.5rem 0.75rem;
+}
+
+.auth__error {
+  background: #fdf3f2;
+  border: 1px solid #e6b8b3;
+  border-radius: 0.375rem;
+  color: #8a1f11;
+  font-size: 0.875rem;
+  margin: 0 0 1rem;
+  padding: 0.625rem 0.75rem;
+}
+
+.auth__choice {
+  font-weight: 600;
+}
+/* ===== End login pages ============================================ */

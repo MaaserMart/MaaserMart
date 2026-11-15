@@ -1,13 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Log in · MaaserMart{% endblock %}
 {% block content %}
-<h1>Log in</h1>
-{% if error %}<p role="alert">{{ error }}</p>{% endif %}
-<form method="post" action="{% url 'accounts:login' %}">
-  {% csrf_token %}
-  <input type="hidden" name="next" value="{{ next }}">
-  <p><label>Username <input name="username" value="{{ username }}" required autofocus autocomplete="username"></label></p>
-  <p><label>Password <input type="password" name="password" required autocomplete="current-password"></label></p>
-  <p><button type="submit">Log in</button></p>
-</form>
+<section class="auth">
+  <h1 class="auth__title">Log in</h1>
+  {% if error %}<p class="auth__error" role="alert">{{ error }}</p>{% endif %}
+  <form class="auth__form" method="post" action="{% url 'accounts:login' %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <label class="auth__field">
+      <span class="auth__label">Username</span>
+      <input class="auth__input" name="username" value="{{ username }}" required autofocus autocomplete="username">
+    </label>
+    <label class="auth__field">
+      <span class="auth__label">Password</span>
+      <input class="auth__input" type="password" name="password" required autocomplete="current-password">
+    </label>
+    <button class="filters__apply auth__submit" type="submit">Log in</button>
+  </form>
+</section>
 {% endblock %}
