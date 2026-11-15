@@ -383,7 +383,7 @@ Rules for this file:
 ## D-YOSEF-accounts-login: Accounts: one signup, roles requested after, and how login is protected
 - Date: 2026-11-14
 - Decided by: CEO (Yosef)
-- Status: Active
+- Status: Active, except the admin point: superseded by D-YOSEF-admin-superuser on 2026-11-15
 - Design doc ref: §6.2.1, §6.2.2, §7.1.1, §8.3, §8.4
 - Decision:
   - Sign-in is username and password through Django's built-in auth. Google sign-in may be added later alongside it.
@@ -415,6 +415,15 @@ Rules for this file:
 - Decision: The caches are `DatabaseCache`: `default` in the table `django_cache` (rate-limit buckets), and `login` in `login_cache` (login failures and locks). A DatabaseCache over its MAX_ENTRIES deletes its alphabetically lowest keys whether or not they have expired, so locks get their own table, where a flood of other keys can't delete them. Both tables are made by one `manage.py createcachetable`, not by a migration, so every database (local, CI, production) needs that command run once after `migrate`. Django's test runner runs it on the test database automatically.
 - Why: The login lockout and rate limit (D-YOSEF-accounts-login) keep counters in the cache. Django's default per-process memory cache would give each Gunicorn worker its own counters and lose them on restart, multiplying the allowed tries. PostgreSQL is already in the stack; Redis would add a service. Switching later is one settings change.
 - Where in code: `config/settings/base.py` (`CACHES`), `README.md` (setup steps), `tests/unit/test_cache.py`
+
+## D-YOSEF-admin-superuser: A MaaserMart admin is a superuser
+- Date: 2026-11-15
+- Decided by: CEO (Yosef)
+- Status: Active. Replaces the "Admin means `User.is_staff`" point of D-YOSEF-accounts-login.
+- Design doc ref: §5.2.2, §6.2.1
+- Decision: `User.is_admin` is `is_superuser`, Django's highest level: every permission, everywhere. The founders (Yosef, Shaul, Benjamin) are superusers. `is_staff` alone only lets someone into `/django-admin/`, limited to the permissions they are given, and does not make them a MaaserMart admin. So a helper, such as a technical supporter, can be given `is_staff` to fix data without seeing the approval queue or the admin dashboard.
+- Why: Asked during review of PR #12. With `is_staff`, giving anyone access to `/django-admin/` would also have made them a full admin in the app.
+- Where in code: `apps/accounts/models.py` (`User.is_admin`), `tests/unit/test_find_role.py`
 
 ---
 
