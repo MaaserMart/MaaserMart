@@ -7,7 +7,9 @@ repository builds: the count or date each mechanism reads, the direction, and
 
 from datetime import timedelta
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.charities.filters import CharityFilters
@@ -360,6 +362,15 @@ class SortCountTest(SortTest):
     def test_every_mechanism_has_an_order_key(self) -> None:
         """Adding a mechanism without an ORDER BY fails here, not on the page."""
         self.assertEqual(set(DjangoCharityRepository.ORDER_KEYS), set(MECHANISMS))
+
+    def test_the_total_does_not_aggregate_reviews(self) -> None:
+        """The count only needs the number of matching charities (D-045)."""
+        make_charity("Alpha")
+
+        with CaptureQueriesContext(connection) as queries:
+            self.assertEqual(self.repository.count(), 1)
+
+        self.assertNotIn("charities_review", queries.captured_queries[0]["sql"])
 
     def test_activity_and_haskama_sorts_do_not_add_a_query_per_charity(self) -> None:
         charity = make_charity("Alpha")

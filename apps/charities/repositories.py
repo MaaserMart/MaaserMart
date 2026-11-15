@@ -122,19 +122,24 @@ class DjangoCharityRepository:
             rows = rows.filter(is_visible=True)
         return rows
 
-    def _counted(self, *, approving: bool = False, disapproving: bool = False) -> QuerySet[Charity]:
-        """Rows annotated with the review numbers the cards show.
+    def _annotated(
+        self, *, reviews: bool, approving: bool = False, disapproving: bool = False
+    ) -> QuerySet[Charity]:
+        """Rows annotated with the numbers the cards and the filters read.
 
         The counts are over all of a charity's rows, not just published ones:
         while D-042 lists unpublished charities, the filters treat them the same.
-        A haskama count is added only when a filter or the chosen order reads it,
-        and comes from a subquery, so it never multiplies the rows the review
+        A value is added only when a card shows it or a filter compares it, so
+        the pagination count does not aggregate rows it never reads. A haskama
+        count comes from a subquery, so it never multiplies the rows the review
         aggregate sees (D-045, D-048).
         """
-        rows = self._rows().annotate(
-            review_count=Count("reviews"),
-            average_rating=Avg("reviews__rating"),
-        )
+        rows = self._rows()
+        if reviews:
+            rows = rows.annotate(
+                review_count=Count("reviews"),
+                average_rating=Avg("reviews__rating"),
+            )
         if approving:
             rows = rows.annotate(approving_haskamas=self._haskama_count(Haskama.Verdict.APPROVE))
         if disapproving:
@@ -171,7 +176,7 @@ class DjangoCharityRepository:
         filters: CharityFilters | None = None,
         sort: CharitySort = DEFAULT_SORT,
     ) -> tuple[CharityCard, ...]:
-        rows = self._narrowed(filters, sort=sort)
+        rows = self._narrowed(filters, sort=sort, reviews=True)
         rows = self._with_event_values(rows, sort)
         rows = self._ordered(rows, sort)
         rows = rows.prefetch_related("domains", "locations")[offset : offset + limit]
@@ -181,20 +186,26 @@ class DjangoCharityRepository:
         return self._narrowed(filters).count()
 
     def _narrowed(
-        self, filters: CharityFilters | None, *, sort: CharitySort | None = None
+        self,
+        filters: CharityFilters | None,
+        *,
+        sort: CharitySort | None = None,
+        reviews: bool = False,
     ) -> QuerySet[Charity]:
         """Apply §6.2.4's groups: OR inside a group, AND between groups.
 
         A repeatable group is one EXISTS, not a join: a charity with three
         matching domains is still one row, so no DISTINCT is needed and the
-        review count cannot be multiplied by a filter. The two haskama counts
-        are read only when a filter (or the chosen order) needs them.
+        review count cannot be multiplied by a filter. A derived value is
+        annotated only when a card, a filter or the chosen order reads it.
         """
         filters = filters or CharityFilters()
+        needs_reviews = reviews or filters.min_rating is not None or filters.min_reviews is not None
         needs_approving = (
             sort is not None and sort.mechanism == HASKAMOS
         ) or filters.min_approving_haskamas is not None
-        rows = self._counted(
+        rows = self._annotated(
+            reviews=needs_reviews,
             approving=needs_approving,
             disapproving=filters.max_disapproving_haskamas is not None,
         )
