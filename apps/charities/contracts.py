@@ -79,7 +79,18 @@ class LocationOption:
 
 @dataclass(frozen=True)
 class RabbiOption:
-    """One choice in the Haskamos filter group, a rabbi's public identity (§6.2.4)."""
+    """One choice in the Haskamos filter group, a rabbi's public identity (§6.2.4, D-045).
+
+    `id` is the **user** id, not the profile's: HASKAMA stores `rabbi_user`,
+    which is what the filter compares against. The two parts of the identity
+    come from RABBI_PROFILE (§5.2.3); `title` is optional there, so the label
+    has to cope with its absence.
+    """
 
     id: int
-    label: str
+    display_name: str
+    title: str | None
+
+    @property
+    def label(self) -> str:
+        return f"{self.title} {self.display_name}" if self.title else self.display_name
