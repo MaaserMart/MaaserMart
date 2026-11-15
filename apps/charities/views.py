@@ -7,6 +7,8 @@ from django.shortcuts import render
 
 from .repositories import DjangoCharityRepository
 from .services import Page, list_charities
+from .sorting import from_query as read_sort
+from .sorting import sort_form
 
 
 def _positive_int(raw: str | None) -> int | None:
@@ -21,12 +23,18 @@ def _positive_int(raw: str | None) -> int | None:
 
 
 def listing(request: HttpRequest) -> HttpResponse:
-    """Render the paginated list of charities."""
+    """Render the paginated list of charities in the order the reader chose."""
+    sort = read_sort(request.GET)
     page: Page = list_charities(
         # published_only stays False until the admin approval queue publishes
         # charities; see D-042.
         repository=DjangoCharityRepository(published_only=False),
+        sort=sort,
         page=_positive_int(request.GET.get("page")),
         page_size=_positive_int(request.GET.get("page_size")),
     )
-    return render(request, "charities/listing.html", {"page": page})
+    return render(
+        request,
+        "charities/listing.html",
+        {"page": page, "sort_form": sort_form(sort)},
+    )

@@ -13,6 +13,9 @@ from apps.events.services import record_event
 from .contracts import CharityCard
 from .models import Charity
 from .repositories import CharityRepository
+from .sorting import DEFAULT_SORT, CharitySort
+from .sorting import query_pairs as sort_query_pairs
+from .sorting import query_string as sort_query_string
 
 
 def publish_charity(charity_id, by_user_id=None):
@@ -53,12 +56,17 @@ def page_count(total: int, page_size: int) -> int:
 
 @dataclass(frozen=True)
 class Page:
-    """One page of results, plus the links needed to move between pages."""
+    """One page of results, plus the links needed to move between pages.
+
+    `sort` is part of the result set, not of one page: every link the page
+    builds repeats it, or moving to page 2 would silently reorder the list.
+    """
 
     items: tuple[CharityCard, ...]
     total: int
     number: int
     page_size: int
+    sort: CharitySort = DEFAULT_SORT
 
     @property
     def page_count(self) -> int:
@@ -72,9 +80,16 @@ class Page:
     def has_next(self) -> bool:
         return self.number < self.page_count
 
+    @property
+    def sort_pairs(self) -> tuple[tuple[str, str], ...]:
+        """The sort as hidden-input pairs; empty for the default order."""
+        return sort_query_pairs(self.sort)
+
     def query(self, number: int) -> str:
         """Query string for another page of this same result set."""
-        return urlencode({"page": number, "page_size": self.page_size})
+        query = urlencode({"page": number, "page_size": self.page_size})
+        sort = sort_query_string(self.sort)
+        return f"{query}&{sort}" if sort else query
 
     @property
     def previous_query(self) -> str:
@@ -100,10 +115,16 @@ def clamp_page_size(requested: int | None) -> int:
 
 def list_charities(
     repository: CharityRepository,
+    sort: CharitySort = DEFAULT_SORT,
     page: int | None = 1,
     page_size: int | None = None,
 ) -> Page:
-    """Return one page of charities, alphabetically by name."""
+    """Return one page of charities, ordered by `sort`.
+
+    §6.2.5: choosing an order shows page 1, which the view gets by not passing a
+    `page` for a sort change; an explicit page in the URL is still honoured so a
+    shared link keeps its whole state (UC-03).
+    """
     page_size = clamp_page_size(page_size)
     total = repository.count()
     count = page_count(total, page_size)
@@ -111,8 +132,9 @@ def list_charities(
     offset = (number - 1) * page_size
 
     return Page(
-        items=repository.page(offset=offset, limit=page_size),
+        items=repository.page(offset=offset, limit=page_size, sort=sort),
         total=total,
         number=number,
         page_size=page_size,
+        sort=sort,
     )
