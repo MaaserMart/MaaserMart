@@ -9,12 +9,16 @@ from django.test import SimpleTestCase
 
 from apps.charities.sorting import (
     ALPHABETICAL,
+    ASCENDING,
     DEFAULT_SORT,
+    DESCENDING,
+    DIRECTION_PARAMETER,
     HASKAMOS,
     MECHANISMS,
     NEWEST,
     POPULAR,
     RATING,
+    SORT_PARAMETER,
     TRENDING,
     UPDATED,
     CharitySort,
@@ -108,14 +112,32 @@ class SortFormTest(SimpleTestCase):
         self.assertEqual(form.selected, UPDATED.value)
         self.assertFalse(form.descending)
 
+    def test_the_form_carries_the_url_vocabulary(self) -> None:
+        """The template must not repeat `sort`, `direction`, `asc` or `desc`."""
+        form = sort_form(DEFAULT_SORT)
+
+        self.assertEqual(form.parameter, SORT_PARAMETER)
+        self.assertEqual(form.direction_parameter, DIRECTION_PARAMETER)
+        self.assertEqual(form.ascending_value, ASCENDING)
+        self.assertEqual(form.descending_value, DESCENDING)
+
     def test_alphabetical_uses_letter_labels(self) -> None:
         form = sort_form(DEFAULT_SORT)
 
         self.assertEqual((form.low_label, form.high_label), ("A to Z", "Z to A"))
 
-    def test_count_orders_use_high_and_low_labels(self) -> None:
-        for mechanism in (TRENDING, POPULAR, RATING, HASKAMOS, NEWEST, UPDATED):
+    def test_each_order_words_its_directions_in_its_own_terms(self) -> None:
+        expected = {
+            TRENDING: ("Low to high", "High to low"),
+            POPULAR: ("Low to high", "High to low"),
+            RATING: ("Lowest rated", "Highest rated"),
+            HASKAMOS: ("Low to high", "High to low"),
+            NEWEST: ("Oldest first", "Newest first"),
+            UPDATED: ("Least recently changed", "Most recently changed"),
+        }
+
+        for mechanism, labels in expected.items():
             with self.subTest(mechanism=mechanism.value):
                 form = sort_form(CharitySort(mechanism=mechanism, descending=True))
 
-                self.assertEqual((form.low_label, form.high_label), ("Low to high", "High to low"))
+                self.assertEqual((form.low_label, form.high_label), labels)

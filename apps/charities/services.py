@@ -89,10 +89,11 @@ class Page:
         """The sort as hidden-input pairs; empty for the default order."""
         return sort_query_pairs(self.sort)
 
-    def _state_query(self, **parts: int) -> str:
+    def _state_query(self, *, include_filters: bool = True, **parts: int) -> str:
         """A query string of `parts`, followed by the active filters and sort."""
         base = urlencode(parts)
-        state = urlencode(self.filter_pairs + self.sort_pairs)
+        pairs = self.filter_pairs if include_filters else ()
+        state = urlencode(pairs + self.sort_pairs)
         return f"{base}&{state}" if state else base
 
     def query(self, number: int) -> str:
@@ -110,7 +111,7 @@ class Page:
     @property
     def clear_filters_query(self) -> str:
         """The page with its size and order kept, but no filters (§6.2.4)."""
-        return self._state_query(page_size=self.page_size)
+        return self._state_query(include_filters=False, page_size=self.page_size)
 
     def numbers(self, window: int = 2) -> list[tuple[int, str]]:
         """(page number, query string) pairs to render as links."""

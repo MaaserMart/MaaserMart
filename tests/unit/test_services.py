@@ -211,3 +211,37 @@ class PageQueryTest(SimpleTestCase):
 
         self.assertEqual(page.next_query, "page=2&page_size=10&sort=rating&direction=desc")
         self.assertEqual(page.sort_pairs, (("sort", "rating"), ("direction", "desc")))
+
+    def test_next_query_keeps_the_filters_and_the_sort(self) -> None:
+        """A page link must replay the whole result set (D-045, D-048)."""
+        page = Page(
+            items=(),
+            total=30,
+            number=1,
+            page_size=10,
+            sort=CharitySort(mechanism=RATING, descending=True),
+            filter_pairs=(("domain", 3), ("min_rating", 4)),
+        )
+
+        self.assertEqual(
+            page.next_query,
+            "page=2&page_size=10&domain=3&min_rating=4&sort=rating&direction=desc",
+        )
+
+    def test_clearing_filters_keeps_the_page_size_and_sort(self) -> None:
+        page = Page(
+            items=(),
+            total=30,
+            number=3,
+            page_size=10,
+            sort=CharitySort(mechanism=RATING, descending=True),
+            filter_pairs=(("domain", 3),),
+        )
+
+        self.assertEqual(page.clear_filters_query, "page_size=10&sort=rating&direction=desc")
+
+    def test_clearing_filters_on_the_default_view_adds_nothing_extra(self) -> None:
+        self.assertEqual(
+            Page(items=(), total=30, number=1, page_size=10).clear_filters_query,
+            "page_size=10",
+        )
