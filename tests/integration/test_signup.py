@@ -1,13 +1,20 @@
 """Member signup with an emailed code (§6.2.2, D-YOSEF-member-signup)."""
 
+import copy
 import re
+import threading
+import time
 from unittest import mock
 
 import pytest
+from django import db
 from django.contrib.auth import SESSION_KEY
 from django.contrib.auth.hashers import check_password
 from django.core import mail
+from django.core.cache import caches
+from django.core.cache.backends.db import DatabaseCache
 from django.db import connection
+from django.test import Client, RequestFactory
 from django.test.utils import CaptureQueriesContext
 
 from apps.accounts import signup
@@ -220,12 +227,22 @@ def test_fifth_signup_from_one_network_is_allowed_and_sixth_is_refused(client):
     assert len(mail.outbox) == 5
 
 
-def test_rate_limit_comes_before_any_other_check(client):
+def test_rate_limit_comes_before_the_database_lookups(client):
     with mock.patch.object(signup, "take_token", return_value=False):
         with CaptureQueriesContext(connection) as queries:
-            response = client.post(SIGNUP, form(agree=None))
+            response = client.post(SIGNUP, GOOD)
     assert response.status_code == 429
     assert not any('"accounts_user"' in q["sql"] for q in queries)
+
+
+def test_a_bad_form_does_not_spend_the_networks_signups(client):
+    """Fixing a typo shouldn't use up an office or campus's 5 an hour."""
+    for _ in range(6):
+        client.post(SIGNUP, form(password="short1"))
+    for n in range(5):
+        response = client.post(SIGNUP, form(username=f"user_t{n}", email=f"t{n}@example.com"))
+        assert response.status_code == 302
+    assert client.post(SIGNUP, form(username="user_t5", email="t5@example.com")).status_code == 429
 
 
 def test_third_email_to_one_address_is_sent_and_fourth_is_refused(client):
@@ -243,6 +260,51 @@ def test_the_email_limit_ignores_capitals(client):
         client.post(SIGNUP, GOOD)
     client.post(SIGNUP, form(email="SARAH@example.com"))
     assert len(mail.outbox) == 3
+
+
+@pytest.mark.parametrize(
+    "alias",
+    ["sarah+1@example.com", "Sarah+news@Example.com", "sarah+a+b@example.com"],
+)
+def test_plus_aliases_share_the_inboxs_email_limit(client, alias):
+    for n in range(3):
+        client.post(SIGNUP, form(username=f"user_a{n}", email=f"sarah+{n}x@example.com"))
+    client.post(SIGNUP, form(username="user_a9", email=alias))
+    assert len(mail.outbox) == 3
+
+
+@pytest.mark.parametrize(
+    "alias", ["s.arah@gmail.com", "sarah@googlemail.com", "S.A.R.A.H@gmail.com"]
+)
+def test_gmail_dots_and_googlemail_share_the_inboxs_email_limit(client, alias):
+    for n in range(3):
+        client.post(SIGNUP, form(username=f"user_g{n}", email=f"sarah+{n}@gmail.com"))
+    client.post(SIGNUP, form(username="user_g9", email=alias))
+    assert len(mail.outbox) == 3
+
+
+def test_dots_elsewhere_are_a_different_inbox(client):
+    """Only Gmail ignores dots: s.arah@example.com is not sarah@example.com."""
+    for n in range(3):
+        client.post(SIGNUP, form(username=f"user_d{n}", email=f"sarah+{n}@example.com"))
+    assert (
+        client.post(SIGNUP, form(username="user_d9", email="s.arah@example.com")).status_code == 302
+    )
+    assert len(mail.outbox) == 4
+
+
+@pytest.mark.parametrize(
+    ("email", "inbox"),
+    [
+        ("Sarah@Example.com", "sarah@example.com"),
+        ("sarah+tag@example.com", "sarah@example.com"),
+        ("s.a.rah+x@gmail.com", "sarah@gmail.com"),
+        ("sarah@googlemail.com", "sarah@gmail.com"),
+        ("s.arah@example.com", "s.arah@example.com"),
+    ],
+)
+def test_mailbox(email, inbox):
+    assert signup.mailbox(email) == inbox
 
 
 def test_a_bad_form_does_not_spend_an_email(client):
@@ -266,6 +328,102 @@ def test_a_code_one_digit_off_is_refused(client, started):
 def test_a_malformed_code_is_refused(client, started, code):
     client.post(VERIFY, {"code": code})
     assert not User.objects.filter(username="sarah_k").exists()
+
+
+def test_tries_left_counts_down_on_the_page(client, started):
+    response = client.post(VERIFY, {"code": wrong(started)})
+    assert "4 tries left" in response.content.decode()
+
+
+def test_eleventh_code_try_from_one_network_is_refused(client):
+    """Each network gets 10 code tries at once, across all its signups."""
+    for n in range(2):
+        other = Client()
+        other.post(SIGNUP, form(username=f"user_v{n}", email=f"v{n}@example.com"))
+        for _ in range(5):
+            other.post(VERIFY, {"code": "000000"})
+    client.post(SIGNUP, GOOD)
+    response = client.post(VERIFY, {"code": sent_code()})
+    assert response.status_code == 429
+    assert not User.objects.filter(username="sarah_k").exists()
+
+
+def test_tenth_code_try_from_one_network_is_allowed(client):
+    other = Client()
+    other.post(SIGNUP, form(username="user_w", email="w@example.com"))
+    for _ in range(4):
+        other.post(VERIFY, {"code": "000000"})
+    client.post(SIGNUP, GOOD)
+    for _ in range(4):
+        client.post(VERIFY, {"code": "000000"})
+    assert client.post(VERIFY, {"code": sent_code()}).status_code == 302
+
+
+def snapshot_requests(pending, count):
+    """`count` requests that each read the session before any of them saved it."""
+    requests = []
+    for _ in range(count):
+        request = RequestFactory().post(VERIFY)
+        request.session = {signup.SESSION_KEY: copy.deepcopy(pending)}
+        requests.append(request)
+    return requests
+
+
+def test_copies_of_one_session_share_the_five_tries(client, started):
+    """Guesses sent in parallel each start from the same saved session (S1)."""
+    pending = client.session[signup.SESSION_KEY]
+    *guesses, last = snapshot_requests(pending, 6)
+    results = [signup.verify_signup(r, wrong(started))[0] for r in guesses[:5]]
+    assert results[-1] is signup.SignupResult.OUT_OF_TRIES
+    assert signup.verify_signup(last, started)[0] is signup.SignupResult.OUT_OF_TRIES
+    assert not User.objects.filter(username="sarah_k").exists()
+
+
+def test_a_used_code_cannot_be_used_again_from_a_copy_of_the_session(client, started):
+    pending = client.session[signup.SESSION_KEY]
+    first, second = snapshot_requests(pending, 2)
+    with mock.patch.object(signup, "login"):
+        assert signup.verify_signup(first, started)[0] is signup.SignupResult.OK
+    assert signup.verify_signup(second, started)[0] is signup.SignupResult.OUT_OF_TRIES
+
+
+@pytest.mark.django_db(transaction=True)
+def test_parallel_guesses_are_all_counted():
+    """Real threads, each with its own database connection, guessing at once."""
+    pending = {
+        "id": "parallel-test",
+        "code": "123456",
+        "sent_at": signup._now(),
+        "username": "racer",
+        "email": "racer@example.com",
+        "password_hash": "x",
+        "next": "",
+    }
+    requests = snapshot_requests(pending, 8)
+    real_get = DatabaseCache.get
+    barrier = threading.Barrier(len(requests))
+
+    def slow_get(self, *args, **kwargs):
+        value = real_get(self, *args, **kwargs)
+        time.sleep(0.05)  # widen the gap between reading and writing the count
+        return value
+
+    def guess(request):
+        try:
+            barrier.wait()
+            signup.verify_signup(request, "000000")
+        finally:
+            db.connection.close()
+
+    with mock.patch.object(DatabaseCache, "get", slow_get):
+        threads = [threading.Thread(target=guess, args=(r,)) for r in requests]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    assert caches["login"].get("signup:tries:parallel-test") == 8
+    (last,) = snapshot_requests(pending, 1)
+    assert signup.verify_signup(last, "123456")[0] is signup.SignupResult.OUT_OF_TRIES
 
 
 def test_the_fourth_wrong_try_still_leaves_one_more(client, started):
@@ -306,8 +464,6 @@ def test_the_code_page_without_a_signup_goes_back_to_step_one(client):
 
 def test_another_browser_cannot_use_my_code(client, started):
     """The code is tied to the session that asked for it."""
-    from django.test import Client
-
     other = Client()
     assert other.post(VERIFY, {"code": started}).url == SIGNUP
     assert not User.objects.filter(username="sarah_k").exists()

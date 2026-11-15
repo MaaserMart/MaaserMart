@@ -4,7 +4,7 @@
 <section class="auth">
   <h1 class="auth__title">Check your email</h1>
   <p class="empty">We sent a {{ code_length }}-digit code to <strong>{{ email }}</strong>. It works for 15 minutes.</p>
-  {% if error %}<p class="auth__error" role="alert">{{ error }}{% if tries_left and tries_left < 5 %} {{ tries_left }} tr{{ tries_left|pluralize:"y,ies" }} left.{% endif %}</p>{% endif %}
+  {% if error %}<p class="auth__error" role="alert">{{ error }}{% if tries_left and tries_left < max_tries %} {{ tries_left }} tr{{ tries_left|pluralize:"y,ies" }} left.{% endif %}</p>{% endif %}
   {% if notice %}<p class="auth__notice" role="status">{{ notice }}</p>{% endif %}
   <form class="auth__form" method="post" action="{% url 'accounts:signup_verify' %}" x-data="codeBoxes({{ code_length }})" x-ref="form">
     {% csrf_token %}

@@ -56,9 +56,10 @@ def submit_member_signup(username, email, password_hash):
             user = User.objects.create(username=username, email=email, password=password_hash)
             RoleAssignment.objects.create(user=user, role=RoleAssignment.Role.MEMBER)
     except IntegrityError as error:
-        if "user_username_ci_uniq" in str(error):
+        constraint = getattr(getattr(error.__cause__, "diag", None), "constraint_name", None)
+        if constraint == "user_username_ci_uniq":
             return SignupOutcome.USERNAME_TAKEN, None
-        if "user_email_ci_uniq" in str(error):
+        if constraint == "user_email_ci_uniq":
             return SignupOutcome.EMAIL_TAKEN, None
         raise
     return SignupOutcome.CREATED, user
