@@ -88,6 +88,9 @@ CACHES = {
     }
 }
 
+# Addresses whose X-Forwarded-For header is believed: Caddy on the same machine.
+TRUSTED_PROXY_IPS = env.list("DJANGO_TRUSTED_PROXY_IPS", default=["127.0.0.1", "::1"])
+
 AUTH_USER_MODEL = "accounts.User"
 AUTHENTICATION_BACKENDS = ["apps.accounts.backends.CaseInsensitiveModelBackend"]
 
