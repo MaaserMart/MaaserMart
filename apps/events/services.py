@@ -24,7 +24,8 @@ from django.utils import timezone
 from .models import Event
 
 # §6.4.3 Trending: events in the past week count three, events in the past month
-# count two. The week is inside the month, so a row from this week counts in both.
+# count two. The two windows do not overlap, or a row from this week would be
+# counted twice (D-050): the month bucket holds days 8–30 only.
 TRENDING_WEEK_WEIGHT = 3
 TRENDING_MONTH_WEIGHT = 2
 TRENDING_WEEK = timedelta(days=7)
@@ -70,9 +71,11 @@ def event_count(charity_ref: OuterRef) -> Expression:
 def trending_score(charity_ref: OuterRef, *, now: datetime | None = None) -> Expression:
     """§6.4.3's trending score for one charity, as an integer expression.
 
-    The score is `3 × events in the past week + 2 × events in the past month`,
-    measured from `now` (UTC by default, D-010). The week is part of the month,
-    so a charity with one event today scores 5 and one event 20 days ago scores 2.
+    The score is `3 × events in the past week + 2 × events 8–30 days ago`,
+    measured from `now` (UTC by default, D-010). The buckets do not overlap, so
+    an event is worth 3 or 2, never both: the week sits inside the month window,
+    and counting it in both was the literal reading the doc's wording allows
+    (D-050).
     """
     now = now or timezone.now()
     week_ago = now - TRENDING_WEEK
@@ -84,11 +87,11 @@ def trending_score(charity_ref: OuterRef, *, now: datetime | None = None) -> Exp
             .values("charity")
             .annotate(
                 week=Count("pk", filter=Q(created__gte=week_ago)),
-                month=Count("pk"),
+                older=Count("pk", filter=Q(created__lt=week_ago)),
             )
             .annotate(
                 score=ExpressionWrapper(
-                    F("week") * TRENDING_WEEK_WEIGHT + F("month") * TRENDING_MONTH_WEIGHT,
+                    F("week") * TRENDING_WEEK_WEIGHT + F("older") * TRENDING_MONTH_WEIGHT,
                     output_field=IntegerField(),
                 )
             )

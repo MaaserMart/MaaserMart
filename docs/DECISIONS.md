@@ -505,7 +505,7 @@ Rules for this file:
 
 - Date: 2026-11-14
 - Decided by: builder, pending CEO/COO confirmation
-- Status: Active
+- Status: Active (amended by D-050 for the trending formula)
 - Design doc ref: §6.2.5 (Sort — SRS FR 3), §5.2.21 (Derived Values), §6.4.3 (Trending), §6.1 (dependencies)
 - Decision: The listing's sort is a `CharitySort` value — a mechanism plus a direction — read from the URL and passed to `charities.services.list_charities(repository, filters, sort, page, page_size)`. §6.2.5 fixes the mechanisms and that each has both directions, but not the parameter values, the default direction, or what several of the orders count, so those are settled here:
   - The URL is `?sort=<mechanism>&direction=<asc|desc>`. The mechanisms, in dropdown order, are `alphabetical`, `trending`, `popular`, `rating`, `haskamos`, `newest` and `updated`. `direction` is `asc` or `desc`.
@@ -513,7 +513,7 @@ Rules for this file:
   - The dropdown is a GET form that carries `page_size` and the active filters but never `page`, so choosing a sort lands on page 1 (§6.2.5). Changing the dropdown submits it immediately with no `direction`, so the new mechanism starts in its default direction and the two buttons' labels always describe the order they will apply. The two direction buttons are submits named `direction`, so they pick the mechanism shown in the dropdown and the clicked direction in one action. Pagination links, the page-size form, the jump form and the filter form carry the sort, so neither control silently drops the other; the filter protocol keeps the sort and vice versa (D-045).
   - The default sort adds no parameters to a URL. `alphabetical` ascending is treated as the default even when written out, so a page-size form or pagination link round-trips to the shortest equivalent address.
   - Ties break alphabetically, A→Z, as §6.2.5's failure path says, then by id so a page boundary cannot repeat or skip a row. The tiebreak is not reversed when the primary order is descending: "latest first" with two equal timestamps still reads A→Z.
-  - `trending` is §6.4.3's score: 3 × the charity's EVENT rows in the last 7 days plus 2 × its EVENT rows in the last 30 days. The week is inside the month, so a row from this week counts both and is worth 5, which is the literal reading of the doc. "Past" is measured from the request time, in UTC (D-010).
+  - `trending` is §6.4.3's score, with the two windows read as non-overlapping: 3 × the charity's EVENT rows in the last 7 days plus 2 × its EVENT rows 8–30 days ago. "Past" is measured from the request time, in UTC (D-010). D-050 settled the buckets; this entry first recorded the literal double count.
   - `popular` is the total number of EVENT rows for the charity (§5.2.21's "visit count is derived from events"), of every action: views, link clicks, rejections and charity updates.
   - `rating` is the average REVIEW.rating (D-044's number), not the review count. Charities with no reviews have no average and sort last in **both** directions: no rating is not a low rating.
   - `haskamos` counts **approving** HASKAMA rows only. §6.2.4 already separates approving from disapproving haskamos, and a disapproval is not an endorsement, so it does not raise a charity's position.
@@ -534,6 +534,18 @@ Rules for this file:
 - Decision: The dev seed samples a prefix/word pair without replacement from the full 8 × 26 grid, so all 200 seeded charities have different names. `CHARITY.name` stays non-unique in the schema (D-013); the pool only guarantees the sample is large enough (208 pairs for 200 rows) and `random.sample` fails loudly if the counts ever outgrow it, rather than quietly repeating a name.
 - Why: the old seed drew each part independently, so the local database held six "Lev Chaim" and five "Tomchei Torah". Paging a rating-ordered listing then repeated a name on two pages, which reads as a paging bug until you check the ids, and ties across 185 rows made the alphabetical tiebreak look broken. Names are also the only thing a developer eyeballs while working on the listing.
 - Where in code: `apps/dashboards/management/commands/seed.py` (`NAME_WORDS`, `NAMES`), `tests/integration/test_seed.py`
+
+---
+
+## D-050: Trending counts each event once: 3 for this week, 2 for days 8–30
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active (amends D-048's `trending` bullet)
+- Design doc ref: §6.4.3 (Trending)
+- Decision: `events.services.trending_score` scores `3 × EVENT rows in the last 7 days + 2 × rows 8–30 days ago`. The month bucket excludes the week instead of repeating it, so one event is worth 3 or 2, never 5. The 30-day outer window and the weights are unchanged, as is the UTC measurement from the request time (D-010).
+- Why: §6.4.3's wording ("multiplying events in the past week by 3 and events in the past month by 2") is ambiguous because the week is inside the month. D-048 first built the literal reading, then left it pending confirmation. The CEO chose non-overlapping buckets: a score that counts one visit twice makes a single busy day outweigh a month of steady activity, and it would have been copied by recommendations and owner stats.
+- Where in code: `apps/events/services.py` (`trending_score`), `tests/unit/test_sort_repository.py` (`TrendingSortTest`)
 
 ---
 

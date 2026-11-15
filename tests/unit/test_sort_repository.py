@@ -211,7 +211,7 @@ class PopularSortTest(SortTest):
 
 
 class TrendingSortTest(SortTest):
-    """§6.4.3: a week of events counts 3, a month counts 2, and the week is inside it."""
+    """§6.4.3 with non-overlapping buckets: days 1–7 count 3, days 8–30 count 2 (D-050)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -228,16 +228,35 @@ class TrendingSortTest(SortTest):
         make_event(outside, days_ago=40)
 
     def test_high_to_low_uses_both_windows(self) -> None:
-        # Alpha 3 + 2×2 = 7; Beta 2×3 = 6; Gamma 3; Delta and Epsilon 0.
+        # A week event is worth 3, not 5: Beta 3×2 = 6 beats Alpha 3 + 2 = 5.
+        # Gamma 3; Delta and Epsilon 0.
         self.assertEqual(
             self.sorted_names(TRENDING, descending=True),
-            ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"],
+            ["Beta", "Alpha", "Gamma", "Delta", "Epsilon"],
         )
 
     def test_low_to_high_reverses_the_score(self) -> None:
         self.assertEqual(
             self.sorted_names(TRENDING, descending=False),
-            ["Delta", "Epsilon", "Gamma", "Beta", "Alpha"],
+            ["Delta", "Epsilon", "Gamma", "Alpha", "Beta"],
+        )
+
+class TrendingBucketTest(SortTest):
+    """The week and month buckets do not overlap (D-050)."""
+
+    def test_a_week_old_event_is_not_also_counted_in_the_month(self) -> None:
+        """One event is worth 3, not 5, at the week boundary."""
+        week_only = make_charity("Week Only")
+        make_event(week_only, days_ago=6)
+        month_only = make_charity("Month Only")
+        for _ in range(2):
+            make_event(month_only, days_ago=10)
+
+        # Week Only 1 × 3 = 3; Month Only 2 × 2 = 4. The literal double count
+        # would put Week Only's single event at 5 and reverse this order.
+        self.assertEqual(
+            self.sorted_names(TRENDING, descending=True),
+            ["Month Only", "Week Only"],
         )
 
 
