@@ -8,8 +8,8 @@ The active filters ride along as hidden inputs, so sorting never drops them.
   <input type="hidden" name="page_size" value="{{ page.page_size }}">
   {% include "charities/filter_state.html" %}
 
-  <label class="sort__label" for="sort">Sort</label>
-  <select class="sort__select" id="sort" name="sort">
+  <label class="sort__label" for="{{ sort_form.parameter }}">Sort</label>
+  <select class="sort__select" id="{{ sort_form.parameter }}" name="{{ sort_form.parameter }}">
     {% for option in sort_form.options %}
       <option value="{{ option.value }}"{% if option.value == sort_form.selected %} selected{% endif %}>{{ option.label }}</option>
     {% endfor %}
@@ -18,15 +18,15 @@ The active filters ride along as hidden inputs, so sorting never drops them.
   <button
     class="sort__direction{% if not sort_form.descending %} sort__direction--current{% endif %}"
     type="submit"
-    name="direction"
-    value="asc"
+    name="{{ sort_form.direction_parameter }}"
+    value="{{ sort_form.ascending_value }}"
     {% if not sort_form.descending %}aria-current="true"{% endif %}
   >{{ sort_form.low_label }}</button>
   <button
     class="sort__direction{% if sort_form.descending %} sort__direction--current{% endif %}"
     type="submit"
-    name="direction"
-    value="desc"
+    name="{{ sort_form.direction_parameter }}"
+    value="{{ sort_form.descending_value }}"
     {% if sort_form.descending %}aria-current="true"{% endif %}
   >{{ sort_form.high_label }}</button>
 </form>

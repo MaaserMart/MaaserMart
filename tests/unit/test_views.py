@@ -420,6 +420,83 @@ class ListingFilterPageTest(TestCase):
 
         self.assertContains(response, f'<input type="hidden" name="domain" value="{self.food.id}">')
 
+    def test_a_sort_does_not_drop_the_active_filter(self) -> None:
+        author = User.objects.create_user(username="sort-filter-reviewer", password="x")
+        Review.objects.create(charity=self.pantry, author=author, rating=1)
+        Review.objects.create(charity=self.school, author=author, rating=5)
+
+        response = self.client.get(
+            self.url, {"domain": [self.food.id], "sort": "rating", "direction": "desc"}
+        )
+
+        self.assertEqual([card.name for card in response.context["page"].items], ["Pantry"])
+        self.assertContains(response, f'<input type="hidden" name="domain" value="{self.food.id}">')
+
+    def test_applying_filters_keeps_the_sort(self) -> None:
+        response = self.client.get(
+            self.url, {"domain": [self.food.id], "sort": "rating", "direction": "desc"}
+        )
+        body = response.content.decode()
+        form = body[body.index('<form class="filters"') :]
+        form = form[: form.index("</form>")]
+
+        self.assertIn('name="sort" value="rating"', form)
+        self.assertIn('name="direction" value="desc"', form)
+
+    def test_clearing_filters_keeps_the_sort(self) -> None:
+        response = self.client.get(
+            self.url, {"domain": [self.food.id], "sort": "rating", "direction": "desc"}
+        )
+
+        link = re.search(r'<a class="filters__clear" href="([^"]+)"', response.content.decode())
+
+        self.assertIsNotNone(link)
+        self.assertIn("sort=rating", link.group(1))
+        self.assertIn("direction=desc", link.group(1))
+        self.assertNotIn("domain=", link.group(1))
+
+    def test_page_links_keep_the_filters_and_the_sort(self) -> None:
+        for index in range(1, 26):
+            charity = Charity.objects.create(name=f"Charity {index:02d}")
+            charity.domains.add(self.food)
+
+        response = self.client.get(
+            self.url,
+            {
+                "domain": [self.food.id],
+                "sort": "rating",
+                "direction": "desc",
+                "page_size": 5,
+            },
+        )
+
+        self.assertContains(
+            response,
+            f"page=2&amp;page_size=5&amp;domain={self.food.id}&amp;sort=rating&amp;direction=desc",
+        )
+
+    def test_the_jump_form_keeps_the_filters_and_the_sort(self) -> None:
+        for index in range(1, 26):
+            charity = Charity.objects.create(name=f"Charity {index:02d}")
+            charity.domains.add(self.food)
+
+        response = self.client.get(
+            self.url,
+            {
+                "domain": [self.food.id],
+                "sort": "rating",
+                "direction": "desc",
+                "page_size": 5,
+            },
+        )
+        body = response.content.decode()
+        jump = body[body.index('<form class="jump"') :]
+        jump = jump[: jump.index("</form>")]
+
+        self.assertIn(f'name="domain" value="{self.food.id}"', jump)
+        self.assertIn('name="sort" value="rating"', jump)
+        self.assertIn('name="direction" value="desc"', jump)
+
     def test_clear_filters_link_appears_only_when_filtering(self) -> None:
         self.assertNotContains(self.client.get(self.url), "Clear filters")
         self.assertContains(self.client.get(self.url, {"domain": [self.food.id]}), "Clear filters")

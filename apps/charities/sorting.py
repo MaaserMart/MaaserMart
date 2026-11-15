@@ -30,8 +30,8 @@ class Mechanism:
 
     `descending_by_default` is the direction the mechanism starts in: A→Z for
     names, high→low for every count or date. `low_label` and `high_label` are
-    what its two direction buttons say; alphabetical order overrides the
-    count-oriented default wording because "high to low" means nothing there.
+    what its two direction buttons say, so each order states the direction in
+    its own terms: letters for names, counts for tallies, dates for time.
     """
 
     value: str
@@ -46,8 +46,8 @@ class Mechanism:
 
 
 # §6.2.5's list, in the order the dropdown shows it. "Most popular" is the doc's
-# name for the order by EVENT count; the labels for the other orders say what
-# they count, so the reader is not left guessing (D-048).
+# name for the order by EVENT count; the direction labels say what each order
+# means, so "high to low" is never asked of a date (D-048).
 ALPHABETICAL = Mechanism(
     "alphabetical",
     "Name",
@@ -57,10 +57,17 @@ ALPHABETICAL = Mechanism(
 )
 TRENDING = Mechanism("trending", "Trending")
 POPULAR = Mechanism("popular", "Most popular")
-RATING = Mechanism("rating", "Highest rated")
+RATING = Mechanism("rating", "Highest rated", low_label="Lowest rated", high_label="Highest rated")
 HASKAMOS = Mechanism("haskamos", "Most haskamos")
-NEWEST = Mechanism("newest", "Most recently added")
-UPDATED = Mechanism("updated", "Most recently updated")
+NEWEST = Mechanism(
+    "newest", "Most recently added", low_label="Oldest first", high_label="Newest first"
+)
+UPDATED = Mechanism(
+    "updated",
+    "Most recently updated",
+    low_label="Least recently changed",
+    high_label="Most recently changed",
+)
 
 MECHANISMS: tuple[Mechanism, ...] = (
     ALPHABETICAL,
@@ -160,8 +167,9 @@ class SortForm:
     """The sort control, ready to render.
 
     The dropdown carries `selected` and the two direction buttons carry their
-    labels and which one is current, so the template holds no mechanism list
-    and no default-direction rule.
+    labels and which one is current. The parameter names and the direction
+    values come from here too, so the template holds no sort vocabulary at all:
+    renaming `sort`, `direction`, `asc` or `desc` is a change in this file only.
     """
 
     options: tuple[SortOption, ...]
@@ -169,6 +177,10 @@ class SortForm:
     descending: bool
     low_label: str
     high_label: str
+    parameter: str = SORT_PARAMETER
+    direction_parameter: str = DIRECTION_PARAMETER
+    ascending_value: str = ASCENDING
+    descending_value: str = DESCENDING
 
 
 def sort_form(sort: CharitySort) -> SortForm:

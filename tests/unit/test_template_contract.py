@@ -176,8 +176,8 @@ class SortControlContractTest(TestCase):
         counted = self._sort_form(self.client.get(self.url, {"sort": "rating"}).content.decode())
 
         self.assertIn("Z to A", alphabetical)
-        self.assertIn("High to low", counted)
-        self.assertIn("Low to high", counted)
+        self.assertIn("Highest rated", counted)
+        self.assertIn("Lowest rated", counted)
 
     def test_the_sort_form_repeats_the_active_filters(self) -> None:
         """Sorting must not drop the sidebar's choices (D-045, D-048)."""
