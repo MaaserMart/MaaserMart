@@ -53,7 +53,7 @@ def choose_dashboard_view(request):
 
 
 SIGNUP_MESSAGES = {
-    signup.SignupResult.RATE_LIMITED: "Too many signups from your connection. Try again later.",
+    signup.SignupResult.RATE_LIMITED: "Too many tries from your connection. Try again later.",
     signup.SignupResult.TOO_MANY_EMAILS: (
         "We've sent this address 3 codes in the last hour. Wait a little and try again."
     ),
@@ -96,6 +96,7 @@ def signup_verify_view(request):
         return redirect("accounts:signup")
     error = None
     notice = None
+    status = 200
     if request.method == "POST":
         if "resend" in request.POST:
             result = signup.resend_code(request)
@@ -105,6 +106,8 @@ def signup_verify_view(request):
             result, user = signup.verify_signup(request, request.POST.get("code", ""))
             if result is signup.SignupResult.OK:
                 return redirect(redirect_after_login(request, user))
+            if result is signup.SignupResult.RATE_LIMITED:
+                status = 429
             if result in (signup.SignupResult.OUT_OF_TRIES, signup.SignupResult.TAKEN):
                 form = signup.SignupForm(initial={"username": pending["username"]})
                 context = {"form": form, "error": SIGNUP_MESSAGES[result], "next": pending["next"]}
@@ -117,5 +120,6 @@ def signup_verify_view(request):
         "notice": notice,
         "tries_left": signup.tries_left(request),
         "code_length": signup.CODE_LENGTH,
+        "max_tries": signup.MAX_CODE_TRIES,
     }
-    return render(request, "accounts/signup_verify.html", context)
+    return render(request, "accounts/signup_verify.html", context, status=status)

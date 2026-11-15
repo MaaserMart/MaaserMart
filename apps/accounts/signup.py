@@ -19,7 +19,9 @@ from django.contrib.auth import login
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.validators import UnicodeUsernameValidator
+from django.core.cache import caches
 from django.core.exceptions import ValidationError
+from django.db import connection, transaction
 from django.db.models import Value
 from django.db.models.functions import Lower
 from django.utils.crypto import constant_time_compare
@@ -37,6 +39,10 @@ SIGNUP_REFILL_SECONDS = 12 * 60
 # Per email address: 3 code emails, then one every 20 minutes (3 an hour).
 EMAIL_CAPACITY = 3
 EMAIL_REFILL_SECONDS = 20 * 60
+
+# Per client network: 10 code tries at once, then one a minute.
+VERIFY_CAPACITY = 10
+VERIFY_REFILL_SECONDS = 60
 
 CODE_LENGTH = 6
 CODE_LIFETIME_SECONDS = 15 * 60
@@ -101,18 +107,33 @@ def _new_code():
     return f"{secrets.randbelow(10**CODE_LENGTH):0{CODE_LENGTH}d}"
 
 
+def mailbox(email):
+    """The inbox an address delivers to, so its aliases share one email limit.
+
+    'Victim+1@Gmail.com' and 'v.ictim@googlemail.com' both reach victim@gmail.com.
+    Any '+tag' is dropped; Gmail also ignores dots. Used only for the limit; the
+    account keeps the address as typed.
+    """
+    local, _, domain = email.lower().rpartition("@")
+    local = local.split("+", 1)[0]
+    if domain in ("gmail.com", "googlemail.com"):
+        local, domain = local.replace(".", ""), "gmail.com"
+    return f"{local}@{domain}"
+
+
 def _email_bucket(email):
-    return "signup-email:" + hashlib.sha256(email.lower().encode()).hexdigest()
+    return "signup-email:" + hashlib.sha256(mailbox(email).encode()).hexdigest()
 
 
 def _spend_email(email):
-    """Spend one of the address's 3 emails an hour. False if none are left."""
+    """Spend one of the inbox's 3 emails an hour. False if none are left."""
     return take_token(_email_bucket(email), EMAIL_CAPACITY, EMAIL_REFILL_SECONDS)
 
 
 def _save_and_send(request, pending):
     """Give the signup a fresh code, save it in the session, then email the code."""
-    pending.update(code=_new_code(), sent_at=_now(), tries=0)
+    # A new id gives the new code its own try count, starting at zero.
+    pending.update(id=secrets.token_urlsafe(16), code=_new_code(), sent_at=_now())
     request.session[SESSION_KEY] = pending
     enqueue_signup_code(pending["email"], pending["code"])
 
@@ -122,12 +143,14 @@ def start_signup(request, form, next_url=""):
 
     Returns a SignupResult. On INVALID the errors are on `form`.
     """
-    # 1. Cheapest: one cache read per request, before any other work.
-    if not take_token(f"signup:{client_network(request)}", SIGNUP_CAPACITY, SIGNUP_REFILL_SECONDS):
-        return SignupResult.RATE_LIMITED
-    # 2. Fields and password rules: no database.
+    # 1. Cheapest: fields and password rules, no database and no limit spent,
+    #    so fixing a typo doesn't use up the network's signups.
     if not form.is_valid():
         return SignupResult.INVALID
+    # 2. One cache read: 5 signups an hour per network, before any lookups, which
+    #    also caps how fast anyone can check which usernames and emails exist.
+    if not take_token(f"signup:{client_network(request)}", SIGNUP_CAPACITY, SIGNUP_REFILL_SECONDS):
+        return SignupResult.RATE_LIMITED
     data = form.cleaned_data
     # 3. Database: is the username or email already in use? (D-032: any capitals.)
     if find_user(data["username"]):
@@ -136,7 +159,7 @@ def start_signup(request, form, next_url=""):
         form.add_error("email", "This email already has an account. Log in instead.")
     if form.errors:
         return SignupResult.INVALID
-    # 4. Last check, because it spends one of the address's 3 emails an hour.
+    # 4. Last check, because it spends one of the inbox's 3 emails an hour.
     if not _spend_email(data["email"]):
         return SignupResult.TOO_MANY_EMAILS
     # Every check passed. Only the hash is kept, never the password itself.
@@ -170,23 +193,55 @@ def _clean_code(code):
     return "".join(ch for ch in code if not ch.isspace() and ch != "-")
 
 
+def _tries_key(pending):
+    return f"signup:tries:{pending['id']}"
+
+
+def _spend_try(pending):
+    """Count one code try for this code. Returns the count, this try included.
+
+    The count lives in the "login" cache, not the session. Django saves the whole
+    session when a request ends, so guesses sent in parallel would each read 0 and
+    write back 1. A PostgreSQL lock on the code's id makes concurrent tries take
+    turns, so every try is counted.
+    """
+    store = caches["login"]
+    key = _tries_key(pending)
+    lock_id = int.from_bytes(hashlib.sha256(key.encode()).digest()[:8], "big", signed=True)
+    with transaction.atomic(), connection.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock(%s)", [lock_id])
+        tries = store.get(key, 0) + 1
+        store.set(key, tries, timeout=CODE_LIFETIME_SECONDS + 60)
+    return tries
+
+
 def verify_signup(request, code):
     """Check the typed code and, if it is right, create and log in the member.
 
     Returns (SignupResult, user or None).
     """
+    # Checks, cheapest first: the network's tries, a signup waiting, not expired.
+    if not take_token(
+        f"signup-code:{client_network(request)}", VERIFY_CAPACITY, VERIFY_REFILL_SECONDS
+    ):
+        return SignupResult.RATE_LIMITED, None
     pending = pending_signup(request)
     if pending is None:
         return SignupResult.NO_SIGNUP, None
     if _now() - pending["sent_at"] > CODE_LIFETIME_SECONDS:
         return SignupResult.EXPIRED, None
+    # Count the try before comparing, so a burst of guesses can't outrun the count.
+    tries = _spend_try(pending)
+    if tries > MAX_CODE_TRIES:
+        del request.session[SESSION_KEY]
+        return SignupResult.OUT_OF_TRIES, None
     if not constant_time_compare(_clean_code(code), pending["code"]):
-        pending["tries"] += 1
-        request.session.modified = True
-        if pending["tries"] >= MAX_CODE_TRIES:
+        if tries == MAX_CODE_TRIES:
             del request.session[SESSION_KEY]
             return SignupResult.OUT_OF_TRIES, None
         return SignupResult.WRONG_CODE, None
+    # Used up: a copy of this session elsewhere can't try the code again.
+    caches["login"].set(_tries_key(pending), MAX_CODE_TRIES + 1, CODE_LIFETIME_SECONDS + 60)
     outcome, user = submit_member_signup(
         pending["username"], pending["email"], pending["password_hash"]
     )
@@ -199,7 +254,9 @@ def verify_signup(request, code):
 
 def tries_left(request):
     pending = pending_signup(request)
-    return MAX_CODE_TRIES - pending["tries"] if pending else 0
+    if pending is None:
+        return 0
+    return max(0, MAX_CODE_TRIES - caches["login"].get(_tries_key(pending), 0))
 
 
 def masked_email(email):
