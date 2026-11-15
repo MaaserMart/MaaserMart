@@ -241,6 +241,7 @@ class TrendingSortTest(SortTest):
             ["Delta", "Epsilon", "Gamma", "Alpha", "Beta"],
         )
 
+
 class TrendingBucketTest(SortTest):
     """The week and month buckets do not overlap (D-050)."""
 

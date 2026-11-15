@@ -513,6 +513,18 @@ Rules for this file:
 
 ---
 
+## D-051: Every card shows the activity values the activity orders sort by
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active
+- Design doc ref: §5.3, §6.2.5 (Sort — SRS FR 3), §5.2.21 (Derived Values)
+- Decision: Every card in the listing shows three activity values alongside the rating: the charity's total EVENT count, its count of **approving** HASKAMA rows, and the date of its last change. `CharityCard` carries them as `ActivitySummary(events, approving_haskamas, last_changed)`, annotated in the same page query. `last_changed` is the latest `charity_updated` EVENT, falling back to CHARITY.created, so the value is never empty. The rating row stays as D-044 defined it; the three values sit below the domain/location chips, labelled "N events", "N haskamas" and "Last changed <date>". §5.3 names only the average rating, so these are additions to the doc's list, not replacements.
+- Why: sorting by trending, most popular, most haskamos or most recently updated reorders the list, but the cards showed none of those numbers, so a reader could not check the order and two charities with equal counts were indistinguishable from a bug. Showing all three, rather than only the one being ordered by, keeps the card stable while the reader changes the sort and lets them compare the values that place a charity. The cost is two extra subqueries per page row (event count and latest update) plus the haskama count the page now always aggregates; the pagination `COUNT` still reads none of them.
+- Where in code: `apps/charities/contracts.py` (`ActivitySummary`, `CharityCard.activity`), `apps/charities/repositories.py` (`_with_activity_values`, `_narrowed`, `_to_card`), `apps/charities/templates/charities/listing.html`, `static/css/site.css` (`.charity-card__activity`), `tests/unit/test_repositories.py`, `tests/unit/test_template_contract.py`
+
+---
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1.

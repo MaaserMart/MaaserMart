@@ -5,8 +5,15 @@ interface, which is exactly the point of keeping them separate.
 """
 
 from django.test import SimpleTestCase
+from django.utils import timezone
 
-from apps.charities.contracts import CharityCard, DomainTag, LocationTag, ReviewSummary
+from apps.charities.contracts import (
+    ActivitySummary,
+    CharityCard,
+    DomainTag,
+    LocationTag,
+    ReviewSummary,
+)
 from apps.charities.filters import CharityFilters
 from apps.charities.services import (
     DEFAULT_PAGE_SIZE,
@@ -27,6 +34,7 @@ def card(name: str) -> CharityCard:
         domains=(DomainTag(name="Free loans"),),
         locations=(LocationTag(name="Lakewood", region="NJ", country="USA"),),
         reviews=ReviewSummary(count=0, average=None),
+        activity=ActivitySummary(events=0, approving_haskamas=0, last_changed=timezone.now()),
     )
 
 

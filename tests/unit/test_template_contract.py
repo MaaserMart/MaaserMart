@@ -12,9 +12,17 @@ import re
 from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
-from apps.charities.contracts import CharityCard, DomainTag, LocationTag, ReviewSummary
-from apps.charities.models import Charity, Domain, Location, Review
+from apps.charities.contracts import (
+    ActivitySummary,
+    CharityCard,
+    DomainTag,
+    LocationTag,
+    ReviewSummary,
+)
+from apps.charities.models import Charity, Domain, Haskama, Location, Review
+from apps.events.models import Event
 from tests.factories.accounts import UserFactory
 
 
@@ -91,6 +99,21 @@ class ListingTemplateContractTest(TestCase):
         self.assertIn("4.5 out of 5", body)
         self.assertIn("2 reviews", body)
 
+    def test_activity_values_render_on_every_card(self) -> None:
+        """D-051: every order shows the numbers it sorts by, including zero counts."""
+        charity = Charity.objects.create(name="Keren L'Dugma")
+        for _ in range(2):
+            Event.objects.create(charity=charity, action=Event.Action.VIEW)
+        Haskama.objects.create(
+            rabbi_user=UserFactory(), charity=charity, verdict=Haskama.Verdict.APPROVE
+        )
+
+        body = self._render_single_charity()
+
+        self.assertIn("2 events", body)
+        self.assertIn("1 haskama", body)
+        self.assertIn("Last changed", body)
+
     def test_charity_without_reviews_says_so(self) -> None:
         """The empty state stands in for the rating, rather than showing 0 out of 5."""
         Charity.objects.create(name="Keren L'Dugma")
@@ -105,9 +128,9 @@ class ListingTemplateContractTest(TestCase):
 
         The template reads .name, .tagline, .image, .domains, .locations and
         each tag's .name (and .label for a location), plus .reviews.count and
-        .reviews.average. If a card
-        stops exposing one of those, or exposes a manager instead of a
-        sequence, this fails loudly.
+        .reviews.average, and .activity's three values. If a card stops
+        exposing one of those, or exposes a manager instead of a sequence, this
+        fails loudly.
         """
         card = CharityCard(
             id=1,
@@ -117,9 +140,18 @@ class ListingTemplateContractTest(TestCase):
             domains=(DomainTag(name="Free loans"),),
             locations=(LocationTag(name="Lakewood", region="NJ", country="USA"),),
             reviews=ReviewSummary(count=2, average=4.5),
+            activity=ActivitySummary(events=7, approving_haskamas=3, last_changed=timezone.now()),
         )
 
-        for attribute in ("name", "tagline", "image", "domains", "locations", "reviews"):
+        for attribute in (
+            "name",
+            "tagline",
+            "image",
+            "domains",
+            "locations",
+            "reviews",
+            "activity",
+        ):
             self.assertTrue(hasattr(card, attribute), attribute)
 
         # The template iterates these directly, so they must be iterable and

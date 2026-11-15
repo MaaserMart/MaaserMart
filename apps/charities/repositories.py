@@ -25,6 +25,7 @@ from django.db.models import (
 from django.db.models.functions import Coalesce
 
 from apps.charities.contracts import (
+    ActivitySummary,
     CharityCard,
     DomainOption,
     DomainTag,
@@ -99,9 +100,9 @@ class DjangoCharityRepository:
     same annotations and cannot disagree (D-045, D-048).
     """
 
-    # §6.2.5's mechanisms mapped to their ORDER BY. The event annotations are
-    # added only when their mechanism is chosen, so a plain listing page pays
-    # for no activity subquery (D-048).
+    # §6.2.5's mechanisms mapped to their ORDER BY. Every card shows the event
+    # count and last-change date, so the page query always has those two
+    # annotations; only trending adds a third (D-051).
     ORDER_KEYS: dict[Mechanism, OrderKey] = {
         ALPHABETICAL: OrderKey("name", tiebreak=("pk",)),
         TRENDING: OrderKey("trending_score"),
@@ -177,7 +178,7 @@ class DjangoCharityRepository:
         sort: CharitySort = DEFAULT_SORT,
     ) -> tuple[CharityCard, ...]:
         rows = self._narrowed(filters, sort=sort, reviews=True)
-        rows = self._with_event_values(rows, sort)
+        rows = self._with_activity_values(rows, sort)
         rows = self._ordered(rows, sort)
         rows = rows.prefetch_related("domains", "locations")[offset : offset + limit]
         return tuple(self._to_card(row) for row in rows)
@@ -201,9 +202,13 @@ class DjangoCharityRepository:
         """
         filters = filters or CharityFilters()
         needs_reviews = reviews or filters.min_rating is not None or filters.min_reviews is not None
+        # A page passes `reviews=True`, and its cards all show the approving
+        # count (D-051); the pagination count reads none of it.
         needs_approving = (
-            sort is not None and sort.mechanism == HASKAMOS
-        ) or filters.min_approving_haskamas is not None
+            reviews
+            or (sort is not None and sort.mechanism == HASKAMOS)
+            or filters.min_approving_haskamas is not None
+        )
         rows = self._annotated(
             reviews=needs_reviews,
             approving=needs_approving,
@@ -245,23 +250,23 @@ class DjangoCharityRepository:
         return rows
 
     @staticmethod
-    def _with_event_values(rows: QuerySet[Charity], sort: CharitySort) -> QuerySet[Charity]:
-        """Annotate the EVENT-derived value the chosen order reads, if any.
+    def _with_activity_values(rows: QuerySet[Charity], sort: CharitySort) -> QuerySet[Charity]:
+        """Annotate the EVENT-derived values the cards show and the chosen order reads.
 
+        Every card shows the event count and last-change date (D-051), so those
+        two are always added; trending is the only order that needs a third.
         The haskama count is not added here: `_narrowed` already knows it is
-        needed for this order (or for a haskama filter), and reusing that one
-        annotation keeps the query from counting the same rows twice. EVENT is
-        another app's table, so these expressions come from its services.py;
-        charities never imports the model (D-006).
+        needed for this page (or for a haskama filter or order), and reusing
+        that one annotation keeps the query from counting the same rows twice.
+        EVENT is another app's table, so these expressions come from its
+        services.py; charities never imports the model (D-006).
         """
-        if sort.mechanism == POPULAR:
-            return rows.annotate(event_count=events.event_count(OuterRef("pk")))
+        rows = rows.annotate(
+            event_count=events.event_count(OuterRef("pk")),
+            last_changed=Coalesce(events.last_changed(OuterRef("pk")), F("created")),
+        )
         if sort.mechanism == TRENDING:
             return rows.annotate(trending_score=events.trending_score(OuterRef("pk")))
-        if sort.mechanism == UPDATED:
-            return rows.annotate(
-                last_changed=Coalesce(events.last_changed(OuterRef("pk")), F("created"))
-            )
         return rows
 
     @classmethod
@@ -297,6 +302,11 @@ class DjangoCharityRepository:
                 for loc in row.locations.all()
             ),
             reviews=ReviewSummary(count=row.review_count, average=row.average_rating),
+            activity=ActivitySummary(
+                events=row.event_count,
+                approving_haskamas=row.approving_haskamas,
+                last_changed=row.last_changed,
+            ),
         )
 
 
