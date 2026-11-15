@@ -50,3 +50,19 @@ def client_ip(request):
         return str(ipaddress.ip_address(last))
     except ValueError:
         return remote
+
+
+def client_network(request):
+    """The visitor's address as a rate-limit key: the IP, or its /64 for IPv6.
+
+    One IPv6 home or server usually gets a whole /64 (2^64 addresses), so keying
+    on single IPv6 addresses would give one visitor a fresh bucket per request.
+    """
+    ip = client_ip(request)
+    try:
+        address = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if address.version == 6:
+        return str(ipaddress.ip_network(f"{address}/64", strict=False))
+    return ip
