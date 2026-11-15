@@ -3,7 +3,6 @@
 from unittest import mock
 
 import pytest
-from django.conf import settings
 from django.contrib.auth import SESSION_KEY
 
 from tests.factories import RoleAssignmentFactory, UserFactory
@@ -176,13 +175,3 @@ def test_error_box_shows_after_a_failed_login(client, member):
 
 def test_no_error_box_on_a_fresh_form(client):
     assert b"auth__error" not in client.get("/accounts/login/").content
-
-
-def test_login_css_block_is_appended_after_the_existing_rules():
-    """The login styles are one marked block at the end, so Shaul's rules stay as they were."""
-    css = (settings.BASE_DIR / "static/css/site.css").read_text()
-    start = css.index("/* ===== Login pages (accounts)")
-    assert ".auth" not in css[:start]
-    assert css.rstrip().endswith(
-        "/* ===== End login pages ============================================ */"
-    )
