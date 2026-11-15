@@ -3,7 +3,12 @@
 Other apps call only the functions defined here, never this app's models.
 """
 
-from .models import RoleAssignment
+import enum
+
+from django.db import IntegrityError, transaction
+
+from .models import RoleAssignment, User
+from .tasks import send_signup_code
 
 ADMIN = "admin"
 
@@ -31,3 +36,35 @@ def find_role(user):
     if user.is_admin:
         roles.add(ADMIN)
     return [str(role) for role in _ROLE_ORDER if role in roles]
+
+
+class SignupOutcome(enum.Enum):
+    CREATED = "created"
+    USERNAME_TAKEN = "username_taken"
+    EMAIL_TAKEN = "email_taken"
+
+
+def submit_member_signup(username, email, password_hash):
+    """Create a USER with the member role (§6.2.2.5). Both rows or neither.
+
+    Takes the password already hashed, so the plain password never has to be
+    kept between signup steps. The unique indexes decide if two people race for
+    the same username or email. Returns (SignupOutcome, user or None).
+    """
+    try:
+        with transaction.atomic():
+            user = User.objects.create(username=username, email=email, password=password_hash)
+            RoleAssignment.objects.create(user=user, role=RoleAssignment.Role.MEMBER)
+    except IntegrityError as error:
+        constraint = getattr(getattr(error.__cause__, "diag", None), "constraint_name", None)
+        if constraint == "user_username_ci_uniq":
+            return SignupOutcome.USERNAME_TAKEN, None
+        if constraint == "user_email_ci_uniq":
+            return SignupOutcome.EMAIL_TAKEN, None
+        raise
+    return SignupOutcome.CREATED, user
+
+
+def enqueue_signup_code(email, code):
+    """Queue the email with a signup code (§6.2.2.5 enqueue_email). Sent by Celery."""
+    send_signup_code.delay(email, code)

@@ -416,6 +416,20 @@ Rules for this file:
 - Why: The login lockout and rate limit (D-YOSEF-accounts-login) keep counters in the cache. Django's default per-process memory cache would give each Gunicorn worker its own counters and lose them on restart, multiplying the allowed tries. PostgreSQL is already in the stack; Redis would add a service. Switching later is one settings change.
 - Where in code: `config/settings/base.py` (`CACHES`), `README.md` (setup steps), `tests/unit/test_cache.py`
 
+## D-YOSEF-member-signup: Member signup checks everything first, then confirms the email with a typed 6-digit code
+- Date: 2026-11-15
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.2.2, §8.4 (resolves the open question "Email verification method": typed code, not a link)
+- Decision:
+  - `/accounts/signup/` takes username, email, password and a terms tick. `/accounts/signup/verify/` takes the code. The account does not exist until the right code is typed; then it is created with the `member` role (both rows or neither) and the user is logged in and sent where login would send them.
+  - Step 1 checks, cheapest first, with nothing written or sent until all pass: the fields and Django's password rules; 5 signups an hour per client network (a form with mistakes doesn't count); username and email not taken ignoring capitals (D-032); 3 code emails an hour per inbox, where aliases of one inbox (`+tags`, and dots or googlemail.com for Gmail) count as one. The page says when a username or email is taken, as §6.2.2.8 asks.
+  - The code is 6 digits from `secrets`, lasts 15 minutes and allows 5 tries; the fifth wrong try throws it away. Tries are counted in the `login` cache under a random id per code, with a PostgreSQL advisory lock so parallel guesses can't each count as the first; a used code can't be tried again. Each client network also gets 10 code tries, then one a minute. A new code gets a new id (fresh tries and clock) and counts toward the 3 emails an hour.
+  - The pending signup (username, email, password hash, code) waits in the session, which is stored in the database (§8.4: "Verification code lives in Django session"). The plain password is never kept.
+  - The email goes through a Celery task (§4.14). The terms paragraph is a placeholder until real terms are written.
+- Why: A typed code keeps the user on one tab and matches §6.2.2. Checking first means a refused signup costs no email and no password hash. The limits stop guessing codes and stop anyone using signup to flood an inbox. These emails are account (transactional) emails, so no separate email consent is asked; marketing email would need its own opt-in.
+- Where in code: `apps/accounts/signup.py`, `apps/accounts/services.py` (`submit_member_signup`, `enqueue_signup_code`), `apps/accounts/tasks.py`, `apps/accounts/views.py`, `templates/accounts/signup*.html`, `tests/integration/test_signup.py`
+
 ## D-042: The listing shows every charity until something can publish one
 
 - Date: 2026-11-12
@@ -591,7 +605,7 @@ Rules for this file:
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1.
 - **2026-11-11: Default charity listing order.** §6.2.3 says alphabetical; UC-03 (§8.5) says "no particular order". Resolved as D-048 on 2026-11-14: alphabetical A→Z is the default sort.
 - **2026-11-12: How the charities listing learns visibility without depending on approvals.** D-023 makes visibility depend on approvals' tables, but §6.1 has approvals depending on charities, not the reverse, and D-006 limits calls to listed dependencies. To be decided before the Phase 1 listing. Resolved as D-038 on 2026-11-12.
-- **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link.
+- **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link. Resolved as D-YOSEF-member-signup on 2026-11-15 (typed code).
 - **2026-11-12: One LINK per kind per charity?** §5.2.14 does not say, but EDIT_REQUEST.field (§5.2.8) has one `website_donate`/`website_about`/`website_contact` value with a single new_value, which implies one link per kind. `Link` has no (charity, kind) uniqueness. Adding it after data exists needs a cleanup migration, so decide before Phase 1 writes links. Resolved as D-036 on 2026-11-12.
 - **2026-11-12: Is the nav sticky?** §7.2 says the nav tab is "always visible": on every page (done, through `base.html`), or also fixed while scrolling (not done). Cheap either way. Resolved as D-037 on 2026-11-12.
 - **2026-11-13: Where is "one review per member per charity" enforced?** §8.6 and UC-05 say a member has one review per charity, but REVIEW has no unique (charity, author) constraint and `save_review` does not exist yet. Options: enforce it only in the upsert service, or add a unique constraint too (a schema change, so decide before the review form lands). See `docs/NOTES.md` N1.
