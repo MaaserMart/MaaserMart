@@ -383,7 +383,7 @@ Rules for this file:
 ## D-YOSEF-accounts-login: Accounts: one signup, roles requested after, and how login is protected
 - Date: 2026-11-14
 - Decided by: CEO (Yosef)
-- Status: Active
+- Status: Active, except the admin point: superseded by D-YOSEF-admin-superuser on 2026-11-15
 - Design doc ref: §6.2.1, §6.2.2, §7.1.1, §8.3, §8.4
 - Decision:
   - Sign-in is username and password through Django's built-in auth. Google sign-in may be added later alongside it.
@@ -597,6 +597,15 @@ Rules for this file:
 - Decision: The sort form carries `data-sort-form`, and `static/js/sort.js` submits it both on `change` and on Enter in the dropdown. Both paths call `form.submit()` with no submitter, so no `direction` value is sent and the server uses the chosen mechanism's default direction. The inline `onchange` handler is gone. With JavaScript off, the form still works as before: the visitor picks a mechanism and clicks a direction button, while Enter in the dropdown would still take the first button (ascending) — that fallback is inherent to the form's button order and is not worth a hidden control.
 - Why: the dropdown alone submitted nothing, so picking a mechanism looked broken until the visitor also clicked the highlighted "current" direction; and Enter in a `<select>` activates the first submit button, giving trending, popularity, rating, haskamos, newest and updated ascending — the opposite of their documented default. §6.2.5 only requires the dropdown and two direction buttons, so a small script on the existing controls fits the doc; `form.submit()` rather than an Apply button keeps the control at two parts.
 - Where in code: `apps/charities/templates/charities/sort.html`, `static/js/sort.js`, `tests/unit/test_template_contract.py`
+
+## D-YOSEF-admin-superuser: A MaaserMart admin is a superuser
+- Date: 2026-11-15
+- Decided by: CEO (Yosef)
+- Status: Active. Replaces the "Admin means `User.is_staff`" point of D-YOSEF-accounts-login.
+- Design doc ref: §5.2.2, §6.2.1
+- Decision: `User.is_admin` is `is_superuser`, Django's highest level: every permission, everywhere. The founders (Yosef, Shaul, Benjamin) are superusers. `is_staff` alone only lets someone into `/django-admin/`, limited to the permissions they are given, and does not make them a MaaserMart admin. So a helper, such as a technical supporter, can be given `is_staff` to fix data without seeing the approval queue or the admin dashboard.
+- Why: Asked during review of PR #12. With `is_staff`, giving anyone access to `/django-admin/` would also have made them a full admin in the app.
+- Where in code: `apps/accounts/models.py` (`User.is_admin`), `tests/unit/test_find_role.py`
 
 ---
 

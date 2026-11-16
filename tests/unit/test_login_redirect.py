@@ -102,7 +102,7 @@ def test_one_role_goes_to_its_dashboard(role, path):
 
 @pytest.mark.urls(STUB)
 def test_admin_only_goes_to_the_admin_dashboard():
-    assert go(user_with(is_staff=True)) == "/dashboard/admin/"
+    assert go(user_with(is_superuser=True)) == "/dashboard/admin/"
 
 
 @pytest.mark.urls(STUB)
@@ -112,7 +112,7 @@ def test_several_roles_go_to_the_chooser():
 
 @pytest.mark.urls(STUB)
 def test_a_member_who_is_also_admin_goes_to_the_chooser():
-    assert go(user_with(Role.MEMBER, is_staff=True)) == "/accounts/choose-dashboard/"
+    assert go(user_with(Role.MEMBER, is_superuser=True)) == "/accounts/choose-dashboard/"
 
 
 @pytest.mark.urls(STUB)
