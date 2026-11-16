@@ -416,13 +416,199 @@ Rules for this file:
 - Why: The login lockout and rate limit (D-YOSEF-accounts-login) keep counters in the cache. Django's default per-process memory cache would give each Gunicorn worker its own counters and lose them on restart, multiplying the allowed tries. PostgreSQL is already in the stack; Redis would add a service. Switching later is one settings change.
 - Where in code: `config/settings/base.py` (`CACHES`), `README.md` (setup steps), `tests/unit/test_cache.py`
 
+## D-YOSEF-member-signup: Member signup checks everything first, then confirms the email with a typed 6-digit code
+- Date: 2026-11-15
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.2.2, §8.4 (resolves the open question "Email verification method": typed code, not a link)
+- Decision:
+  - `/accounts/signup/` takes username, email, password and a terms tick. `/accounts/signup/verify/` takes the code. The account does not exist until the right code is typed; then it is created with the `member` role (both rows or neither) and the user is logged in and sent where login would send them.
+  - Step 1 checks, cheapest first, with nothing written or sent until all pass: the fields and Django's password rules; 5 signups an hour per client network (a form with mistakes doesn't count); username and email not taken ignoring capitals (D-032); 3 code emails an hour per inbox, where aliases of one inbox (`+tags`, and dots or googlemail.com for Gmail) count as one. The page says when a username or email is taken, as §6.2.2.8 asks.
+  - The code is 6 digits from `secrets`, lasts 15 minutes and allows 5 tries; the fifth wrong try throws it away. Tries are counted in the `login` cache under a random id per code, with a PostgreSQL advisory lock so parallel guesses can't each count as the first; a used code can't be tried again. Each client network also gets 10 code tries, then one a minute. A new code gets a new id (fresh tries and clock) and counts toward the 3 emails an hour.
+  - The pending signup (username, email, password hash, code) waits in the session, which is stored in the database (§8.4: "Verification code lives in Django session"). The plain password is never kept.
+  - The email goes through a Celery task (§4.14). The terms paragraph is a placeholder until real terms are written.
+- Why: A typed code keeps the user on one tab and matches §6.2.2. Checking first means a refused signup costs no email and no password hash. The limits stop guessing codes and stop anyone using signup to flood an inbox. These emails are account (transactional) emails, so no separate email consent is asked; marketing email would need its own opt-in.
+- Where in code: `apps/accounts/signup.py`, `apps/accounts/services.py` (`submit_member_signup`, `enqueue_signup_code`), `apps/accounts/tasks.py`, `apps/accounts/views.py`, `templates/accounts/signup*.html`, `tests/integration/test_signup.py`
+
+## D-042: The listing shows every charity until something can publish one
+
+- Date: 2026-11-12
+- Decided by: builder, pending CEO/COO confirmation
+- Status: Active
+- Design doc ref: §6.2.3
+- Decision: `charities.repositories.DjangoCharityRepository` takes `published_only`, default `False`, so the listing reads all charities. It flips to `True` when the admin approval queue lands, since that queue is what calls `publish_charity` (D-038). The option is a constructor argument, not a setting or a class attribute, so the behaviour is explicit at the call site and testable in both directions.
+- Why: D-038 makes `is_visible` the visibility switch and gives every charity `False` by default. Nothing calls `publish_charity` yet, because the admin approval queue is not built. Reading `is_visible` literally would render an empty listing and make the tracer bullet unverifiable. This is a deliberate, temporary departure from D-038 and it is undone by one argument when the queue exists.
+- Where in code: `apps/charities/repositories.py` (`published_only`), `apps/charities/views.py` (`listing`)
+
+---
+
+## D-043: Seeded charity images use the artwork already in the repo
+
+- Date: 2026-11-13
+- Decided by: CEO (Yosef), asked for directly
+- Status: Active (supersedes D-024)
+- Design doc ref: not in design doc
+- Decision: The dev seed gives every charity one of the twelve SVGs in `static/charities/img/`, cycling through them by index, instead of pointing at an external placeholder host. `image` holds a repo-relative path such as `charities/img/charity-04.svg`, so the template serves it through `{% static %}` the way a real uploaded path would be served.
+- Why: D-024's placeholders rendered as grey rectangles with the text "600x400", which read as broken. Only every third charity got one at all, so 133 of 200 rows had no image. The repo already ships twelve distinct images that nothing referenced. This also exercises the relative-path branch of the listing template, which the external URLs never touched, and removes a network dependency from dev.
+- Where in code: `apps/dashboards/management/commands/seed.py` (`IMAGE_PATHS`), `apps/charities/templates/charities/listing.html`
+
+---
+
+## D-044: The listing shows each charity's average rating and review count
+
+- Date: 2026-11-13
+- Decided by: CEO (Yosef), asked for directly
+- Status: Active
+- Design doc ref: §5.2.15, §5.3, §6.2.3
+- Decision: Every card in the charity listing shows the charity's average rating and how many reviews it has. §5.3 has the listing page show "average rating", so that number is on the card, and the count goes with it because an average alone hides whether it is based on one review or fifty. Both are derived from REVIEW on read — nothing is stored, per §5.3's "derive data" rule — and a charity with no reviews shows "No reviews yet" instead of "0 out of 5", which would read as a rating of zero rather than no rating. The average is shown to one decimal. The repository annotates the page query with `Count`/`Avg` so the listing still costs no extra round trip, and the card carries the pair as `ReviewSummary(count, average)` where `average` is `None` when there are no reviews.
+- Why: §5.3 names an average rating on the list page but says nothing about a count, the empty state or rounding. Deriving both values keeps them from going stale when a review is written or edited.
+- Where in code: `apps/charities/contracts.py` (`ReviewSummary`), `apps/charities/repositories.py` (`DjangoCharityRepository.page`, `_to_card`), `apps/charities/templates/charities/listing.html`, `static/css/site.css`, `tests/unit/test_repositories.py`, `tests/unit/test_template_contract.py`
+
+## D-045: The charity listing filters by six groups, with the shape the doc gives them
+
+- Date: 2026-11-13
+- Decided by: CEO (Yosef), asked for directly; built by the filter branch
+- Status: Superseded by D-046 on 2026-11-13, for the parameter-name correction and the min_rating range rule
+- Design doc ref: §6.2.4 (Filter — FR 2), §8.5 (UC-03)
+- Decision: `charities.services.list_charities` takes an optional `filters` mapping and narrows the listing by **six** of §6.2.4's seven groups: `domain`, `location`, `haskama_rabbis`, `min_rating`, `min_reviews`, `min_approving_haskamas`, `max_disapproving_haskamas` — that is all seven, with `haskama_rabbis` present in shape but unpopulated (see the sub-decision below). Values repeat inside a group (OR) and groups combine (AND), exactly as §6.2.4 says; setting any filter returns page 1. The groups mean, precisely:
+  - `domain`, `location`, `haskama_rabbi`: repeatable **ids** (`?domain=2&domain=5`), not names. A raw value that names no row is ignored rather than rejected, the same way the listing already treats a junk `page`. Ids because names are not keys: D-032 makes LOCATION unique on (name, region, country), so a name alone can point at several locations.
+  - `min_rating`: a minimum **average star rating, 1–5 inclusive**, the scale `REVIEW.rating` holds and the one D-044 prints on the card ("4.5 out of 5"). There is no "no minimum" value: clearing the group is what clears it. A value off the scale is clamped into it and the sidebar says so (D-046). A charity with no reviews has no average, so it does not match a `min_rating` filter.
+  - `min_reviews`: minimum `ReviewSummary.count`, the number D-044 already shows on the card.
+  - `min_approving_haskamas` / `max_disapproving_haskamas`: minimum and maximum counts of `HASKAMA` rows with verdict `approve` / `disapprove`.
+  - `0` is a real value for `min_reviews`, `min_approving_haskamas` and `max_disapproving_haskamas` ("no reviews", "no disapprovals"). An absent `max_disapproving_haskamas` is no cap, because absence cannot mean zero without ruling out every charity that has one.
+- Sub-decision — `haskama_rabbis` returns nothing today: `HASKAMA` is queried in its real shape (`verdict`, `rabbi_user_id`), but the **option list** it needs is `accounts.services.search_rabbis`, which §6.2.4 names and which does not exist yet. Until it does, the group's options are empty and its parameter matches nothing; the query path is written and covered by a test with direct `HASKAMA` rows, so wiring the search in changes no other code. Asked for this way: "include whatever tables it needs in real form, but there happens to be no data, so you will have to give that result."
+- Sub-decision — no `is_visible` filtering while D-042 stands: as of 2026-11-13 the listing shows charities that are not yet admin-approved (D-042), and the CEO's instruction is that every filter applies the same way, so rating, review and haskama counts are read from all charities' rows, published or not. Repositories filter on `is_visible` only through their existing `published_only` argument, so the day the approval queue flips it, the filters narrow with the listing and nothing else changes.
+- Sub-decision — a location's label is its full identity: because a name is not unique, both the card chip and the filter checkbox label show name, region and country ("Lakewood, New Jersey, USA"), never the name alone.
+- Sub-decision — a rabbi's option carries RABBI_PROFILE's two parts: `RabbiOption` holds `display_name` and nullable `title` (§5.2.3) and joins them into a label ("Rabbi Yosef Cohen", or the name alone when the title is empty), the same shape `LocationOption` uses, so the formatting rule lives in `charities` where the template is and not in whichever app supplies the list. Its `id` is the **user** id, because `HASKAMA` stores `rabbi_user`.
+- Why: §6.2.4 fixes the groups, their URL parameter names and the OR/AND rule but leaves the rating scale, the meaning of zero, the identity of a domain/location/rabbi value and the empty-state behaviour unstated, and those choices decide the URL shape, which is expensive to change once links are shared. Picking ids and a 1–5 scale keeps the filter page, the cards and §5.2.15 saying the same thing.
+- Where in code: `apps/charities/contracts.py` (`CharityFilters`, `DomainOption`, `LocationOption`, `RabbiOption`), `apps/charities/services.py` (`list_charities`, `list_domains`, `list_locations`, `list_rabbis`), `apps/charities/repositories.py` (`CharityRepository`, `DjangoCharityRepository`), `apps/charities/views.py` (`_read_filters`), `apps/charities/templates/charities/filters.html`, `tests/unit/test_filter_service.py`
+
+---
+
+## D-046: Filter audit corrections: the rabbi parameter is singular, an out-of-range rating filters nothing, and a chosen zero still shows
+
+- Date: 2026-11-13
+- Decided by: CEO (Yosef) and Platform Lead, on the filter-branch audit
+- Status: Active
+- Design doc ref: §6.2.4 (Filter — FR 2)
+- Decision: Four corrections to D-045, three of which change what is built:
+  - The Haskamos group's URL parameter is `haskama_rabbi` — singular, exactly as §6.2.4 writes it — not `haskama_rabbis` as D-045 recorded. The group's internal name stays `haskama_rabbis` (one rabbi filters by their id, several filter by several); only the URL surface is the doc's spelling. D-045 is superseded for its parameter-name and rating-range text, and stays active for everything else.
+  - A `min_rating` outside 1–5 is **clamped into the scale, once, where the URL is read**, and the correction is shown instead of being silent: the sidebar's input displays the value actually applied and a note beside it says "Kept between 1 and 5; using 5." D-045's original clamp was invisible, which is what made `?min_rating=99` surprising; the problem was the silence, not the saturating.
+  - The Haskamos group's values are **ids**, not the usernames §6.2.4's parameter line mentions. Ids survive a rabbi renaming their public name, match the other repeatable groups, and are what `accounts.services.search_rabbis` will feed the sidebar; the doc's "username" was a design note, not a contract. Decided here because D-045 asserted ids without saying the doc names usernames.
+  - A chosen `0` in `max_disapproving_haskamas` (or any numeric group) renders as `0`, not as a blank box: the sidebar now carries an explicit `is_set` per group rather than inferring "set" from a truthy value.
+  - This entry first said an out-of-range rating would be *ignored* rather than clamped, and that was built and reviewed. The CEO then chose clamping: "clamp it, but make it clear." Clamping therefore stands, and the audit finding is answered by making the correction visible. `clamp_rating` in `filters.py` is the one place it happens, so the query, the sidebar's input and the page links cannot disagree, and `sidebar_groups` receives the raw numbers `requested_numbers` read so it can compare and say what changed.
+  - The repeatable groups' option lists scroll inside the panel (`.filters__options`, capped at 14rem) instead of growing without bound, so a real, thousands-row location list cannot push the Apply button off the page. The group table also collapsed into one `Group` entry per filter, keyed by URL parameter, so the code no longer keeps three lists that must agree.
+- Why: The audit found the parameter spelling diverging from the doc and two behaviours (the clamp, the blank-zero) that worked today but would break the moment rendering or clamping changed. The option lists were the one unbounded read on the page.
+- Where in code: `apps/charities/filters.py` (`GROUPS`, `Group`, `clamp_rating`, `requested_numbers`, `sidebar_groups`, `is_set`), `apps/charities/repositories.py` (`_narrowed`), `apps/charities/views.py`, `apps/charities/templates/charities/filters.html`, `static/css/site.css` (`.filters__options`), `tests/unit/test_filter_service.py`, `tests/unit/test_filter_repository.py`, `tests/unit/test_views.py`
+
+---
+
+## D-047: The filter sidebar scrolls as a whole, so its last groups stay reachable
+
+- Date: 2026-11-14
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.2.4 (Filter — FR 2)
+- Decision: The sidebar is bounded to the viewport and scrolls inside itself: `max-height: calc(100vh - 5.5rem)` with `overflow-y: auto` on `.listing__sidebar`. D-045 and D-046 bounded each option list (`.filters__options`, 14rem), but the seven groups together are taller than a viewport, so reaching the bottom groups meant scrolling the results off the page while the pinned panel stayed where it was. Below 48rem the sidebar sits above the results, so its own scroll and its pinning are both switched off there.
+- Why: the panel's last groups were unreachable for a reader who was reading the results, and the only way to them was to scroll away from the page.
+- Where in code: `static/css/site.css` (`.listing__sidebar`, and the 48rem reset), `tests/unit/test_template_contract.py` (the rule is read from the stylesheet the page loads, as D-037's nav test does)
+
+---
+
+## D-048: Sort offers §6.2.5's seven orders, with `sort` and `direction` in the URL
+
+- Date: 2026-11-14
+- Decided by: builder, pending CEO/COO confirmation
+- Status: Active (amended by D-050 for the trending formula and D-053 for how a changed dropdown is applied)
+- Design doc ref: §6.2.5 (Sort — SRS FR 3), §5.2.21 (Derived Values), §6.4.3 (Trending), §6.1 (dependencies)
+- Decision: The listing's sort is a `CharitySort` value — a mechanism plus a direction — read from the URL and passed to `charities.services.list_charities(repository, filters, sort, page, page_size)`. §6.2.5 fixes the mechanisms and that each has both directions, but not the parameter values, the default direction, or what several of the orders count, so those are settled here:
+  - The URL is `?sort=<mechanism>&direction=<asc|desc>`. The mechanisms, in dropdown order, are `alphabetical`, `trending`, `popular`, `rating`, `haskamos`, `newest` and `updated`. `direction` is `asc` or `desc`.
+  - `alphabetical` starts A→Z and is the default; every other mechanism starts high→low. When `sort` is absent the mechanism is alphabetical. When `sort` is present but names no mechanism, the whole choice falls back to alphabetical A→Z, which is §6.2.5's "when nothing recognizable is input, or when nothing is input, it defaults to alphabetical a->z". A `direction` that is absent or not `asc`/`desc` falls back to the chosen mechanism's default direction, the same way §6.2.4's filter groups ignore junk values.
+  - The dropdown is a GET form that carries `page_size` and the active filters but never `page`, so choosing a sort lands on page 1 (§6.2.5). Changing the dropdown submits it immediately with no `direction` (D-053), so the new mechanism starts in its default direction and the two buttons' labels always describe the order they will apply. The two direction buttons are submits named `direction`, so they pick the mechanism shown in the dropdown and the clicked direction in one action. Pagination links, the page-size form, the jump form and the filter form carry the sort, so neither control silently drops the other; the filter protocol keeps the sort and vice versa (D-045).
+  - The default sort adds no parameters to a URL. `alphabetical` ascending is treated as the default even when written out, so a page-size form or pagination link round-trips to the shortest equivalent address.
+  - Ties break alphabetically, A→Z, as §6.2.5's failure path says, then by id so a page boundary cannot repeat or skip a row. The tiebreak is not reversed when the primary order is descending: "latest first" with two equal timestamps still reads A→Z.
+  - `trending` is §6.4.3's score, with the two windows read as non-overlapping: 3 × the charity's EVENT rows in the last 7 days plus 2 × its EVENT rows 8–30 days ago. "Past" is measured from the request time, in UTC (D-010). D-050 settled the buckets; this entry first recorded the literal double count.
+  - `popular` is the total number of EVENT rows for the charity (§5.2.21's "visit count is derived from events"), of every action: views, link clicks, rejections and charity updates.
+  - `rating` is the average REVIEW.rating (D-044's number), not the review count. Charities with no reviews have no average and sort last in **both** directions: no rating is not a low rating.
+  - `haskamos` counts **approving** HASKAMA rows only. §6.2.4 already separates approving from disapproving haskamos, and a disapproval is not an endorsement, so it does not raise a charity's position.
+  - `newest` is CHARITY.created, which D-017 made required. §6.2.5 lists NEW_CHARITY_REQUEST among the tables read, but §6.1 does not make approvals a dependency of charities; the request and the charity are created in the same transaction (§6.2.2), so the charity's own timestamp says the same thing without a cross-app read.
+  - `updated` is the latest EVENT for the charity with action `charity_updated` (§5.2.20's `(charity_id, action, created)` index is built for exactly this), falling back to CHARITY.created when the charity has no such event. It is not read from EDIT_REQUEST or APPROVAL_REQUEST: §6.2.5 lists them, but §6.1 makes approvals depend on charities, not the reverse (D-006). Every save of a charity records a `charity_updated` event through charities' own service (D-052), so edits are included without reading another app's tables.
+  - EVENT metrics are ordered in the listing's one database query through subquery expressions exported by `events.services` (`event_count`, `trending_score`, `last_changed`). Charities never imports the EVENT model or queries its table, so D-006 holds. This follows UC-03's implementation constraint that sorting uses Django's `annotate` rather than sorting rows in Python after paging.
+- Why: §6.2.5 settles the behaviour but leaves the URL, the defaults and four ambiguous counts open, and the URL is expensive to change once links are shared. The choices keep the sort page and the cards saying the same thing: rating means the average already printed on each card, haskamos means the approving count §6.2.4 already distinguishes from a disapproval, and updated means the same "last change" event trail D-039 writes.
+- Where in code: `apps/charities/sorting.py` (`MECHANISMS`, `CharitySort`, `from_query`, `query_pairs`, `sort_form`), `apps/charities/services.py` (`list_charities`, `Page.sort`, `Page.query`, `Page.clear_filters_query`), `apps/charities/repositories.py` (`DjangoCharityRepository.page`, `_with_sort_values`, `_ordered`), `apps/charities/views.py` (`listing`), `apps/charities/templates/charities/{listing,sort,sort_state,state}.html`, `apps/charities/templates/charities/filters.html`, `static/css/site.css`, `apps/events/services.py` (`event_count`, `trending_score`, `last_changed`), `tests/unit/test_sorting.py`, `tests/unit/test_sort_repository.py`
+
+---
+
+## D-049: Seeded charities get distinct names
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active
+- Design doc ref: not in design doc (§5.2.2's name field, D-013)
+- Decision: The dev seed samples a prefix/word pair without replacement from the full 8 × 26 grid, so all 200 seeded charities have different names. `CHARITY.name` stays non-unique in the schema (D-013); the pool only guarantees the sample is large enough (208 pairs for 200 rows) and `random.sample` fails loudly if the counts ever outgrow it, rather than quietly repeating a name.
+- Why: the old seed drew each part independently, so the local database held six "Lev Chaim" and five "Tomchei Torah". Paging a rating-ordered listing then repeated a name on two pages, which reads as a paging bug until you check the ids, and ties across 185 rows made the alphabetical tiebreak look broken. Names are also the only thing a developer eyeballs while working on the listing.
+- Where in code: `apps/dashboards/management/commands/seed.py` (`NAME_WORDS`, `NAMES`), `tests/integration/test_seed.py`
+
+---
+
+## D-050: Trending counts each event once: 3 for this week, 2 for days 8–30
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active (amends D-048's `trending` bullet)
+- Design doc ref: §6.4.3 (Trending)
+- Decision: `events.services.trending_score` scores `3 × EVENT rows in the last 7 days + 2 × rows 8–30 days ago`. The month bucket excludes the week instead of repeating it, so one event is worth 3 or 2, never 5. The 30-day outer window and the weights are unchanged, as is the UTC measurement from the request time (D-010).
+- Why: §6.4.3's wording ("multiplying events in the past week by 3 and events in the past month by 2") is ambiguous because the week is inside the month. D-048 first built the literal reading, then left it pending confirmation. The CEO chose non-overlapping buckets: a score that counts one visit twice makes a single busy day outweigh a month of steady activity, and it would have been copied by recommendations and owner stats.
+- Where in code: `apps/events/services.py` (`trending_score`), `tests/unit/test_sort_repository.py` (`TrendingSortTest`)
+
+---
+
+## D-051: Every card shows the activity values the activity orders sort by
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active
+- Design doc ref: §5.3, §6.2.5 (Sort — SRS FR 3), §5.2.21 (Derived Values)
+- Decision: Every card in the listing shows three activity values alongside the rating: the charity's total EVENT count, its count of **approving** HASKAMA rows, and the date of its last change. `CharityCard` carries them as `ActivitySummary(events, approving_haskamas, last_changed)`, annotated in the same page query. `last_changed` is the latest `charity_updated` EVENT, falling back to CHARITY.created, so the value is never empty. The rating row stays as D-044 defined it; the three values sit below the domain/location chips, labelled "N events", "N haskamas" and "Last changed <date>". §5.3 names only the average rating, so these are additions to the doc's list, not replacements.
+- Why: sorting by trending, most popular, most haskamos or most recently updated reorders the list, but the cards showed none of those numbers, so a reader could not check the order and two charities with equal counts were indistinguishable from a bug. Showing all three, rather than only the one being ordered by, keeps the card stable while the reader changes the sort and lets them compare the values that place a charity. The cost is two extra subqueries per page row (event count and latest update) plus the haskama count the page now always aggregates; the pagination `COUNT` still reads none of them.
+- Where in code: `apps/charities/contracts.py` (`ActivitySummary`, `CharityCard.activity`), `apps/charities/repositories.py` (`_with_activity_values`, `_narrowed`, `_to_card`), `apps/charities/templates/charities/listing.html`, `static/css/site.css` (`.charity-card__activity`), `tests/unit/test_repositories.py`, `tests/unit/test_template_contract.py`
+
+---
+
+## D-052: Every save of a charity goes through a service and records `charity_updated`
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active (resolves the open question of 2026-11-14; extends D-039)
+- Design doc ref: §6.1, §5.2.17, §5.2.21, §6.2.5
+- Decision: Any save that changes a charity — an approved edit, an owner edit, an admin form save, a publish or a hide — records one EVENT with action `charity_updated` and the acting user, in the same transaction as the change. Field saves go through `charities.services.update_charity`, which accepts only `EDITABLE_FIELDS` (`name`, `tagline`, `description`, `image`), locks the row, writes only the fields that actually differ, and records one event; it is the one door for a future edit flow. `is_visible` stays outside it and changes only through `publish_charity`/`hide_charity` (D-038, D-039). Creating a charity is not a change, so it records no event, the same as the factories and the seed (D-022). A save with no change writes nothing and records nothing (D-041). The Django admin's change form now routes its scalar edits through `update_charity`, so it no longer bypasses the event trail.
+- Why: D-048's "most recently updated" order and §5.2.21's derived date read the latest `charity_updated` EVENT, and nothing else — charities cannot read EDIT_REQUEST (D-006). The audit's issue #10 asked only about approved edits, but confirming that alone would still leave admin and owner saves invisible to the order. Making every save use one service gives the later edit flow a single, audited write path instead of a rule it has to remember.
+- Known gap: a change to a charity's domains or locations through the admin form's multi-selects still saves without an event, because those rows are written by the through tables after `save_model`. The edit-request flow (§5.2.8) is field-based, so no product path does this today; it is filed as a task for the edit-flow work, together with whether `update_charity` should accept membership changes.
+- Where in code: `apps/charities/services.py` (`EDITABLE_FIELDS`, `update_charity`, `_set_visible`), `apps/charities/admin.py` (`CharityAdmin.save_model`), `tests/unit/test_charity_services.py`, `tests/integration/test_charity_admin.py`
+
+---
+
+## D-053: A changed sort dropdown applies at once, and Enter takes the same path
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active (amends D-048's dropdown paragraph)
+- Design doc ref: §6.2.5 (Sort — SRS FR 3)
+- Decision: The sort form carries `data-sort-form`, and `static/js/sort.js` submits it both on `change` and on Enter in the dropdown. Both paths call `form.submit()` with no submitter, so no `direction` value is sent and the server uses the chosen mechanism's default direction. The inline `onchange` handler is gone. With JavaScript off, the form still works as before: the visitor picks a mechanism and clicks a direction button, while Enter in the dropdown would still take the first button (ascending) — that fallback is inherent to the form's button order and is not worth a hidden control.
+- Why: the dropdown alone submitted nothing, so picking a mechanism looked broken until the visitor also clicked the highlighted "current" direction; and Enter in a `<select>` activates the first submit button, giving trending, popularity, rating, haskamos, newest and updated ascending — the opposite of their documented default. §6.2.5 only requires the dropdown and two direction buttons, so a small script on the existing controls fits the doc; `form.submit()` rather than an Apply button keeps the control at two parts.
+- Where in code: `apps/charities/templates/charities/sort.html`, `static/js/sort.js`, `tests/unit/test_template_contract.py`
+
 ---
 
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1.
-- **2026-11-11: Default charity listing order.** §6.2.3 says alphabetical; UC-03 (§8.5) says "no particular order".
+- **2026-11-11: Default charity listing order.** §6.2.3 says alphabetical; UC-03 (§8.5) says "no particular order". Resolved as D-048 on 2026-11-14: alphabetical A→Z is the default sort.
 - **2026-11-12: How the charities listing learns visibility without depending on approvals.** D-023 makes visibility depend on approvals' tables, but §6.1 has approvals depending on charities, not the reverse, and D-006 limits calls to listed dependencies. To be decided before the Phase 1 listing. Resolved as D-038 on 2026-11-12.
-- **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link.
+- **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link. Resolved as D-YOSEF-member-signup on 2026-11-15 (typed code).
 - **2026-11-12: One LINK per kind per charity?** §5.2.14 does not say, but EDIT_REQUEST.field (§5.2.8) has one `website_donate`/`website_about`/`website_contact` value with a single new_value, which implies one link per kind. `Link` has no (charity, kind) uniqueness. Adding it after data exists needs a cleanup migration, so decide before Phase 1 writes links. Resolved as D-036 on 2026-11-12.
 - **2026-11-12: Is the nav sticky?** §7.2 says the nav tab is "always visible": on every page (done, through `base.html`), or also fixed while scrolling (not done). Cheap either way. Resolved as D-037 on 2026-11-12.
+- **2026-11-13: Where is "one review per member per charity" enforced?** §8.6 and UC-05 say a member has one review per charity, but REVIEW has no unique (charity, author) constraint and `save_review` does not exist yet. Options: enforce it only in the upsert service, or add a unique constraint too (a schema change, so decide before the review form lands). See `docs/NOTES.md` N1.
+- **2026-11-13: Default statuses for APPROVAL_REQUEST and TICKET?** The doc (§5.2.5, §5.2.19) gives no default; the models default `ApprovalRequest.status` to `pending` and `Ticket.status` to `not_responded`. Those defaults are the only choices nobody has confirmed.
+- **2026-11-13: Can users pick a rabbi in the listing filter yet?** §6.2.4 makes `haskama_rabbi` repeatable by rabbi and names `accounts.services.search_rabbis`, which does not exist. The filter is wired end to end but its option list is empty, so it matches nothing. Resolved as D-045 (sub-decision) on 2026-11-13; it becomes usable when `search_rabbis` lands.
+- **2026-11-14: Should an approved edit record a `charity_updated` EVENT?** D-048 orders "most recently updated" by the latest `charity_updated` EVENT, because §6.1 does not let charities read EDIT_REQUEST. Nothing applies edits yet. When the edit/approval flow lands it must record that event through charities' service, or this order will ignore edits. Asked because it is a rule the later flow has to keep. Resolved as D-052 on 2026-11-15: every save records it, not only approved edits.

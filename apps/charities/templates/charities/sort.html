@@ -1,0 +1,43 @@
+{% load static %}
+{% comment %}
+The listing's sort control (§6.2.5, D-048): one dropdown and two direction
+buttons, all in a plain GET form, so the order lives in the URL like the rest of
+the page state. No `page` field is sent, so changing the order starts at page 1.
+The active filters ride along as hidden inputs, so sorting never drops them.
+`js/sort.js` applies a changed dropdown and Enter, sending no direction so the
+mechanism starts in its default one (D-053).
+{% endcomment %}
+<form class="sort" method="get" action="{% url 'charities:listing' %}" data-sort-form>
+  <input type="hidden" name="page_size" value="{{ page.page_size }}">
+  {% include "charities/filter_state.html" %}
+
+  <label class="sort__label" for="{{ sort_form.parameter }}">Sort</label>
+  {% comment %}Submitting here sends no direction, so the new mechanism starts in
+  its default direction; that also refreshes the two buttons' labels, which
+  describe the order they will apply.{% endcomment %}
+  <select
+    class="sort__select"
+    id="{{ sort_form.parameter }}"
+    name="{{ sort_form.parameter }}"
+  >
+    {% for option in sort_form.options %}
+      <option value="{{ option.value }}"{% if option.value == sort_form.selected %} selected{% endif %}>{{ option.label }}</option>
+    {% endfor %}
+  </select>
+
+  <button
+    class="sort__direction{% if not sort_form.descending %} sort__direction--current{% endif %}"
+    type="submit"
+    name="{{ sort_form.direction_parameter }}"
+    value="{{ sort_form.ascending_value }}"
+    {% if not sort_form.descending %}aria-current="true"{% endif %}
+  >{{ sort_form.low_label }}</button>
+  <button
+    class="sort__direction{% if sort_form.descending %} sort__direction--current{% endif %}"
+    type="submit"
+    name="{{ sort_form.direction_parameter }}"
+    value="{{ sort_form.descending_value }}"
+    {% if sort_form.descending %}aria-current="true"{% endif %}
+  >{{ sort_form.high_label }}</button>
+</form>
+<script src="{% static 'js/sort.js' %}" defer></script>

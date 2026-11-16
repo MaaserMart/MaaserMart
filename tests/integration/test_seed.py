@@ -16,6 +16,8 @@ def test_seed_fills_an_empty_database(settings):
     call_command("seed")
 
     assert Charity.objects.count() == 200
+    # D-049: pairs are sampled without replacement, so no two names repeat.
+    assert Charity.objects.values("name").distinct().count() == 200
     assert Event.objects.exists()
     approved_ids = set(
         NewCharityRequest.objects.filter(
