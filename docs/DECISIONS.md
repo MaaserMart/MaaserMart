@@ -704,10 +704,20 @@ Rules for this file:
 
 - Date: 2026-11-17
 - Decided by: Platform Lead, applying `docs/AUDIT-2026-11-17.md` (S1, S7, Q4)
-- Status: Active (deliberate deferral, with the trigger recorded)
+- Status: Superseded by D-068 on 2026-11-17 (the trigger fired: it was the last open audit finding and the per-form test now covers the risk this entry was waiting on)
 - Decision: `filters.py`, `sorting.py` and `search.py` keep their own frozen value object, `from_query`, `query_pairs`, `query_string` and form dataclass; they are not collapsed into one `PageState`. The repeated shape is real, but the three modules encode three different rules (clamping, mechanism/direction pairing, term length and advanced options), and collapsing them is a rewrite of five modules, six templates and every listing test with no behaviour change — the worst kind of change to make under an audit deadline. The trigger to revisit: a fourth URL state (a date range, or a saved search) or the first "form forgot an include" bug, whichever comes first. Q4 (accent-insensitive search) stays open: it changes `Search`, not the page state, and needs a Postgres extension decision.
 - Why: The audit ranked it a Medium smell, not a defect; every other finding in this audit that *was* a defect is fixed. Recording the deferral with the trigger keeps it a decision instead of a lost note.
 - Where in code: `apps/charities/{filters,sorting,search,services}.py`
+
+## D-068: The listing's URL state is one value, `PageState` (supersedes D-067)
+
+- Date: 2026-11-17
+- Decided by: Platform Lead, on comtai#39, applying `docs/AUDIT-2026-11-17.md` (S1, S7)
+- Status: Active (supersedes D-067's deferral; D-067's reasoning is kept below for the record)
+- Design doc ref: §6.2.4–6.2.6 (the listing's controls), UC-03 (a shareable address)
+- Decision: `apps/charities/state.py` holds the whole address as one immutable `PageState` — the search, the filters, the order, and the page/page_size window. One table (`PARTS`) states the order the parts are read in and written in; one `pairs()` / `query_string()` joins them; `Page` carries a single `state` instead of three pair-bundles stapled together by hand. One template partial (`state.html`) writes the whole result set as hidden inputs and takes a `skip` naming the slice the form owns, so the default is "everything" and forgetting is visible. The three feature modules keep their own rules (`from_query`, `query_pairs`, the clamp tables, the mechanism pairing, the term matching); they lost only their duplicate `query_string`, which was the third copy of the same `urlencode` call (S7). Page-size bounds and `page_count` moved here too, because a page size is part of the address.
+- Why: D-067 deferred this as a Medium smell with a trigger. The trigger is that it was the last finding in the audit without a disposition, it is a deletion rather than an addition (218 lines added, 226 removed, excluding this entry and the new tests), and the risk it was deferred for is now covered: `EveryFormCarriesTheWholeStateTest` requests the listing and asserts, per form, which slices it carries, so a form that drops one fails loudly. Every existing page test passed unchanged, and the addresses the tests pin stayed byte-identical — the two things that would have made this refactor unsafe.
+- Where in code: `apps/charities/state.py` (new), `apps/charities/services.py` (`Page`, `list_charities`), `apps/charities/views.py`, `apps/charities/templates/charities/state.html` (and the three `*_state.html` partials it replaces), `tests/unit/test_page_state.py`, `tests/unit/test_template_contract.py`
 
 ## Open questions
 

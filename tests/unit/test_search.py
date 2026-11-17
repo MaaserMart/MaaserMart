@@ -15,9 +15,9 @@ from apps.charities.search import (
     Search,
     from_query,
     query_pairs,
-    query_string,
     search_form,
 )
+from apps.charities.state import PageState
 
 
 def query(params: dict) -> QueryDict:
@@ -105,7 +105,7 @@ class SearchMatchTest(SimpleTestCase):
 class SearchQueryPairsTest(SimpleTestCase):
     def test_an_empty_search_adds_no_parameters(self) -> None:
         self.assertEqual(query_pairs(Search()), ())
-        self.assertEqual(query_string(Search()), "")
+        self.assertEqual(PageState(search=Search()).query_string(), "")
 
     def test_the_term_is_one_parameter(self) -> None:
         self.assertEqual(query_pairs(Search(term="chessed")), (("q", "chessed"),))
@@ -121,7 +121,7 @@ class SearchQueryPairsTest(SimpleTestCase):
     def test_a_query_survives_a_round_trip(self) -> None:
         search = Search(term="lev chai", whole_words=True, tagline=True)
 
-        self.assertEqual(from_query(QueryDict(query_string(search))), search)
+        self.assertEqual(from_query(QueryDict(PageState(search=search).query_string())), search)
 
 
 class SearchFormTest(SimpleTestCase):

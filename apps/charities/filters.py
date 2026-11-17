@@ -12,7 +12,6 @@ alone ambiguous, and a name in a URL would break the moment a row is renamed.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields, replace
-from urllib.parse import urlencode
 
 
 @dataclass(frozen=True)
@@ -111,11 +110,6 @@ def query_pairs(filters: CharityFilters) -> tuple[tuple[str, object], ...]:
         elif value is not None:
             parts.append((group.parameter, value))
     return tuple(parts)
-
-
-def query_string(filters: CharityFilters) -> str:
-    """The filter groups as a query string, so a page link can repeat them."""
-    return urlencode(query_pairs(filters))
 
 
 def from_query(query) -> CharityFilters:

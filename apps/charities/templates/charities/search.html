@@ -7,8 +7,7 @@ The advanced options sit behind a <details> toggle, which needs no JavaScript.
 {% endcomment %}
 <form class="search" method="get" action="{% url 'charities:listing' %}" role="search">
   <input type="hidden" name="page_size" value="{{ page.page_size }}">
-  {% include "charities/filter_state.html" %}
-  {% include "charities/sort_state.html" %}
+  {% include "charities/state.html" with skip="search" %}
 
   <div class="search__bar">
     <label class="search__label" for="{{ search_form.parameter }}">{{ search_form.label }}</label>

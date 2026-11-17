@@ -1,6 +1,0 @@
-{% comment %}
-The active filters as hidden inputs. A form that changes the order, page size or
-page number includes this so it cannot silently drop the filters (§6.2.4).
-{% endcomment %}
-{% for name, value in page.filter_pairs %}<input type="hidden" name="{{ name }}" value="{{ value }}">
-{% endfor %}
