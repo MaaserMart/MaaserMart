@@ -8,6 +8,7 @@ fetched.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,19 @@ class ReviewSummary:
 
 
 @dataclass(frozen=True)
+class ActivitySummary:
+    """The activity values the card shows, and four sort orders read (D-051).
+
+    `last_changed` falls back to CHARITY.created, so it is always a date: a
+    charity no one has edited yet was last changed when it was added.
+    """
+
+    events: int
+    approving_haskamas: int
+    last_changed: datetime
+
+
+@dataclass(frozen=True)
 class CharityCard:
     """What the listing shows for one charity."""
 
@@ -53,6 +67,7 @@ class CharityCard:
     domains: tuple[DomainTag, ...]
     locations: tuple[LocationTag, ...]
     reviews: ReviewSummary
+    activity: ActivitySummary
 
 
 @dataclass(frozen=True)

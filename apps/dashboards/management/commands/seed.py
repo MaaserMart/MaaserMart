@@ -57,7 +57,39 @@ LOCATIONS = [
 ]
 
 NAME_PREFIXES = ["Keren", "Chasdei", "Yad", "Ezras", "Bais", "Tomchei", "Achiezer", "Lev"]
-NAME_WORDS = ["Chesed", "Shalom", "Emunah", "Tzedakah", "Rachamim", "Simcha", "Torah", "Chaim"]
+NAME_WORDS = [
+    "Chesed",
+    "Shalom",
+    "Emunah",
+    "Tzedakah",
+    "Rachamim",
+    "Simcha",
+    "Torah",
+    "Chaim",
+    "Yisrael",
+    "Mordechai",
+    "Avraham",
+    "Yitzchak",
+    "Yaakov",
+    "Moshe",
+    "Aharon",
+    "David",
+    "Shlomo",
+    "Menachem",
+    "Naftali",
+    "Yehuda",
+    "Zev",
+    "Aryeh",
+    "Baruch",
+    "Efraim",
+    "Yosef",
+    "Binyamin",
+]
+
+# One name per prefix/word pair: 8 × 26 = 208 pairs for 200 charities, so the
+# seeded listing has no repeated name (D-049). CHARITY.name stays non-unique in
+# the schema (D-013); this is only about data that reads like real rows.
+NAMES = [f"{prefix} {word}" for prefix in NAME_PREFIXES for word in NAME_WORDS]
 
 # Dev images come from the SVGs already in the repo (D-043, superseding D-024).
 # Repo-relative paths, so the template serves them through {% static %}.
@@ -110,8 +142,8 @@ class Command(BaseCommand):
             f.RabbiProfileFactory(user=rabbi)
 
         charities = []
-        for i in range(APPROVED + PENDING):
-            name = f"{self.rng.choice(NAME_PREFIXES)} {self.rng.choice(NAME_WORDS)}"
+        names = self.rng.sample(NAMES, APPROVED + PENDING)
+        for i, name in enumerate(names):
             approved = i < APPROVED
             charity = f.CharityFactory(name=name, image=IMAGE_PATHS[i % len(IMAGE_PATHS)])
             for domain in self.rng.sample(domains, self.rng.randint(1, 3)):

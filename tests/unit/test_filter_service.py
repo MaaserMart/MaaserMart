@@ -18,6 +18,7 @@ from apps.charities.filters import (
     sidebar_groups,
 )
 from apps.charities.services import list_charities
+from apps.charities.sorting import DEFAULT_SORT
 
 
 class FakeRepository:
@@ -26,7 +27,7 @@ class FakeRepository:
     def __init__(self) -> None:
         self.seen: list[CharityFilters] = []
 
-    def page(self, offset, limit, filters) -> tuple[CharityCard, ...]:
+    def page(self, offset, limit, filters, sort=DEFAULT_SORT) -> tuple[CharityCard, ...]:
         self.seen.append(filters)
         return ()
 

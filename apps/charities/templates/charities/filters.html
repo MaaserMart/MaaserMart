@@ -11,9 +11,10 @@ and the browser's Back button works (UC-03's implementation constraints).
     {% endif %}
   </div>
 
-  {% comment %}Keep the page size the reader chose; a filter resets the page to 1
-  (§6.2.4), which is what a missing `page` parameter means.{% endcomment %}
+  {% comment %}Keep the page size and the order the reader chose; a filter resets
+  the page to 1 (§6.2.4), which is what a missing `page` parameter means.{% endcomment %}
   <input type="hidden" name="page_size" value="{{ page.page_size }}">
+  {% include "charities/sort_state.html" %}
 
   {% comment %}Each group is an open panel like Amazon's. <details> needs no
   JavaScript and keeps the page working if Alpine fails to load.{% endcomment %}
@@ -67,7 +68,7 @@ and the browser's Back button works (UC-03's implementation constraints).
   <div class="filters__actions">
     <button class="filters__apply" type="submit">Apply filters</button>
     {% if form.is_active %}
-      <a class="filters__clear" href="{% url 'charities:listing' %}?page_size={{ page.page_size }}">Clear filters</a>
+      <a class="filters__clear" href="{% url 'charities:listing' %}?{{ page.clear_filters_query }}">Clear filters</a>
     {% endif %}
   </div>
 </form>

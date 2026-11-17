@@ -11,9 +11,16 @@ from django.db import transaction
 from apps.events.services import record_event
 
 from .contracts import CharityCard, DomainOption, LocationOption, RabbiOption
-from .filters import CharityFilters, FilterForm, query_pairs, query_string, sidebar_groups
+from .filters import CharityFilters, FilterForm, sidebar_groups
+from .filters import query_pairs as filter_query_pairs
 from .models import Charity
 from .repositories import CharityRepository
+from .sorting import DEFAULT_SORT, CharitySort
+from .sorting import query_pairs as sort_query_pairs
+
+# The charity fields a save may change. `is_visible` stays out: it changes only
+# through publish/hide, so a caller cannot flip visibility by passing it here.
+EDITABLE_FIELDS = ("name", "tagline", "description", "image")
 
 
 def publish_charity(charity_id, by_user_id=None):
@@ -24,6 +31,32 @@ def publish_charity(charity_id, by_user_id=None):
 def hide_charity(charity_id, by_user_id=None):
     """Hide a charity from the public, for example to review it again after many reports."""
     _set_visible(charity_id, False, by_user_id)
+
+
+def update_charity(charity_id, by_user_id=None, **changes):
+    """Save field changes to a charity, recording one `charity_updated` EVENT.
+
+    Every save of a charity goes through here or `_set_visible` (D-052), so the
+    "most recently updated" order and §5.2.21's derived date cannot go stale.
+    Only `EDITABLE_FIELDS` are accepted; anything else is a programming error,
+    not a value to ignore. A call that changes nothing writes nothing and
+    records no event (D-041's rule for an unchanged state).
+    """
+    unknown = set(changes) - set(EDITABLE_FIELDS)
+    if unknown:
+        raise ValueError(f"Not an editable charity field: {', '.join(sorted(unknown))}")
+    with transaction.atomic():
+        charity = Charity.objects.select_for_update().filter(pk=charity_id).first()
+        if charity is None:
+            raise Charity.DoesNotExist(f"No charity with id {charity_id}")
+        changed = [field for field, value in changes.items() if getattr(charity, field) != value]
+        if not changed:
+            return
+        for field in changed:
+            setattr(charity, field, changes[field])
+        charity.save(update_fields=changed)
+        # Every change to a charity is recorded as a charity_updated EVENT (§6.1, D-039).
+        record_event(charity_id, "charity_updated", user_id=by_user_id)
 
 
 def _set_visible(charity_id, visible, by_user_id):
@@ -40,8 +73,8 @@ def _set_visible(charity_id, visible, by_user_id):
 
 
 # --- Listing -----------------------------------------------------------------
-# The rules below are the listing's: order, page clamping, page sizes. They know
-# nothing about where the rows come from; the repository is injected.
+# The rules below are the listing's: filters, order, page clamping, page sizes.
+# They know nothing about where the rows come from; the repository is injected.
 
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
@@ -56,16 +89,17 @@ def page_count(total: int, page_size: int) -> int:
 class Page:
     """One page of results, plus the links needed to move between pages.
 
-    `filters_query` is the query string a page link must repeat so the reader
-    keeps the filters they chose; empty when nothing is filtered.
+    The chosen filters and sort belong to the result set, not to one page: every
+    link the page builds repeats both, or moving to page 2 would silently drop a
+    filter or reorder the list.
     """
 
     items: tuple[CharityCard, ...]
     total: int
     number: int
     page_size: int
-    filters_query: str = ""
-    # The same filters as (name, value) pairs, for replaying them as hidden inputs.
+    sort: CharitySort = DEFAULT_SORT
+    # The filters as (parameter, value) pairs, for replaying them as hidden inputs.
     filter_pairs: tuple[tuple[str, object], ...] = ()
 
     @property
@@ -80,12 +114,21 @@ class Page:
     def has_next(self) -> bool:
         return self.number < self.page_count
 
+    @property
+    def sort_pairs(self) -> tuple[tuple[str, str], ...]:
+        """The sort as hidden-input pairs; empty for the default order."""
+        return sort_query_pairs(self.sort)
+
+    def _state_query(self, *, include_filters: bool = True, **parts: int) -> str:
+        """A query string of `parts`, followed by the active filters and sort."""
+        base = urlencode(parts)
+        pairs = self.filter_pairs if include_filters else ()
+        state = urlencode(pairs + self.sort_pairs)
+        return f"{base}&{state}" if state else base
+
     def query(self, number: int) -> str:
         """Query string for another page of this same result set."""
-        parts = {"page": number, "page_size": min(self.page_size, MAX_PAGE_SIZE)}
-        if self.filters_query:
-            return f"{urlencode(parts)}&{self.filters_query}"
-        return urlencode(parts)
+        return self._state_query(page=number, page_size=min(self.page_size, MAX_PAGE_SIZE))
 
     @property
     def previous_query(self) -> str:
@@ -94,6 +137,11 @@ class Page:
     @property
     def next_query(self) -> str:
         return self.query(self.number + 1)
+
+    @property
+    def clear_filters_query(self) -> str:
+        """The page with its size and order kept, but no filters (§6.2.4)."""
+        return self._state_query(include_filters=False, page_size=self.page_size)
 
     def numbers(self, window: int = 2) -> list[tuple[int, str]]:
         """(page number, query string) pairs to render as links."""
@@ -111,11 +159,18 @@ def clamp_page_size(requested: int | None) -> int:
 
 def list_charities(
     repository: CharityRepository,
+    filters: CharityFilters | None = None,
+    sort: CharitySort = DEFAULT_SORT,
     page: int | None = 1,
     page_size: int | None = None,
-    filters: CharityFilters | None = None,
 ) -> Page:
-    """Return one page of the charities `filters` keep, alphabetically by name."""
+    """Return one page of the charities `filters` keep, ordered by `sort`.
+
+    §6.2.5: choosing an order shows page 1, which the view gets by not passing a
+    `page` for a sort change; an explicit page in the URL is still honoured so a
+    shared link keeps its whole state (UC-03). A filter change works the same
+    way (§6.2.4).
+    """
     filters = filters or CharityFilters()
     page_size = clamp_page_size(page_size)
     total = repository.count(filters)
@@ -124,12 +179,12 @@ def list_charities(
     offset = (number - 1) * page_size
 
     return Page(
-        items=repository.page(offset=offset, limit=page_size, filters=filters),
+        items=repository.page(offset=offset, limit=page_size, filters=filters, sort=sort),
         total=total,
         number=number,
         page_size=page_size,
-        filters_query=query_string(filters),
-        filter_pairs=query_pairs(filters),
+        sort=sort,
+        filter_pairs=filter_query_pairs(filters),
     )
 
 

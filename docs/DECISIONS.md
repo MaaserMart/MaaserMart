@@ -465,10 +465,95 @@ Rules for this file:
 
 ---
 
+## D-048: Sort offers §6.2.5's seven orders, with `sort` and `direction` in the URL
+
+- Date: 2026-11-14
+- Decided by: builder, pending CEO/COO confirmation
+- Status: Active (amended by D-050 for the trending formula and D-053 for how a changed dropdown is applied)
+- Design doc ref: §6.2.5 (Sort — SRS FR 3), §5.2.21 (Derived Values), §6.4.3 (Trending), §6.1 (dependencies)
+- Decision: The listing's sort is a `CharitySort` value — a mechanism plus a direction — read from the URL and passed to `charities.services.list_charities(repository, filters, sort, page, page_size)`. §6.2.5 fixes the mechanisms and that each has both directions, but not the parameter values, the default direction, or what several of the orders count, so those are settled here:
+  - The URL is `?sort=<mechanism>&direction=<asc|desc>`. The mechanisms, in dropdown order, are `alphabetical`, `trending`, `popular`, `rating`, `haskamos`, `newest` and `updated`. `direction` is `asc` or `desc`.
+  - `alphabetical` starts A→Z and is the default; every other mechanism starts high→low. When `sort` is absent the mechanism is alphabetical. When `sort` is present but names no mechanism, the whole choice falls back to alphabetical A→Z, which is §6.2.5's "when nothing recognizable is input, or when nothing is input, it defaults to alphabetical a->z". A `direction` that is absent or not `asc`/`desc` falls back to the chosen mechanism's default direction, the same way §6.2.4's filter groups ignore junk values.
+  - The dropdown is a GET form that carries `page_size` and the active filters but never `page`, so choosing a sort lands on page 1 (§6.2.5). Changing the dropdown submits it immediately with no `direction` (D-053), so the new mechanism starts in its default direction and the two buttons' labels always describe the order they will apply. The two direction buttons are submits named `direction`, so they pick the mechanism shown in the dropdown and the clicked direction in one action. Pagination links, the page-size form, the jump form and the filter form carry the sort, so neither control silently drops the other; the filter protocol keeps the sort and vice versa (D-045).
+  - The default sort adds no parameters to a URL. `alphabetical` ascending is treated as the default even when written out, so a page-size form or pagination link round-trips to the shortest equivalent address.
+  - Ties break alphabetically, A→Z, as §6.2.5's failure path says, then by id so a page boundary cannot repeat or skip a row. The tiebreak is not reversed when the primary order is descending: "latest first" with two equal timestamps still reads A→Z.
+  - `trending` is §6.4.3's score, with the two windows read as non-overlapping: 3 × the charity's EVENT rows in the last 7 days plus 2 × its EVENT rows 8–30 days ago. "Past" is measured from the request time, in UTC (D-010). D-050 settled the buckets; this entry first recorded the literal double count.
+  - `popular` is the total number of EVENT rows for the charity (§5.2.21's "visit count is derived from events"), of every action: views, link clicks, rejections and charity updates.
+  - `rating` is the average REVIEW.rating (D-044's number), not the review count. Charities with no reviews have no average and sort last in **both** directions: no rating is not a low rating.
+  - `haskamos` counts **approving** HASKAMA rows only. §6.2.4 already separates approving from disapproving haskamos, and a disapproval is not an endorsement, so it does not raise a charity's position.
+  - `newest` is CHARITY.created, which D-017 made required. §6.2.5 lists NEW_CHARITY_REQUEST among the tables read, but §6.1 does not make approvals a dependency of charities; the request and the charity are created in the same transaction (§6.2.2), so the charity's own timestamp says the same thing without a cross-app read.
+  - `updated` is the latest EVENT for the charity with action `charity_updated` (§5.2.20's `(charity_id, action, created)` index is built for exactly this), falling back to CHARITY.created when the charity has no such event. It is not read from EDIT_REQUEST or APPROVAL_REQUEST: §6.2.5 lists them, but §6.1 makes approvals depend on charities, not the reverse (D-006). Every save of a charity records a `charity_updated` event through charities' own service (D-052), so edits are included without reading another app's tables.
+  - EVENT metrics are ordered in the listing's one database query through subquery expressions exported by `events.services` (`event_count`, `trending_score`, `last_changed`). Charities never imports the EVENT model or queries its table, so D-006 holds. This follows UC-03's implementation constraint that sorting uses Django's `annotate` rather than sorting rows in Python after paging.
+- Why: §6.2.5 settles the behaviour but leaves the URL, the defaults and four ambiguous counts open, and the URL is expensive to change once links are shared. The choices keep the sort page and the cards saying the same thing: rating means the average already printed on each card, haskamos means the approving count §6.2.4 already distinguishes from a disapproval, and updated means the same "last change" event trail D-039 writes.
+- Where in code: `apps/charities/sorting.py` (`MECHANISMS`, `CharitySort`, `from_query`, `query_pairs`, `sort_form`), `apps/charities/services.py` (`list_charities`, `Page.sort`, `Page.query`, `Page.clear_filters_query`), `apps/charities/repositories.py` (`DjangoCharityRepository.page`, `_with_sort_values`, `_ordered`), `apps/charities/views.py` (`listing`), `apps/charities/templates/charities/{listing,sort,sort_state,state}.html`, `apps/charities/templates/charities/filters.html`, `static/css/site.css`, `apps/events/services.py` (`event_count`, `trending_score`, `last_changed`), `tests/unit/test_sorting.py`, `tests/unit/test_sort_repository.py`
+
+---
+
+## D-049: Seeded charities get distinct names
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active
+- Design doc ref: not in design doc (§5.2.2's name field, D-013)
+- Decision: The dev seed samples a prefix/word pair without replacement from the full 8 × 26 grid, so all 200 seeded charities have different names. `CHARITY.name` stays non-unique in the schema (D-013); the pool only guarantees the sample is large enough (208 pairs for 200 rows) and `random.sample` fails loudly if the counts ever outgrow it, rather than quietly repeating a name.
+- Why: the old seed drew each part independently, so the local database held six "Lev Chaim" and five "Tomchei Torah". Paging a rating-ordered listing then repeated a name on two pages, which reads as a paging bug until you check the ids, and ties across 185 rows made the alphabetical tiebreak look broken. Names are also the only thing a developer eyeballs while working on the listing.
+- Where in code: `apps/dashboards/management/commands/seed.py` (`NAME_WORDS`, `NAMES`), `tests/integration/test_seed.py`
+
+---
+
+## D-050: Trending counts each event once: 3 for this week, 2 for days 8–30
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active (amends D-048's `trending` bullet)
+- Design doc ref: §6.4.3 (Trending)
+- Decision: `events.services.trending_score` scores `3 × EVENT rows in the last 7 days + 2 × rows 8–30 days ago`. The month bucket excludes the week instead of repeating it, so one event is worth 3 or 2, never 5. The 30-day outer window and the weights are unchanged, as is the UTC measurement from the request time (D-010).
+- Why: §6.4.3's wording ("multiplying events in the past week by 3 and events in the past month by 2") is ambiguous because the week is inside the month. D-048 first built the literal reading, then left it pending confirmation. The CEO chose non-overlapping buckets: a score that counts one visit twice makes a single busy day outweigh a month of steady activity, and it would have been copied by recommendations and owner stats.
+- Where in code: `apps/events/services.py` (`trending_score`), `tests/unit/test_sort_repository.py` (`TrendingSortTest`)
+
+---
+
+## D-051: Every card shows the activity values the activity orders sort by
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active
+- Design doc ref: §5.3, §6.2.5 (Sort — SRS FR 3), §5.2.21 (Derived Values)
+- Decision: Every card in the listing shows three activity values alongside the rating: the charity's total EVENT count, its count of **approving** HASKAMA rows, and the date of its last change. `CharityCard` carries them as `ActivitySummary(events, approving_haskamas, last_changed)`, annotated in the same page query. `last_changed` is the latest `charity_updated` EVENT, falling back to CHARITY.created, so the value is never empty. The rating row stays as D-044 defined it; the three values sit below the domain/location chips, labelled "N events", "N haskamas" and "Last changed <date>". §5.3 names only the average rating, so these are additions to the doc's list, not replacements.
+- Why: sorting by trending, most popular, most haskamos or most recently updated reorders the list, but the cards showed none of those numbers, so a reader could not check the order and two charities with equal counts were indistinguishable from a bug. Showing all three, rather than only the one being ordered by, keeps the card stable while the reader changes the sort and lets them compare the values that place a charity. The cost is two extra subqueries per page row (event count and latest update) plus the haskama count the page now always aggregates; the pagination `COUNT` still reads none of them.
+- Where in code: `apps/charities/contracts.py` (`ActivitySummary`, `CharityCard.activity`), `apps/charities/repositories.py` (`_with_activity_values`, `_narrowed`, `_to_card`), `apps/charities/templates/charities/listing.html`, `static/css/site.css` (`.charity-card__activity`), `tests/unit/test_repositories.py`, `tests/unit/test_template_contract.py`
+
+---
+
+## D-052: Every save of a charity goes through a service and records `charity_updated`
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active (resolves the open question of 2026-11-14; extends D-039)
+- Design doc ref: §6.1, §5.2.17, §5.2.21, §6.2.5
+- Decision: Any save that changes a charity — an approved edit, an owner edit, an admin form save, a publish or a hide — records one EVENT with action `charity_updated` and the acting user, in the same transaction as the change. Field saves go through `charities.services.update_charity`, which accepts only `EDITABLE_FIELDS` (`name`, `tagline`, `description`, `image`), locks the row, writes only the fields that actually differ, and records one event; it is the one door for a future edit flow. `is_visible` stays outside it and changes only through `publish_charity`/`hide_charity` (D-038, D-039). Creating a charity is not a change, so it records no event, the same as the factories and the seed (D-022). A save with no change writes nothing and records nothing (D-041). The Django admin's change form now routes its scalar edits through `update_charity`, so it no longer bypasses the event trail.
+- Why: D-048's "most recently updated" order and §5.2.21's derived date read the latest `charity_updated` EVENT, and nothing else — charities cannot read EDIT_REQUEST (D-006). The audit's issue #10 asked only about approved edits, but confirming that alone would still leave admin and owner saves invisible to the order. Making every save use one service gives the later edit flow a single, audited write path instead of a rule it has to remember.
+- Known gap: a change to a charity's domains or locations through the admin form's multi-selects still saves without an event, because those rows are written by the through tables after `save_model`. The edit-request flow (§5.2.8) is field-based, so no product path does this today; it is filed as a task for the edit-flow work, together with whether `update_charity` should accept membership changes.
+- Where in code: `apps/charities/services.py` (`EDITABLE_FIELDS`, `update_charity`, `_set_visible`), `apps/charities/admin.py` (`CharityAdmin.save_model`), `tests/unit/test_charity_services.py`, `tests/integration/test_charity_admin.py`
+
+---
+
+## D-053: A changed sort dropdown applies at once, and Enter takes the same path
+
+- Date: 2026-11-15
+- Decided by: CEO (Yosef), on the sort-branch audit
+- Status: Active (amends D-048's dropdown paragraph)
+- Design doc ref: §6.2.5 (Sort — SRS FR 3)
+- Decision: The sort form carries `data-sort-form`, and `static/js/sort.js` submits it both on `change` and on Enter in the dropdown. Both paths call `form.submit()` with no submitter, so no `direction` value is sent and the server uses the chosen mechanism's default direction. The inline `onchange` handler is gone. With JavaScript off, the form still works as before: the visitor picks a mechanism and clicks a direction button, while Enter in the dropdown would still take the first button (ascending) — that fallback is inherent to the form's button order and is not worth a hidden control.
+- Why: the dropdown alone submitted nothing, so picking a mechanism looked broken until the visitor also clicked the highlighted "current" direction; and Enter in a `<select>` activates the first submit button, giving trending, popularity, rating, haskamos, newest and updated ascending — the opposite of their documented default. §6.2.5 only requires the dropdown and two direction buttons, so a small script on the existing controls fits the doc; `form.submit()` rather than an Apply button keeps the control at two parts.
+- Where in code: `apps/charities/templates/charities/sort.html`, `static/js/sort.js`, `tests/unit/test_template_contract.py`
+
+---
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1.
-- **2026-11-11: Default charity listing order.** §6.2.3 says alphabetical; UC-03 (§8.5) says "no particular order".
+- **2026-11-11: Default charity listing order.** §6.2.3 says alphabetical; UC-03 (§8.5) says "no particular order". Resolved as D-048 on 2026-11-14: alphabetical A→Z is the default sort.
 - **2026-11-12: How the charities listing learns visibility without depending on approvals.** D-023 makes visibility depend on approvals' tables, but §6.1 has approvals depending on charities, not the reverse, and D-006 limits calls to listed dependencies. To be decided before the Phase 1 listing. Resolved as D-038 on 2026-11-12.
 - **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link.
 - **2026-11-12: One LINK per kind per charity?** §5.2.14 does not say, but EDIT_REQUEST.field (§5.2.8) has one `website_donate`/`website_about`/`website_contact` value with a single new_value, which implies one link per kind. `Link` has no (charity, kind) uniqueness. Adding it after data exists needs a cleanup migration, so decide before Phase 1 writes links. Resolved as D-036 on 2026-11-12.
@@ -476,3 +561,4 @@ Rules for this file:
 - **2026-11-13: Where is "one review per member per charity" enforced?** §8.6 and UC-05 say a member has one review per charity, but REVIEW has no unique (charity, author) constraint and `save_review` does not exist yet. Options: enforce it only in the upsert service, or add a unique constraint too (a schema change, so decide before the review form lands). See `docs/NOTES.md` N1.
 - **2026-11-13: Default statuses for APPROVAL_REQUEST and TICKET?** The doc (§5.2.5, §5.2.19) gives no default; the models default `ApprovalRequest.status` to `pending` and `Ticket.status` to `not_responded`. Those defaults are the only choices nobody has confirmed.
 - **2026-11-13: Can users pick a rabbi in the listing filter yet?** §6.2.4 makes `haskama_rabbi` repeatable by rabbi and names `accounts.services.search_rabbis`, which does not exist. The filter is wired end to end but its option list is empty, so it matches nothing. Resolved as D-045 (sub-decision) on 2026-11-13; it becomes usable when `search_rabbis` lands.
+- **2026-11-14: Should an approved edit record a `charity_updated` EVENT?** D-048 orders "most recently updated" by the latest `charity_updated` EVENT, because §6.1 does not let charities read EDIT_REQUEST. Nothing applies edits yet. When the edit/approval flow lands it must record that event through charities' service, or this order will ignore edits. Asked because it is a rule the later flow has to keep. Resolved as D-052 on 2026-11-15: every save records it, not only approved edits.

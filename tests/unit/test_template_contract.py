@@ -12,9 +12,17 @@ import re
 from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
-from apps.charities.contracts import CharityCard, DomainTag, LocationTag, ReviewSummary
-from apps.charities.models import Charity, Domain, Location, Review
+from apps.charities.contracts import (
+    ActivitySummary,
+    CharityCard,
+    DomainTag,
+    LocationTag,
+    ReviewSummary,
+)
+from apps.charities.models import Charity, Domain, Haskama, Location, Review
+from apps.events.models import Event
 from tests.factories.accounts import UserFactory
 
 
@@ -91,6 +99,21 @@ class ListingTemplateContractTest(TestCase):
         self.assertIn("4.5 out of 5", body)
         self.assertIn("2 reviews", body)
 
+    def test_activity_values_render_on_every_card(self) -> None:
+        """D-051: every order shows the numbers it sorts by, including zero counts."""
+        charity = Charity.objects.create(name="Keren L'Dugma")
+        for _ in range(2):
+            Event.objects.create(charity=charity, action=Event.Action.VIEW)
+        Haskama.objects.create(
+            rabbi_user=UserFactory(), charity=charity, verdict=Haskama.Verdict.APPROVE
+        )
+
+        body = self._render_single_charity()
+
+        self.assertIn("2 events", body)
+        self.assertIn("1 haskama", body)
+        self.assertIn("Last changed", body)
+
     def test_charity_without_reviews_says_so(self) -> None:
         """The empty state stands in for the rating, rather than showing 0 out of 5."""
         Charity.objects.create(name="Keren L'Dugma")
@@ -105,9 +128,9 @@ class ListingTemplateContractTest(TestCase):
 
         The template reads .name, .tagline, .image, .domains, .locations and
         each tag's .name (and .label for a location), plus .reviews.count and
-        .reviews.average. If a card
-        stops exposing one of those, or exposes a manager instead of a
-        sequence, this fails loudly.
+        .reviews.average, and .activity's three values. If a card stops
+        exposing one of those, or exposes a manager instead of a sequence, this
+        fails loudly.
         """
         card = CharityCard(
             id=1,
@@ -117,9 +140,18 @@ class ListingTemplateContractTest(TestCase):
             domains=(DomainTag(name="Free loans"),),
             locations=(LocationTag(name="Lakewood", region="NJ", country="USA"),),
             reviews=ReviewSummary(count=2, average=4.5),
+            activity=ActivitySummary(events=7, approving_haskamas=3, last_changed=timezone.now()),
         )
 
-        for attribute in ("name", "tagline", "image", "domains", "locations", "reviews"):
+        for attribute in (
+            "name",
+            "tagline",
+            "image",
+            "domains",
+            "locations",
+            "reviews",
+            "activity",
+        ):
             self.assertTrue(hasattr(card, attribute), attribute)
 
         # The template iterates these directly, so they must be iterable and
@@ -136,6 +168,82 @@ class ListingTemplateContractTest(TestCase):
         body = self._render_single_charity()
 
         self.assertNotIn("chip-divider", body)
+
+
+class SortControlContractTest(TestCase):
+    """The sort partial reads only fields `SortForm` guarantees (D-048).
+
+    Django templates fail silently, so an option list or direction label that
+    stops reaching the page would leave a working-looking control that does
+    nothing. These pin the shape the partial depends on.
+    """
+
+    def setUp(self) -> None:
+        self.url = reverse("charities:listing")
+
+    def _sort_form(self, body: str) -> str:
+        start = body.index('<form class="sort"')
+        return body[start : body.index("</form>", start)]
+
+    def test_every_mechanism_reaches_the_dropdown(self) -> None:
+        body = self.client.get(self.url).content.decode()
+        form = self._sort_form(body)
+
+        for value in (
+            "alphabetical",
+            "trending",
+            "popular",
+            "rating",
+            "haskamos",
+            "newest",
+            "updated",
+        ):
+            with self.subTest(value=value):
+                self.assertIn(f'<option value="{value}"', form)
+
+    def test_the_direction_labels_come_from_the_chosen_mechanism(self) -> None:
+        alphabetical = self._sort_form(
+            self.client.get(self.url, {"direction": "desc"}).content.decode()
+        )
+        counted = self._sort_form(self.client.get(self.url, {"sort": "rating"}).content.decode())
+
+        self.assertIn("Z to A", alphabetical)
+        self.assertIn("Highest rated", counted)
+        self.assertIn("Lowest rated", counted)
+
+    def test_the_sort_form_repeats_the_active_filters(self) -> None:
+        """Sorting must not drop the sidebar's choices (D-045, D-048)."""
+        domain = Domain.objects.create(name="Free loans")
+
+        body = self.client.get(self.url, {"domain": domain.id}).content.decode()
+
+        self.assertIn(f'name="domain" value="{domain.id}"', self._sort_form(body))
+
+    def test_the_dropdown_applies_its_choice_when_it_changes(self) -> None:
+        """The labels must never describe the mechanism that is no longer chosen (D-053)."""
+        body = self.client.get(self.url).content.decode()
+        form = self._sort_form(body)
+
+        self.assertIn("data-sort-form", form)
+        # The behaviour lives in the script, not in an inline handler that a
+        # Content-Security-Policy would have to allow.
+        self.assertNotIn("onchange=", form)
+        self.assertIn('<script src="', body)
+        self.assertIn("js/sort.js", body)
+
+    def test_enter_in_the_dropdown_takes_the_same_path_as_a_change(self) -> None:
+        """Both listeners submit with no submitter, so the default direction wins.
+
+        There is no browser here to press the key, so the check is on the script
+        the page loads: losing either listener would bring back the asc-first
+        implicit submit.
+        """
+        script = (settings.BASE_DIR / "static" / "js" / "sort.js").read_text(encoding="utf-8")
+
+        self.assertIn('addEventListener("change"', script)
+        self.assertIn('addEventListener("keydown"', script)
+        self.assertIn('event.key === "Enter"', script)
+        self.assertIn("form.submit()", script)
 
 
 class FilterSidebarContractTest(TestCase):

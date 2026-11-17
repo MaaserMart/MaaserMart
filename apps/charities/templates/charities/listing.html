@@ -14,27 +14,29 @@
       <div class="listing__header">
         <h1>Charities</h1>
 
-        <form class="page-size" method="get">
-          {% if page.number > 1 %}
-            <input type="hidden" name="page" value="1">
-          {% endif %}
-          {# Keep the filters when the reader changes the page size. #}
-          {% for name, value in page.filter_pairs %}
-            <input type="hidden" name="{{ name }}" value="{{ value }}">
-          {% endfor %}
-          <label class="page-size__label" for="page-size">Page size</label>
-          <input
-            class="page-size__input"
-            id="page-size"
-            name="page_size"
-            type="number"
-            inputmode="numeric"
-            min="1"
-            max="100"
-            value="{{ page.page_size }}"
-          >
-          <button class="page-size__submit" type="submit">Go</button>
-        </form>
+        <div class="listing__controls">
+          {% include "charities/sort.html" %}
+
+          <form class="page-size" method="get">
+            {% if page.number > 1 %}
+              <input type="hidden" name="page" value="1">
+            {% endif %}
+            {# Keep the filters and the order when the reader changes the page size. #}
+            {% include "charities/state.html" %}
+            <label class="page-size__label" for="page-size">Page size</label>
+            <input
+              class="page-size__input"
+              id="page-size"
+              name="page_size"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              max="100"
+              value="{{ page.page_size }}"
+            >
+            <button class="page-size__submit" type="submit">Go</button>
+          </form>
+        </div>
       </div>
 
       {% if page.items %}
@@ -87,6 +89,13 @@
                       <span class="chip chip--location">{{ location.label }}</span>
                     {% endfor %}
                   </span>
+
+                  {# D-051: the numbers and dates the activity orders sort by, so an order can be checked. #}
+                  <span class="charity-card__activity">
+                    <span>{{ charity.activity.events }} event{{ charity.activity.events|pluralize }}</span>
+                    <span>{{ charity.activity.approving_haskamas }} haskama{{ charity.activity.approving_haskamas|pluralize }}</span>
+                    <span>Last changed {{ charity.activity.last_changed|date:"j M Y" }}</span>
+                  </span>
                 </span>
               </a>
             </li>
@@ -121,9 +130,7 @@
 
             <form class="jump" method="get">
               <input type="hidden" name="page_size" value="{{ page.page_size }}">
-              {% for name, value in page.filter_pairs %}
-                <input type="hidden" name="{{ name }}" value="{{ value }}">
-              {% endfor %}
+              {% include "charities/state.html" %}
               <label class="jump__label" for="jump-page">Go to</label>
               <input
                 class="jump__input"

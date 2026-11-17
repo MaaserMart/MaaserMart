@@ -5,8 +5,15 @@ interface, which is exactly the point of keeping them separate.
 """
 
 from django.test import SimpleTestCase
+from django.utils import timezone
 
-from apps.charities.contracts import CharityCard, DomainTag, LocationTag, ReviewSummary
+from apps.charities.contracts import (
+    ActivitySummary,
+    CharityCard,
+    DomainTag,
+    LocationTag,
+    ReviewSummary,
+)
 from apps.charities.filters import CharityFilters
 from apps.charities.services import (
     DEFAULT_PAGE_SIZE,
@@ -15,6 +22,7 @@ from apps.charities.services import (
     clamp_page_size,
     list_charities,
 )
+from apps.charities.sorting import DEFAULT_SORT, RATING, CharitySort
 
 
 def card(name: str) -> CharityCard:
@@ -26,6 +34,7 @@ def card(name: str) -> CharityCard:
         domains=(DomainTag(name="Free loans"),),
         locations=(LocationTag(name="Lakewood", region="NJ", country="USA"),),
         reviews=ReviewSummary(count=0, average=None),
+        activity=ActivitySummary(events=0, approving_haskamas=0, last_changed=timezone.now()),
     )
 
 
@@ -34,10 +43,16 @@ class FakeCharityRepository:
 
     def __init__(self, names: list[str]) -> None:
         self._cards = tuple(card(name) for name in sorted(names))
+        self.requested_sort = None
 
     def page(
-        self, offset: int, limit: int, filters: CharityFilters | None = None
+        self,
+        offset: int,
+        limit: int,
+        filters: CharityFilters | None = None,
+        sort: CharitySort = DEFAULT_SORT,
     ) -> tuple[CharityCard, ...]:
+        self.requested_sort = sort
         return self._cards[offset : offset + limit]
 
     def count(self, filters: CharityFilters | None = None) -> int:
@@ -114,6 +129,25 @@ class ListCharitiesPaginationTest(SimpleTestCase):
         self.assertEqual(page.total, 0)
 
 
+class ListCharitiesSortTest(SimpleTestCase):
+    def test_the_default_sort_is_alphabetical(self) -> None:
+        repository = FakeCharityRepository(["Zohar Fund"])
+
+        page = list_charities(repository)
+
+        self.assertEqual(repository.requested_sort, DEFAULT_SORT)
+        self.assertEqual(page.sort, DEFAULT_SORT)
+
+    def test_the_chosen_sort_reaches_the_repository(self) -> None:
+        repository = FakeCharityRepository(["Zohar Fund"])
+        sort = CharitySort(mechanism=RATING, descending=True)
+
+        page = list_charities(repository, sort=sort)
+
+        self.assertEqual(repository.requested_sort, sort)
+        self.assertEqual(page.sort, sort)
+
+
 class ClampPageSizeTest(SimpleTestCase):
     def test_absent_size_falls_back_to_the_default(self) -> None:
         self.assertEqual(clamp_page_size(None), DEFAULT_PAGE_SIZE)
@@ -167,3 +201,55 @@ class PageQueryTest(SimpleTestCase):
         page = Page(items=(), total=30, number=1, page_size=10)
 
         self.assertEqual(page.numbers()[1], (2, "page=2&page_size=10"))
+
+    def test_the_default_sort_adds_nothing_to_the_query(self) -> None:
+        page = Page(items=(), total=30, number=1, page_size=10)
+
+        self.assertEqual(page.sort_pairs, ())
+
+    def test_next_query_keeps_a_chosen_sort(self) -> None:
+        """§6.2.5: moving to another page must not reorder the list."""
+        page = Page(
+            items=(),
+            total=30,
+            number=1,
+            page_size=10,
+            sort=CharitySort(mechanism=RATING, descending=True),
+        )
+
+        self.assertEqual(page.next_query, "page=2&page_size=10&sort=rating&direction=desc")
+        self.assertEqual(page.sort_pairs, (("sort", "rating"), ("direction", "desc")))
+
+    def test_next_query_keeps_the_filters_and_the_sort(self) -> None:
+        """A page link must replay the whole result set (D-045, D-048)."""
+        page = Page(
+            items=(),
+            total=30,
+            number=1,
+            page_size=10,
+            sort=CharitySort(mechanism=RATING, descending=True),
+            filter_pairs=(("domain", 3), ("min_rating", 4)),
+        )
+
+        self.assertEqual(
+            page.next_query,
+            "page=2&page_size=10&domain=3&min_rating=4&sort=rating&direction=desc",
+        )
+
+    def test_clearing_filters_keeps_the_page_size_and_sort(self) -> None:
+        page = Page(
+            items=(),
+            total=30,
+            number=3,
+            page_size=10,
+            sort=CharitySort(mechanism=RATING, descending=True),
+            filter_pairs=(("domain", 3),),
+        )
+
+        self.assertEqual(page.clear_filters_query, "page_size=10&sort=rating&direction=desc")
+
+    def test_clearing_filters_on_the_default_view_adds_nothing_extra(self) -> None:
+        self.assertEqual(
+            Page(items=(), total=30, number=1, page_size=10).clear_filters_query,
+            "page_size=10",
+        )
