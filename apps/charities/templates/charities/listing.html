@@ -5,6 +5,9 @@
 
 {% block content %}
   <div class="listing">
+    {# §6.2.6 Search: a bar across the top of the listing, above both columns. #}
+    {% include "charities/search.html" %}
+
     {# §6.2.4 Filter: the sidebar narrows the listing, Amazon-style. #}
     <aside class="listing__sidebar">
       {% include "charities/filters.html" %}
@@ -146,6 +149,10 @@
             </form>
           </nav>
         {% endif %}
+      {% elif search_form.is_active and form.is_active %}
+        <p class="empty">No charities match that search and those filters.</p>
+      {% elif search_form.is_active %}
+        <p class="empty">No charities match that search.</p>
       {% elif form.is_active %}
         <p class="empty">No charities match those filters.</p>
       {% else %}

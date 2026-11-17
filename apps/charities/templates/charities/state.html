@@ -1,5 +1,6 @@
 {% comment %}
-Everything that makes the current result set: the filters and the order. The
-page-size and jump forms include this, since they change neither.
+Everything that makes the current result set: the search, the filters and the
+order. The page-size and jump forms include this, since they change none of
+it.
 {% endcomment %}
-{% include "charities/filter_state.html" %}{% include "charities/sort_state.html" %}
+{% include "charities/search_state.html" %}{% include "charities/filter_state.html" %}{% include "charities/sort_state.html" %}
