@@ -18,6 +18,7 @@ from django.db.models import (
     F,
     IntegerField,
     OuterRef,
+    Q,
     QuerySet,
     Subquery,
     Value,
@@ -36,6 +37,7 @@ from apps.charities.contracts import (
 )
 from apps.charities.filters import CharityFilters
 from apps.charities.models import Charity, CharityDomain, CharityLocation, Domain, Haskama, Location
+from apps.charities.search import Search
 from apps.charities.sorting import (
     ALPHABETICAL,
     DEFAULT_SORT,
@@ -66,6 +68,22 @@ class OrderKey:
     nulls_last: bool = False
 
 
+def _search_condition(search: Search | None) -> Q | None:
+    """§6.2.6's term as one condition, or None when nothing was typed.
+
+    The term is matched against the columns `search.fields` names, OR-ed
+    together, so a charity whose tagline matches is a match even when its name
+    does not. An empty search is not a condition at all: the listing is then
+    unfiltered, which is what the page shows before anything is typed.
+    """
+    if search is None or search.is_empty:
+        return None
+    condition = Q()
+    for field in search.fields:
+        condition |= Q(**{f"{field}__{search.lookup}": search.pattern})
+    return condition
+
+
 class CharityRepository(Protocol):
     """Read access to charities, in the terms the listing needs."""
 
@@ -75,12 +93,13 @@ class CharityRepository(Protocol):
         limit: int,
         filters: CharityFilters | None = None,
         sort: CharitySort = DEFAULT_SORT,
+        search: Search | None = None,
     ) -> tuple[CharityCard, ...]:
         """Return cards for the given window of the filtered set, in the chosen order."""
         ...
 
-    def count(self, filters: CharityFilters | None = None) -> int:
-        """Return how many charities the filters keep."""
+    def count(self, filters: CharityFilters | None = None, search: Search | None = None) -> int:
+        """Return how many charities the filters and the search keep."""
         ...
 
 
@@ -176,24 +195,26 @@ class DjangoCharityRepository:
         limit: int,
         filters: CharityFilters | None = None,
         sort: CharitySort = DEFAULT_SORT,
+        search: Search | None = None,
     ) -> tuple[CharityCard, ...]:
-        rows = self._narrowed(filters, sort=sort, reviews=True)
+        rows = self._narrowed(filters, sort=sort, search=search, reviews=True)
         rows = self._with_activity_values(rows, sort)
         rows = self._ordered(rows, sort)
         rows = rows.prefetch_related("domains", "locations")[offset : offset + limit]
         return tuple(self._to_card(row) for row in rows)
 
-    def count(self, filters: CharityFilters | None = None) -> int:
-        return self._narrowed(filters).count()
+    def count(self, filters: CharityFilters | None = None, search: Search | None = None) -> int:
+        return self._narrowed(filters, search=search).count()
 
     def _narrowed(
         self,
         filters: CharityFilters | None,
         *,
         sort: CharitySort | None = None,
+        search: Search | None = None,
         reviews: bool = False,
     ) -> QuerySet[Charity]:
-        """Apply §6.2.4's groups: OR inside a group, AND between groups.
+        """Apply §6.2.4's groups and §6.2.6's search: OR inside a group, AND between them.
 
         A repeatable group is one EXISTS, not a join: a charity with three
         matching domains is still one row, so no DISTINCT is needed and the
@@ -247,6 +268,9 @@ class DjangoCharityRepository:
             rows = rows.filter(approving_haskamas__gte=filters.min_approving_haskamas)
         if filters.max_disapproving_haskamas is not None:
             rows = rows.filter(disapproving_haskamas__lte=filters.max_disapproving_haskamas)
+        condition = _search_condition(search)
+        if condition is not None:
+            rows = rows.filter(condition)
         return rows
 
     @staticmethod

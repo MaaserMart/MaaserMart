@@ -15,6 +15,8 @@ from .filters import CharityFilters, FilterForm, sidebar_groups
 from .filters import query_pairs as filter_query_pairs
 from .models import Charity
 from .repositories import CharityRepository
+from .search import Search
+from .search import query_pairs as search_query_pairs
 from .sorting import DEFAULT_SORT, CharitySort
 from .sorting import query_pairs as sort_query_pairs
 
@@ -99,6 +101,8 @@ class Page:
     number: int
     page_size: int
     sort: CharitySort = DEFAULT_SORT
+    # The search as (parameter, value) pairs, for replaying it as hidden inputs.
+    search_pairs: tuple[tuple[str, object], ...] = ()
     # The filters as (parameter, value) pairs, for replaying them as hidden inputs.
     filter_pairs: tuple[tuple[str, object], ...] = ()
 
@@ -120,10 +124,10 @@ class Page:
         return sort_query_pairs(self.sort)
 
     def _state_query(self, *, include_filters: bool = True, **parts: int) -> str:
-        """A query string of `parts`, followed by the active filters and sort."""
+        """A query string of `parts`, followed by the search, filters and sort."""
         base = urlencode(parts)
         pairs = self.filter_pairs if include_filters else ()
-        state = urlencode(pairs + self.sort_pairs)
+        state = urlencode(self.search_pairs + pairs + self.sort_pairs)
         return f"{base}&{state}" if state else base
 
     def query(self, number: int) -> str:
@@ -140,7 +144,7 @@ class Page:
 
     @property
     def clear_filters_query(self) -> str:
-        """The page with its size and order kept, but no filters (§6.2.4)."""
+        """The page with its size, search and order kept, but no filters (§6.2.4)."""
         return self._state_query(include_filters=False, page_size=self.page_size)
 
     def numbers(self, window: int = 2) -> list[tuple[int, str]]:
@@ -163,27 +167,34 @@ def list_charities(
     sort: CharitySort = DEFAULT_SORT,
     page: int | None = 1,
     page_size: int | None = None,
+    search: Search | None = None,
 ) -> Page:
-    """Return one page of the charities `filters` keep, ordered by `sort`.
+    """Return one page of the charities `filters` and `search` keep, ordered by `sort`.
 
-    §6.2.5: choosing an order shows page 1, which the view gets by not passing a
-    `page` for a sort change; an explicit page in the URL is still honoured so a
-    shared link keeps its whole state (UC-03). A filter change works the same
-    way (§6.2.4).
+    §6.2.6: the search is a term plus the advanced options that shape it, and it
+    narrows the same set the filters do rather than starting a new one, so the
+    two combine. §6.2.6 also shows page 1 of a search, which the view gets by not
+    passing a `page` when the term changes; an explicit page in the URL is still
+    honoured so a shared link keeps its whole state (UC-03). §6.2.5's sort change
+    and §6.2.4's filter change work the same way.
     """
     filters = filters or CharityFilters()
+    search = search or Search()
     page_size = clamp_page_size(page_size)
-    total = repository.count(filters)
+    total = repository.count(filters, search=search)
     count = page_count(total, page_size)
     number = max(1, min(page or 1, count))
     offset = (number - 1) * page_size
 
     return Page(
-        items=repository.page(offset=offset, limit=page_size, filters=filters, sort=sort),
+        items=repository.page(
+            offset=offset, limit=page_size, filters=filters, sort=sort, search=search
+        ),
         total=total,
         number=number,
         page_size=page_size,
         sort=sort,
+        search_pairs=search_query_pairs(search),
         filter_pairs=filter_query_pairs(filters),
     )
 

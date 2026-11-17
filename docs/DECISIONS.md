@@ -550,6 +550,25 @@ Rules for this file:
 
 ---
 
+## D-054: The listing search: a `q` term with two advanced options, over name and tagline
+
+- Date: 2026-11-17
+- Decided by: builder, pending CEO/COO confirmation
+- Status: Active
+- Design doc ref: §6.2.6 (Search — SRS FR 4), §6.2.2 (signup search), UC-03 (§8.5)
+- Decision: The listing's search is a `Search` value — a term plus the advanced options that shape how it is matched — read from the URL and passed to `charities.services.list_charities(repository, filters, sort, page, page_size, search)`. §6.2.6 fixes that there is a bar, a submit, advanced options, and that page 1 is shown with filters and sort still on, but it names neither the URL parameters nor the matching rules, so those are settled here:
+  - The URL is `?q=<term>` plus one parameter per option, `whole_words=1` and `tagline=1`. `q` is the conventional short search parameter; the options are named for what they switch on. Exactly two options are built, the two §6.2.6 names as examples: matching whole words only, and searching the tagline as well as the name. Adding one is one entry in the `OPTIONS` table in `apps/charities/search.py`.
+  - The term is matched against the name, case-insensitively, as a substring (`icontains`), which is §6.2.2's "searches the name column" and UC-03's "case-insensitive search". §6.2.6's "searching in the tagline" adds the tagline to the fields searched, OR-ed with the name, so a charity is kept when either column matches; it does not replace the name.
+  - "Full words only" matches the term as one contiguous piece of text bounded by word boundaries (`iregex` with `\y...\y`, the term escaped so it is text, not a pattern). A multi-word term has to appear as typed, in that order; the doc says nothing about tokenizing, and splitting the term would make an address's meaning harder to predict. A term that is blank or only whitespace is no search at all: the listing shows every charity, and the options are dropped with it, since they cannot narrow anything.
+  - The default search stays off the tagline, so an empty advanced panel and a plain term mean the same address today and after more options are added.
+  - Search and the six filter groups AND together (a search does not clear the filters), and page 1 of a search is shown because the search bar form sends no `page`; a URL with an explicit `page` still keeps it, the same rule as the filter and sort forms (D-045, D-048, N5). Every other control on the page — the sort form, the filter form, the pagination links, the page-size form, the jump form and the Clear-filters link — carries the search as hidden inputs or query pairs, so none of them can silently drop the term. The search bar itself carries the filters and the sort, so a search does not silently reorder or unfilter.
+  - The advanced options sit behind a `<details>` toggle that opens when one is on, the same no-JavaScript pattern the filter sidebar uses, so the visitor can see why the results are narrowed differently than the term alone would explain.
+  - Nothing-found is its own message, following §6.2.6: "No charities match that search." when only the search is on, "No charities match that search and those filters." when both narrow, keeping the two older messages (N6) for filters-only and for an empty database.
+- Why: §6.2.6 names the behaviour but leaves the URL, the matched columns and the meaning of "full words" unstated, and the URL is expensive to change once links are shared. The choices make the search read the same columns the listing displays, keep the doc's "filters and sort remain on" literally true, and fit the existing controls' protocol — every form on the page replays the whole view state, and only a deliberate control change resets the page.
+- Where in code: `apps/charities/search.py`, `apps/charities/services.py` (`list_charities`, `Page.search_pairs`), `apps/charities/repositories.py` (`_search_condition`), `apps/charities/views.py`, `apps/charities/templates/charities/{search,search_state,listing,filters,sort,state}.html`, `static/css/site.css` (`.search`), `tests/unit/test_search.py`, `tests/unit/test_search_repository.py`, `tests/unit/test_services.py`, `tests/unit/test_views.py`
+
+---
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1.
