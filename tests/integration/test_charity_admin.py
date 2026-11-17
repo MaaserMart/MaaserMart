@@ -63,3 +63,35 @@ def test_publish_and_hide_actions_go_through_the_services(client, admin_user):
 
     events = Event.objects.filter(charity=charity, action=Event.Action.CHARITY_UPDATED)
     assert list(events.values_list("user_id", flat=True)) == [admin_user.id, admin_user.id]
+
+
+def test_an_admin_added_charity_is_published(client, admin_user):
+    """D-038: an admin who adds a charity creates it already approved (audit B7)."""
+    response = client.post(
+        f"{CHANGELIST}add/",
+        {"name": "Brand New Fund", "tagline": "", "description": "", "image": ""},
+    )
+
+    assert response.status_code == 302
+    charity = Charity.objects.get(name="Brand New Fund")
+    assert charity.is_visible is True
+    assert Event.objects.filter(charity=charity, action=Event.Action.CHARITY_UPDATED).exists()
+
+
+def test_an_admin_changed_field_the_service_cannot_apply_is_an_error(admin_user):
+    """A changed field outside EDITABLE_FIELDS must not be silently dropped (B2)."""
+    from types import SimpleNamespace
+
+    from django.contrib import admin as django_admin
+
+    from apps.charities.admin import CharityAdmin, CharityAdminUnappliedFieldError
+
+    charity = CharityFactory()
+    request = SimpleNamespace(user=admin_user)
+
+    class Form:
+        changed_data = ["name", "slug"]
+        cleaned_data = {"name": "New Name", "slug": "new-name"}
+
+    with pytest.raises(CharityAdminUnappliedFieldError, match="slug"):
+        CharityAdmin(Charity, django_admin.site).save_model(request, charity, Form(), change=True)

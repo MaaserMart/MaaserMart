@@ -22,6 +22,13 @@ from urllib.parse import urlencode
 # switch on (D-054).
 TERM_PARAMETER = "q"
 
+# A term longer than this is not a search anyone typed; it is dropped like a
+# junk `page`, so an over-long URL cannot turn into a multi-megabyte ILIKE
+# pattern over every row (audit B5). 100 characters is longer than any charity
+# name in §5.2.9 (200) needs to be typed in full and far shorter than a request
+# line Caddy would reject.
+MAX_TERM_LENGTH = 100
+
 
 @dataclass(frozen=True)
 class Option:
@@ -114,10 +121,14 @@ def from_query(query) -> Search:
     normalised, is no search at all: the listing shows every charity, and the
     advanced options are dropped with it rather than left on with nothing to
     match. Runs of whitespace collapse to one space, so a doubled space in an
-    address still matches the single space in the text.
+    address still matches the single space in the text. A term longer than
+    `MAX_TERM_LENGTH` is treated the same way as a blank one: no search.
     """
-    term = " ".join((query.get(TERM_PARAMETER) or "").split())
-    if not term:
+    # A repeated `q` keeps the last value (the first is a real term too, but a
+    # URL can only mean one); saying so here keeps the choice explicit (B9).
+    terms = query.getlist(TERM_PARAMETER)
+    term = " ".join((terms[-1] if terms else "").split())
+    if not term or len(term) > MAX_TERM_LENGTH:
         return Search()
     values = {option.attribute: _switched_on(query.get(option.parameter)) for option in OPTIONS}
     return Search(term=term, **values)

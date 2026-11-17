@@ -52,6 +52,17 @@ OPTION_SOURCES: dict[str, str] = {
 # §5.2.15 REVIEW.rating is 1–5, and D-044 prints the average out of 5.
 MIN_STAR_RATING, MAX_STAR_RATING = 1, 5
 
+# The bounds each numeric group's value is held inside, so a value is never
+# carried off the scale it means. `None` is "no bound in that direction". One
+# table for every group: the clamp and the note that explains it read the same
+# entry, so a new bounded group cannot print another group's sentence (audit B4).
+CLAMPS: dict[str, tuple[int, None] | tuple[int, int] | tuple[None, int]] = {
+    "min_rating": (MIN_STAR_RATING, MAX_STAR_RATING),
+    "min_reviews": (0, None),
+    "min_approving_haskamas": (0, None),
+    "max_disapproving_haskamas": (0, None),
+}
+
 
 @dataclass(frozen=True)
 class CharityFilters:
@@ -119,10 +130,10 @@ def from_query(query) -> CharityFilters:
     for group in GROUPS:
         if group.repeatable:
             values[group.attribute] = _token_ids(query.getlist(group.parameter))
-        elif group.parameter == "min_rating":
-            values[group.attribute] = clamp_rating(_number(query.get(group.parameter)))
         else:
-            values[group.attribute] = _number(query.get(group.parameter))
+            values[group.attribute] = clamp_number(
+                group.parameter, _number(query.get(group.parameter))
+            )
     return CharityFilters(**values)
 
 
@@ -150,17 +161,29 @@ def keep_known_ids(filters: CharityFilters, options: dict[str, tuple]) -> Charit
     return replace(filters, **changes) if changes else filters
 
 
-def clamp_rating(rating: int | None) -> int | None:
-    """Hold `min_rating` inside the star scale, so the value is never off it.
+def clamp_number(parameter: str, value: int | None) -> int | None:
+    """Hold one numeric group inside the bounds its meaning allows (D-046, audit B4).
 
     Clamping happens once, at the edge where the URL is read, so everything
     downstream — the query, the sidebar's input, the page links — sees the same
     number. `?min_rating=99` therefore means "5 stars or more" and the sidebar
-    shows that 5, rather than the reader silently getting something else (D-046).
+    shows that 5, rather than the reader silently getting something else. Each
+    group's bounds come from `CLAMPS`, so the rating's star scale is the rating's
+    own rule and a negative review count becomes zero instead of "everyone".
     """
-    if rating is None:
+    if value is None:
         return None
-    return max(MIN_STAR_RATING, min(rating, MAX_STAR_RATING))
+    low, high = CLAMPS.get(parameter, (None, None))
+    if low is not None:
+        value = max(low, value)
+    if high is not None:
+        value = min(high, value)
+    return value
+
+
+def clamp_rating(rating: int | None) -> int | None:
+    """Hold `min_rating` inside the star scale (D-046)."""
+    return clamp_number("min_rating", rating)
 
 
 def requested_numbers(query) -> dict[str, int | None]:
@@ -325,8 +348,8 @@ def sidebar_groups(
                 value=value,
                 is_set=value is not None,
                 label=NUMBER_LABELS[parameter],
-                min=MIN_STAR_RATING if parameter == "min_rating" else 0,
-                max=MAX_STAR_RATING if parameter == "min_rating" else None,
+                min=CLAMPS.get(parameter, (None, None))[0],
+                max=CLAMPS.get(parameter, (None, None))[1],
                 none_note=NONE_NOTES.get(parameter, ""),
                 adjusted_note=_adjusted_note(parameter, requested, value),
             )
@@ -335,11 +358,23 @@ def sidebar_groups(
 
 
 def _adjusted_note(parameter: str, requested: dict[str, int | None], value: int | None) -> str:
-    """Say so when the URL asked for a value the sidebar is not showing."""
+    """Say so when the URL asked for a value the sidebar is not showing.
+
+    The sentence is built from that group's own bounds, so it names the rule
+    that was applied ("between 1 and 5" for the star scale, "0 or more" for a
+    count) rather than always describing the rating group (audit B4).
+    """
     asked = requested.get(parameter)
     if asked is None or asked == value:
         return ""
-    return f"Kept between {MIN_STAR_RATING} and {MAX_STAR_RATING}; using {value}."
+    low, high = CLAMPS.get(parameter, (None, None))
+    if low is not None and high is not None:
+        return f"Kept between {low} and {high}; using {value}."
+    if low is not None:
+        return f"Kept at {low} or more; using {value}."
+    if high is not None:
+        return f"Kept at {high} or less; using {value}."
+    return ""
 
 
 def _option_label(option) -> str:

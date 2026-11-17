@@ -155,3 +155,27 @@ class SearchFormTest(SimpleTestCase):
 
     def test_an_empty_search_is_not_active_so_the_empty_message_can_differ(self) -> None:
         self.assertFalse(search_form(Search()).is_active)
+
+
+class SearchTermLimitsTest(SimpleTestCase):
+    """A term past the cap is treated as no search (audit B5)."""
+
+    def test_a_term_longer_than_the_cap_is_dropped(self) -> None:
+        from apps.charities.search import MAX_TERM_LENGTH
+
+        too_long = "a" * (MAX_TERM_LENGTH + 1)
+
+        self.assertTrue(from_query(query({TERM_PARAMETER: too_long})).is_empty)
+
+    def test_a_term_at_the_cap_is_kept(self) -> None:
+        from apps.charities.search import MAX_TERM_LENGTH
+
+        at_cap = "a" * MAX_TERM_LENGTH
+
+        self.assertEqual(from_query(query({TERM_PARAMETER: at_cap})).term, at_cap)
+
+    def test_a_repeated_term_uses_the_last_value(self) -> None:
+        """`?q=a&q=b` is one term, and the choice is explicit (audit B9)."""
+        parsed = from_query(QueryDict(f"{TERM_PARAMETER}=a&{TERM_PARAMETER}=b"))
+
+        self.assertEqual(parsed.term, "b")

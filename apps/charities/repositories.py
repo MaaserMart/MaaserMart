@@ -22,6 +22,7 @@ from django.db.models import (
     QuerySet,
     Subquery,
     Value,
+    Window,
 )
 from django.db.models.functions import Coalesce
 
@@ -100,6 +101,17 @@ class CharityRepository(Protocol):
 
     def count(self, filters: CharityFilters | None = None, search: Search | None = None) -> int:
         """Return how many charities the filters and the search keep."""
+        ...
+
+    def page_and_count(
+        self,
+        offset: int,
+        limit: int,
+        filters: CharityFilters | None = None,
+        sort: CharitySort = DEFAULT_SORT,
+        search: Search | None = None,
+    ) -> tuple[tuple[CharityCard, ...], int]:
+        """Return a page and the total it came from, read as one snapshot."""
         ...
 
 
@@ -205,6 +217,31 @@ class DjangoCharityRepository:
 
     def count(self, filters: CharityFilters | None = None, search: Search | None = None) -> int:
         return self._narrowed(filters, search=search).count()
+
+    def page_and_count(
+        self,
+        offset: int,
+        limit: int,
+        filters: CharityFilters | None = None,
+        sort: CharitySort = DEFAULT_SORT,
+        search: Search | None = None,
+    ) -> tuple[tuple[CharityCard, ...], int]:
+        """Return a page and its total from one read, so both see one snapshot.
+
+        The total is a window count over the same query, so a row written
+        between the count and the page (which used to be two statements) cannot
+        make a charity repeat on page 2 or be skipped entirely (audit B3). Only
+        an out-of-range page, which returns no rows and so has no window to read
+        the total from, falls back to a count.
+        """
+        rows = self._narrowed(filters, sort=sort, search=search, reviews=True)
+        rows = self._with_activity_values(rows, sort)
+        rows = self._ordered(rows.annotate(total=Window(Count("pk"))), sort)
+        window = list(rows.prefetch_related("domains", "locations")[offset : offset + limit])
+        if not window:
+            # Past the end: the caller still needs the total to clamp the page.
+            return (), self.count(filters, search=search)
+        return tuple(self._to_card(row) for row in window), window[0].total
 
     def _narrowed(
         self,

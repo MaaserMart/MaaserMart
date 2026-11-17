@@ -62,6 +62,18 @@ class FakeCharityRepository:
     def count(self, filters: CharityFilters | None = None, search: Search | None = None) -> int:
         return len(self._cards)
 
+    def page_and_count(
+        self,
+        offset: int,
+        limit: int,
+        filters: CharityFilters | None = None,
+        sort: CharitySort = DEFAULT_SORT,
+        search: Search | None = None,
+    ) -> tuple[tuple[CharityCard, ...], int]:
+        self.requested_sort = sort
+        self.requested_search = search
+        return self._cards[offset : offset + limit], len(self._cards)
+
 
 class ListCharitiesDefaultTest(SimpleTestCase):
     """The default run, as named in the Charity List tracer bullet."""

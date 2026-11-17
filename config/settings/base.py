@@ -82,6 +82,11 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Hosts a charity image may be loaded from, besides the repo's own static files
+# (D-021, audit B8). An entry starting with "." allows subdomains. Empty means
+# only repo-relative paths are allowed, which is the safe default.
+CHARITY_IMAGE_HOSTS = env.list("CHARITY_IMAGE_HOSTS", default=[])
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Celery (broker is SQS in production; see prod.py).

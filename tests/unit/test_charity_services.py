@@ -120,3 +120,50 @@ def test_no_event_when_already_in_that_state(change):
     change(charity.id)
 
     assert Event.objects.count() == before + 1
+
+
+def test_a_cleared_field_is_stored_as_null_not_an_empty_string():
+    """D-013: "absent" has one encoding in the schema (audit D5)."""
+    charity = CharityFactory(description="Some text", tagline="A tagline", image=None)
+    update_charity(charity.id, description="", tagline="   ", image="charities/img/charity-02.svg")
+    charity.refresh_from_db()
+    assert charity.description is None
+    assert charity.tagline is None
+    assert charity.image == "charities/img/charity-02.svg"
+
+
+def test_a_static_path_is_an_acceptable_image():
+    charity = CharityFactory()
+    update_charity(charity.id, image="charities/img/charity-03.svg")
+    charity.refresh_from_db()
+    assert charity.image == "charities/img/charity-03.svg"
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "https://tracker.example/pixel.png",  # host not on the allowlist
+        "javascript:alert(1)",
+        "/etc/passwd",
+        "../../secret.png",
+        "charities/../../secret.png",
+    ],
+)
+def test_an_unsafe_image_is_refused(image):
+    """A card never renders a value the template cannot trust (audit B8)."""
+    charity = CharityFactory()
+    with pytest.raises(ValueError):
+        update_charity(charity.id, image=image)
+    charity.refresh_from_db()
+    assert charity.image is None
+
+
+@pytest.mark.django_db
+def test_an_allowlisted_image_host_is_accepted(settings):
+    settings.CHARITY_IMAGE_HOSTS = [".example.org"]
+    charity = CharityFactory()
+
+    update_charity(charity.id, image="https://img.example.org/charity.png")
+
+    charity.refresh_from_db()
+    assert charity.image == "https://img.example.org/charity.png"

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load charity_images static %}
 
 {% block title %}Charities &middot; MaaserMart{% endblock %}
 
@@ -48,16 +48,14 @@
             <li>
               {# TODO(comtai): point at the charity page once that bullet exists. #}
               <a class="charity-card" href="#">
-                {% if charity.image %}
-                  {% if charity.image|slice:":4" == "http" %}
-                    {# Seed data and user-supplied images are absolute URLs; {% static %} is for repo files. #}
-                    <img class="charity-card__image" src="{{ charity.image }}" alt="" width="96" height="96">
+                {# One filter decides the src, so an absolute URL and a repo path cannot be confused (B8). #}
+                {% with image=charity.image|image_src %}
+                  {% if image %}
+                    <img class="charity-card__image" src="{{ image }}" alt="" width="96" height="96">
                   {% else %}
-                    <img class="charity-card__image" src="{% static charity.image %}" alt="" width="96" height="96">
+                    <span class="charity-card__image charity-card__image--empty" aria-hidden="true"></span>
                   {% endif %}
-                {% else %}
-                  <span class="charity-card__image charity-card__image--empty" aria-hidden="true"></span>
-                {% endif %}
+                {% endwith %}
 
                 <span class="charity-card__body">
                   <span class="charity-card__name">{{ charity.name }}</span>

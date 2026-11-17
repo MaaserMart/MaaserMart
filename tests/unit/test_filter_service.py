@@ -37,6 +37,10 @@ class FakeRepository:
         self.seen.append(filters)
         return 0
 
+    def page_and_count(self, offset, limit, filters, sort=DEFAULT_SORT, search=None):
+        self.seen.append(filters)
+        return (), 0
+
 
 class FiltersFromQueryTest(SimpleTestCase):
     """§6.2.4's parameter names are the app's public URL surface."""
@@ -220,7 +224,8 @@ class ListCharitiesPassesFiltersTest(SimpleTestCase):
 
         page = list_charities(repository, filters=filters)
 
-        self.assertEqual(repository.seen, [filters, filters])
+        # One read, not a count followed by a page (audit B3).
+        self.assertEqual(repository.seen, [filters])
         self.assertEqual(page.total, 0)
 
     def test_no_filters_pass_an_empty_filter_object(self) -> None:
@@ -387,3 +392,25 @@ class ZeroIsSetTest(SimpleTestCase):
         groups = sidebar_groups(CharityFilters(domains=(2,)), {"domains": (Option(),)})
 
         self.assertTrue(groups[0].is_set)
+
+
+class NumericGroupClampTest(SimpleTestCase):
+    """Every numeric group is held inside its own bounds (audit B4)."""
+
+    def test_a_negative_count_is_clamped_to_zero(self) -> None:
+        filters = from_query(_Query({"min_reviews": ["-4"]}))
+
+        self.assertEqual(filters.min_reviews, 0)
+
+    def test_the_note_names_the_group_it_clamped(self) -> None:
+        groups = sidebar_groups(CharityFilters(min_reviews=0), {}, requested={"min_reviews": -4})
+        reviews = next(g for g in groups if g.parameter == "min_reviews")
+
+        self.assertEqual(reviews.adjusted_note, "Kept at 0 or more; using 0.")
+        self.assertNotIn("1 and 5", reviews.adjusted_note)
+
+    def test_a_group_that_asked_for_nothing_has_no_note(self) -> None:
+        groups = sidebar_groups(CharityFilters(), {})
+        rating = next(g for g in groups if g.parameter == "min_rating")
+
+        self.assertEqual(rating.adjusted_note, "")
