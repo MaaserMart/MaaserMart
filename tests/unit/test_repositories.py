@@ -86,10 +86,10 @@ class DjangoCharityRepositoryTest(TestCase):
 
     def test_maps_review_average_and_count(self) -> None:
         """§5.3: the average rating is derived from the reviews, not stored."""
-        author = UserFactory()
         charity = Charity.objects.create(name="Keren L'Dugma")
         for rating in (2, 4, 5):
-            Review.objects.create(charity=charity, author=author, rating=rating)
+            # One review per member per charity (D-055), so each rating has its own author.
+            Review.objects.create(charity=charity, author=UserFactory(), rating=rating)
 
         card = self.repository.page(filters=self.no_filters, offset=0, limit=1)[0]
 

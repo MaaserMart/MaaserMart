@@ -50,6 +50,13 @@ class Charity(models.Model):
 
     class Meta:
         verbose_name_plural = "charities"
+        # Every listing page sorts by name (the default order) or by created
+        # (`newest`), so both columns need an index or each page sorts the whole
+        # table (B2, D-055). The `pk` tiebreak rides along in the name index.
+        indexes = [
+            models.Index(fields=["name", "id"], name="charity_name_idx"),
+            models.Index(fields=["created"], name="charity_created_idx"),
+        ]
 
     def __str__(self):
         return self.name
@@ -115,6 +122,12 @@ class Review(models.Model):
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(rating__gte=1, rating__lte=5), name="review_rating_1_to_5"
+            ),
+            # §8.6 and UC-05: a member has one review per charity. Enforced here
+            # as well as in the future upsert service, so no writer can add a
+            # second one (B1 of the schema audit, D-055).
+            models.UniqueConstraint(
+                fields=["charity", "author"], name="review_charity_author_uniq"
             ),
         ]
 

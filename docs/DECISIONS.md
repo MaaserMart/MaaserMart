@@ -569,6 +569,20 @@ Rules for this file:
 
 ---
 
+## D-055: Schema audit corrections (review uniqueness, listing indexes, ledger rules, batch index)
+
+- Date: 2026-11-17
+- Decided by: Platform Lead (schema and platform owner), applying `docs/AUDIT-2026-11-17.md` (D1–D4, D6)
+- Status: Active
+- Design doc ref: §5.2.15, §8.6, UC-05, §5.2.18, §5.2.5, §7.1.6
+- Decision: Four schema changes, all enforced by constraints so no writer can drift:
+  - REVIEW gets a unique `(charity, author)` constraint, closing the open question of 2026-11-13: the reviewer form still blocks duplicates in its service, but the database now forbids them too, so a second review of the same charity by the same member is impossible no matter which writer lands first. No cleanup migration was needed: no production data exists, and the seed and factories never create a duplicate.
+  - CHARITY gets btree indexes on `(name, id)` and `(created)`, the two columns every listing page orders by (the default alphabetical order, and the `newest` order, D-048). Both orders were sequential scans with a top-N sort even for a limit-20 read.
+  - TRANSACTION.amount must be greater than zero (check constraint), and TRANSACTION.date is required and defaults to today. A maaser ledger has no zero or negative amounts, and a ledger line without a date cannot be ordered or totalled per period.
+  - APPROVAL_REQUEST gets a `(batch_id, status)` index, the lookup §7.1.6's batch queue uses, replacing the per-request batches the seed used to create. The seed now batches its requests ~10 per shared `batch_id`, so the queue screen has real batches to decide in dev.
+- Why: Each is a rule the doc states or implies but the schema did not enforce, and all four get more expensive to apply once rows exist.
+- Where in code: `apps/charities/models.py` (`Review.Meta.constraints`, `Charity.Meta.indexes`), `apps/approvals/models.py` (`ApprovalRequest.Meta.indexes`), `apps/tools/models.py` (`Transaction.amount`, `Transaction.date`), `apps/dashboards/management/commands/seed.py` (`BATCH_SIZE`), migrations `charities/0002_*`, `approvals/0002_*`, `tools/0002_*`, `tests/unit/test_models.py`
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1.
