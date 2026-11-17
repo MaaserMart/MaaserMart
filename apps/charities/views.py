@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
+
+from apps.events.services import record_event
 
 from .filters import from_query as read_filters
 from .filters import keep_known_ids, requested_numbers
@@ -13,6 +15,8 @@ from .search import search_form
 from .services import (
     Page,
     filter_form,
+    get_charity_page,
+    get_link_url,
     list_charities,
     list_domains,
     list_locations,
@@ -73,3 +77,40 @@ def listing(request: HttpRequest) -> HttpResponse:
             "search_form": search_form(search),
         },
     )
+
+
+def _actor_id(request: HttpRequest) -> int | None:
+    """The signed-in user's id, or None for a visitor (§5.2.17 allows both)."""
+    return request.user.id if request.user.is_authenticated else None
+
+
+def detail(request: HttpRequest, charity_id: int) -> HttpResponse:
+    """§6.2.7's charity page: everything known about one charity.
+
+    The visit is recorded as a `view` EVENT (§5.2.21's visit count, §6.2.7's
+    "writes events"), which is what makes the listing's popular and trending
+    orders read real traffic instead of only seeded rows (audit M4).
+    """
+    charity = get_charity_page(
+        # published_only stays False until the approval queue publishes
+        # charities, for the same reason as the listing (D-042).
+        DjangoCharityRepository(published_only=False),
+        charity_id,
+    )
+    if charity is None:
+        raise Http404("No charity with that id")
+    record_event(charity_id, "view", user_id=_actor_id(request))
+    return render(request, "charities/detail.html", {"charity": charity})
+
+
+def link_redirect(request: HttpRequest, charity_id: int, link_id: int) -> HttpResponse:
+    """Count a click on a charity's outbound link, then send the visitor there.
+
+    §5.2.21 derives "link clicks" from EVENT, and §6.2.7 says the charity page
+    writes events; without this, a click on a donate link is invisible (audit M4).
+    """
+    url = get_link_url(DjangoCharityRepository(published_only=False), charity_id, link_id)
+    if url is None:
+        raise Http404("No such link")
+    record_event(charity_id, "link_click", link_id=link_id, user_id=_actor_id(request))
+    return HttpResponseRedirect(url)

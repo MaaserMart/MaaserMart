@@ -599,6 +599,29 @@ Rules for this file:
 - Why: Each was a place where the code accepted a value it could not honour, or stored two encodings of "absent". Validating at the write edge keeps the template, the filters and the future edit flow reading one meaning.
 - Where in code: `apps/charities/services.py` (`NULLABLE_FIELDS`, `validate_image`, `_clean_value`, `update_charity`), `apps/charities/admin.py` (`save_model`, `CharityAdminUnappliedFieldError`), `apps/charities/templatetags/charity_images.py`, `apps/charities/filters.py` (`CLAMPS`, `clamp_number`, `_adjusted_note`), `apps/charities/search.py` (`MAX_TERM_LENGTH`, `from_query`), `apps/events/services.py` (`record_event`), `config/settings/base.py` (`CHARITY_IMAGE_HOSTS`), `.env.example`
 
+## D-057: The charity page is `/charity/<id>/`; it writes the events popularity reads; hidden history counts for nothing
+
+- Date: 2026-11-17
+- Decided by: Platform Lead, applying `docs/AUDIT-2026-11-17.md` (M3, M4, M9, DOC3, A1)
+- Status: Active
+- Design doc ref: §6.2.7 (charity page), §5.2.21 (visit/clicks), §6.2.10 (member history)
+- Decision: Three decisions the audit forced to be made before this page was built:
+  - The charity page is `/charity/<id>/`, as CLAUDE.md already stated and D-009's prefix rule supports. §6.2.7's bare `/charity_id/` was ambiguous; the listing coupon now links here, so the `href="#"` cards are gone. It also has a counted outbound-link route `/charity/<id>/link/<link_id>/` that records a `link_click` EVENT and redirects (only http(s) targets), so "popularity" stops reading only seeded rows.
+  - The page records a `view` EVENT for every visit, attributed to the signed-in user or `NULL` for a visitor (§5.2.17 allows both). This is the lowest-cost way to give §5.2.21's visit count and D-048's `popular`/`trending` orders real traffic; the listing page does not write views, because showing 20 cards is not 20 visits.
+  - An EVENT the member hid from their own history (D-060, previously `hidden_by_user`) counts for nothing: the listing's event count, the `popular` order and the `trending` score all filter it out. Hiding is a statement that an event should not be remembered, so it must not quietly keep moving a charity up the ranking. `last_changed` is unaffected, since `charity_updated` events are never hidden.
+- Why: The page was the largest missing feature the audit named (M3), and its details (the URL, what events it writes, whether hidden rows count) were all open. Building the page without deciding them would have shipped dead links and noise-driven orders.
+- Where in code: `apps/charities/urls.py` (`detail`, `link`), `apps/charities/views.py` (`detail`, `link_redirect`), `apps/charities/services.py` (`get_charity_page`, `get_link_url`), `apps/charities/repositories.py` (`detail`, `link_url`, `CharityPage`), `apps/charities/templates/charities/detail.html`, `apps/charities/contracts.py` (`CharityPage`), `apps/events/services.py` (`event_count`, `trending_score`), `tests/unit/test_charity_page.py`, `tests/unit/test_repositories.py`
+
+## D-058: The Haskamos group is fed by `accounts.services.search_rabbis`
+
+- Date: 2026-11-17
+- Decided by: Platform Lead, applying `docs/AUDIT-2026-11-17.md` (M6)
+- Status: Active (resolves the open question of 2026-11-13; completes D-045's sub-decision)
+- Design doc ref: §6.2.4 (Filter), §5.2.3 (RABBI_PROFILE)
+- Decision: `accounts.services.search_rabbis` now exists, so the Haskamos filter finally has an option list (M6). It returns every rabbi with a profile, optionally narrowed by a term against the display name and the account name, as `RabbiIdentity(user_id, display_name, title)` — the same identities the charity page uses for haskama attribution. The filter's option ids are **user** ids (D-045, audit Q3), and the sidebar's "Rabbi search is not available yet" note is gone.
+- Why: The group was the only filter a visitor could see that could not work; the empty-note that said so was a placeholder for this service, and this entry clears it.
+- Where in code: `apps/accounts/services.py` (`search_rabbis`, `RabbiIdentity`), `apps/charities/repositories.py` (`DjangoFilterOptionsRepository.rabbis`), `apps/charities/filters.py` (`EMPTY_NOTES`), `tests/unit/test_charity_page.py` (`RabbiOptionsTest`)
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1.
@@ -609,5 +632,5 @@ Rules for this file:
 - **2026-11-12: Is the nav sticky?** §7.2 says the nav tab is "always visible": on every page (done, through `base.html`), or also fixed while scrolling (not done). Cheap either way. Resolved as D-037 on 2026-11-12.
 - **2026-11-13: Where is "one review per member per charity" enforced?** §8.6 and UC-05 say a member has one review per charity, but REVIEW has no unique (charity, author) constraint and `save_review` does not exist yet. Options: enforce it only in the upsert service, or add a unique constraint too (a schema change, so decide before the review form lands). See `docs/NOTES.md` N1.
 - **2026-11-13: Default statuses for APPROVAL_REQUEST and TICKET?** The doc (§5.2.5, §5.2.19) gives no default; the models default `ApprovalRequest.status` to `pending` and `Ticket.status` to `not_responded`. Those defaults are the only choices nobody has confirmed.
-- **2026-11-13: Can users pick a rabbi in the listing filter yet?** §6.2.4 makes `haskama_rabbi` repeatable by rabbi and names `accounts.services.search_rabbis`, which does not exist. The filter is wired end to end but its option list is empty, so it matches nothing. Resolved as D-045 (sub-decision) on 2026-11-13; it becomes usable when `search_rabbis` lands.
+- **2026-11-13: Can users pick a rabbi in the listing filter yet?** §6.2.4 makes `haskama_rabbi` repeatable by rabbi and names `accounts.services.search_rabbis`, which does not exist. The filter is wired end to end but its option list is empty, so it matches nothing. Resolved as D-045 (sub-decision) on 2026-11-13; it becomes usable when `search_rabbis` lands. Resolved as D-058 on 2026-11-17: `search_rabbis` exists.
 - **2026-11-14: Should an approved edit record a `charity_updated` EVENT?** D-048 orders "most recently updated" by the latest `charity_updated` EVENT, because §6.1 does not let charities read EDIT_REQUEST. Nothing applies edits yet. When the edit/approval flow lands it must record that event through charities' service, or this order will ignore edits. Asked because it is a rule the later flow has to keep. Resolved as D-052 on 2026-11-15: every save records it, not only approved edits.

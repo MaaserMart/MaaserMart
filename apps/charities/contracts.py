@@ -109,3 +109,59 @@ class RabbiOption:
     @property
     def label(self) -> str:
         return f"{self.title} {self.display_name}" if self.title else self.display_name
+
+
+@dataclass(frozen=True)
+class CharityLink:
+    """One of a charity's outbound links (§5.2.14), with the label the page shows."""
+
+    id: int
+    kind: str
+    label: str
+    url: str
+
+
+@dataclass(frozen=True)
+class ReviewEntry:
+    """One review as the charity page shows it (§5.2.15)."""
+
+    author: str
+    rating: int
+    body: str
+    created: datetime
+
+
+@dataclass(frozen=True)
+class HaskamaEntry:
+    """One rabbi's endorsement as the charity page shows it (§5.2.16)."""
+
+    rabbi: str
+    approving: bool
+    importance: int | None
+    body: str
+    updated: datetime
+
+
+@dataclass(frozen=True)
+class CharityPage:
+    """Everything §6.2.7's charity page shows, read in one place.
+
+    ``image`` is the stored value (a path or an allowed URL), never a rendered
+    `src`; the template turns it into one through `image_src` (D-056).
+    """
+
+    id: int
+    name: str
+    tagline: str | None
+    description: str | None
+    image: str | None
+    domains: tuple[DomainTag, ...]
+    locations: tuple[LocationTag, ...]
+    links: tuple[CharityLink, ...]
+    reviews: tuple[ReviewEntry, ...]
+    review_summary: ReviewSummary
+    haskamas: tuple[HaskamaEntry, ...]
+    approving_haskamas: int
+    disapproving_haskamas: int
+    activity: ActivitySummary
+    is_visible: bool

@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% load charity_images %}
+
+{% block title %}{{ charity.name }} &middot; MaaserMart{% endblock %}
+
+{% block content %}
+  <article class="charity-page">
+    <header class="charity-page__head">
+      {% with image=charity.image|image_src %}
+        {% if image %}
+          <img class="charity-page__image" src="{{ image }}" alt="" width="160" height="160">
+        {% else %}
+          <span class="charity-page__image charity-page__image--empty" aria-hidden="true"></span>
+        {% endif %}
+      {% endwith %}
+
+      <div class="charity-page__intro">
+        <h1 class="charity-page__name">{{ charity.name }}</h1>
+        {% if charity.tagline %}
+          <p class="charity-page__tagline">{{ charity.tagline }}</p>
+        {% endif %}
+
+        {# §5.3 / D-044: the same summary the card shows. #}
+        <p class="charity-page__rating">
+          {% if charity.review_summary.count %}
+            <span class="rating__value">{{ charity.review_summary.average|floatformat:1 }} out of 5</span>
+            <span class="rating__count">
+              ({{ charity.review_summary.count }} review{{ charity.review_summary.count|pluralize }})
+            </span>
+          {% else %}
+            <span class="charity-card__rating--empty">No reviews yet</span>
+          {% endif %}
+        </p>
+
+        <p class="charity-page__meta">
+          {% for domain in charity.domains %}
+            <span class="chip">{{ domain.name }}</span>
+          {% endfor %}
+          {% for location in charity.locations %}
+            <span class="chip chip--location">{{ location.label }}</span>
+          {% endfor %}
+        </p>
+
+        {% if charity.links %}
+          <ul class="charity-page__links">
+            {% for link in charity.links %}
+              {# Each click is counted as a `link_click` EVENT before the redirect (M4). #}
+              <li>
+                <a class="charity-page__link" href="{% url 'charities:link' charity.id link.id %}" rel="noopener">
+                  {{ link.label }}: {{ link.url }}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+    </header>
+
+    {% if charity.description %}
+      <section class="charity-page__section" aria-labelledby="about-heading">
+        <h2 class="charity-page__heading" id="about-heading">About</h2>
+        <p class="charity-page__description">{{ charity.description|linebreaksbr }}</p>
+      </section>
+    {% endif %}
+
+    <section class="charity-page__section" aria-labelledby="haskamos-heading">
+      <h2 class="charity-page__heading" id="haskamos-heading">Haskamos</h2>
+      <p class="charity-page__counts">
+        {{ charity.approving_haskamas }} approving &middot;
+        {{ charity.disapproving_haskamas }} disapproving
+      </p>
+      {% if charity.haskamas %}
+        <ul class="haskama-list">
+          {% for haskama in charity.haskamas %}
+            <li class="haskama">
+              <p class="haskama__head">
+                <span class="haskama__rabbi">{{ haskama.rabbi }}</span>
+                <span class="haskama__verdict{% if not haskama.approving %} haskama__verdict--no{% endif %}">
+                  {% if haskama.approving %}Approves{% else %}Does not approve{% endif %}
+                </span>
+                {% if haskama.importance %}
+                  <span class="haskama__importance">Importance {{ haskama.importance }}/10</span>
+                {% endif %}
+              </p>
+              {% if haskama.body %}
+                <p class="haskama__body">{{ haskama.body|linebreaksbr }}</p>
+              {% endif %}
+              <p class="haskama__date">Updated {{ haskama.updated|date:"j M Y" }}</p>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty">No haskamos yet.</p>
+      {% endif %}
+    </section>
+
+    <section class="charity-page__section" aria-labelledby="reviews-heading">
+      <h2 class="charity-page__heading" id="reviews-heading">Reviews</h2>
+      {% if charity.reviews %}
+        <ul class="review-list">
+          {% for review in charity.reviews %}
+            <li class="review">
+              <p class="review__head">
+                <span class="review__author">{{ review.author }}</span>
+                <span class="review__rating">{{ review.rating }} out of 5</span>
+              </p>
+              {% if review.body %}
+                <p class="review__body">{{ review.body|linebreaksbr }}</p>
+              {% endif %}
+              <p class="review__date">{{ review.created|date:"j M Y" }}</p>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty">No reviews yet.</p>
+      {% endif %}
+    </section>
+
+    <footer class="charity-page__foot">
+      <p>
+        {{ charity.activity.events }} event{{ charity.activity.events|pluralize }} &middot;
+        {{ charity.activity.approving_haskamas }} approving haskama{{ charity.activity.approving_haskamas|pluralize }} &middot;
+        Last changed {{ charity.activity.last_changed|date:"j M Y" }}
+      </p>
+      <p><a href="{% url 'charities:listing' %}">Back to all charities</a></p>
+    </footer>
+  </article>
+{% endblock %}
