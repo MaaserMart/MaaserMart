@@ -704,3 +704,27 @@ body {
     flex-direction: column;
   }
 }
+
+/* Skip link (A3): invisible until a keyboard user focuses it, then it is the
+   first thing on the page and lands on <main>. */
+.skip-link {
+  background: #1a4d8f;
+  border-radius: 0 0 0.25rem 0.25rem;
+  color: #fff;
+  left: 1rem;
+  padding: 0.5rem 0.75rem;
+  position: absolute;
+  text-decoration: none;
+  top: -10rem;
+  z-index: 20;
+}
+
+.skip-link:focus-visible {
+  top: 0;
+}
+
+.error-page {
+  margin: 0 auto;
+  max-width: 40rem;
+  padding: 4rem 1.5rem;
+}

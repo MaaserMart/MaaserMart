@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Page not found &middot; MaaserMart{% endblock %}
+
+{% block content %}
+  <div class="error-page">
+    <h1>Page not found</h1>
+    <p>The address you used does not match any page. It may have been moved, or the link may be out of date.</p>
+    <p><a href="{% url 'charities:listing' %}">Back to the charity listing</a></p>
+  </div>
+{% endblock %}

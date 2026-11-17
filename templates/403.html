@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Not allowed &middot; MaaserMart{% endblock %}
+
+{% block content %}
+  <div class="error-page">
+    <h1>Not allowed</h1>
+    <p>You do not have permission to see that page.</p>
+    <p><a href="{% url 'charities:listing' %}">Back to the charity listing</a></p>
+  </div>
+{% endblock %}
