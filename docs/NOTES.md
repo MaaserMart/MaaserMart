@@ -10,6 +10,36 @@ Where things go, so this file does not turn into a junk drawer:
 
 ---
 
+## 2026-11-17 — Findings while building the §6.2.6 search (none decided except D-054)
+
+**N9. The search cannot use an index, so it is a sequential scan.** `icontains`
+compiles to `ILIKE` and the whole-word option to `~*`, and neither uses the
+`charities_charity_name` btree index (a leading wildcard defeats a btree). On the
+200-row dev database this is invisible; at real scale a `pg_trgm` GIN index on
+`name` (and `tagline`, once more than a handful of searches use it) is the
+standard fix, and it needs an extension, an index migration and a Platform Lead.
+Not filed as a task because it is a performance choice, not a defect; raised here
+so the first person to notice a slow listing search has the reason and the fix.
+
+**N10. Search is case-insensitive but not accent-insensitive.** `ILIKE` and the
+`~*` regex both fold case, not diacritics, so a reader typing "chesed" does not
+find "Chésed". §6.2.6 asks only for case-insensitivity (UC-03: "case-insensitive
+search"), so the built behaviour matches the doc; worth knowing before someone
+files it as a bug. Postgres' `unaccent` extension would be the fix, and it has
+the same cost as N9.
+
+**N11. A whole-word search is Postgres regular-expression syntax.** `\y` (a word
+boundary) is Postgres ARE, not Python `re` — Python has `\b`. Nothing outside
+`DjangoCharityRepository` sees the pattern, and the project is Postgres-only
+(`config/settings/base.py` reads `DATABASE_URL`), so this is a note, not a risk,
+unless a SQLite or MySQL backend is ever added.
+
+**N12. The local dev database is stale relative to D-049.** `maasermart_dev` on
+port 5433 holds 200 charities but only 61 distinct names, so it was seeded before
+D-049's distinct-name sample landed and still shows "Lev Chaim" five times per
+page. `./dev.sh --fresh` reseeds it. Checked with `psql -c "select count(*),
+count(distinct name) from charities_charity"` while smoke-testing the search.
+
 ## 2026-11-13 — Database schema checked against §5.2 of the design doc
 
 Checked the models in `apps/*/models.py` and the live dev database (`.pgdata`, port 5433) against

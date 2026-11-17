@@ -80,6 +80,16 @@ class SearchRepositoryTest(TestCase):
 
         self.assertEqual(self.names(Search(term="a.b", whole_words=True)), ["A.B Fund"])
 
+    def test_a_wildcard_in_the_term_is_text(self) -> None:
+        """`%` and `_` are LIKE wildcards; a reader typing them means the characters."""
+        Charity.objects.create(name="100% Chessed")
+        Charity.objects.create(name="100x Chessed")
+        Charity.objects.create(name="A_B Fund")
+        Charity.objects.create(name="AxB Fund")
+
+        self.assertEqual(self.names(Search(term="100%")), ["100% Chessed"])
+        self.assertEqual(self.names(Search(term="a_b")), ["A_B Fund"])
+
     def test_the_tagline_is_not_searched_by_default(self) -> None:
         """§6.2.2: list_charities searches the name column."""
         Charity.objects.create(name="Adas Chessed", tagline="Interest-free loans")
