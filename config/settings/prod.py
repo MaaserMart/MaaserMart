@@ -15,14 +15,32 @@ if SECRET_KEY == _INSECURE_KEY or len(SECRET_KEY) < 32:  # noqa: F405
 if not ALLOWED_HOSTS:  # noqa: F405
     raise RuntimeError("DJANGO_ALLOWED_HOSTS must be set in production.")
 
+# The CSP is served by an explicit middleware only in production (SEC1).
+MIDDLEWARE.append("apps.support.middleware.ContentSecurityPolicyMiddleware")  # noqa: F405
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; img-src 'self' https:; base-uri 'none'; "
+    "form-action 'self'; frame-ancestors 'none'"
+)
+
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=True)
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
-SECURE_HSTS_SECONDS = env.int("DJANGO_SECURE_HSTS_SECONDS", default=60)
+# One year is the preload list's minimum, which is also what SECURE_HSTS_PRELOAD
+# promises (SEC1, D-059). A shorter value with preload on would be refused.
+SECURE_HSTS_SECONDS = env.int("DJANGO_SECURE_HSTS_SECONDS", default=60 * 60 * 24 * 365)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
+
+# Versioned static filenames, so a deploy busts cached CSS and JS (P3).
+# Requires `collectstatic` at deploy time, which Caddy serves from STATIC_ROOT.
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.ManifestStaticFilesStorage",
+    }
+}
 
 # Email through SES SMTP.
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"

@@ -622,9 +622,96 @@ Rules for this file:
 - Why: The group was the only filter a visitor could see that could not work; the empty-note that said so was a placeholder for this service, and this entry clears it.
 - Where in code: `apps/accounts/services.py` (`search_rabbis`, `RabbiIdentity`), `apps/charities/repositories.py` (`DjangoFilterOptionsRepository.rabbis`), `apps/charities/filters.py` (`EMPTY_NOTES`), `tests/unit/test_charity_page.py` (`RabbiOptionsTest`)
 
+## D-059: The listing only publishes once; the detail page hides what the flag hides
+
+- Date: 2026-11-17
+- Decided by: Platform Lead, applying `docs/AUDIT-2026-11-17.md` (M5, Q2)
+- Status: Active
+- Design doc ref: §5.2.1 (CHARITY.is_visible), D-042, D-038
+- Decision: `is_visible` is now enforced at read time wherever a repository is told to publish only (listing rows and the charity page both filter it; D-042's flip is a view flag, D-038's switch is the column). Nothing in the app publishes yet because the approval queue that drives publication is Phase 1; until then the views pass `published_only=False` on purpose, so the listing stays the whole dataset as Phase 0 has always shown it. Q2's answer: when the flag flips, filters, search and sort read *published* charities only, because D-042's wording is about what a visitor may see, not a separate analytics channel; if the dashboards ever need hidden-charity numbers they will read them through their own (approvals-side) queries.
+- Why: The audit listed M5 because enforcement lived only in comments. Wiring it now, while the flag still reads False, is the cheap version; the alternative — a fourth read path that special-cases hidden charities — is exactly the divergence D-038 exists to prevent.
+- Where in code: `apps/charities/repositories.py` (`_rows`, `detail`), `apps/charities/views.py` (`published_only`)
+
+## D-060: The nav advertises only shipped pages; error pages are first-class templates
+
+- Date: 2026-11-17
+- Decided by: Platform Lead, applying `docs/AUDIT-2026-11-17.md` (B1, S4, M8, A1, A3, SEC2)
+- Status: Active
+- Design doc ref: §7.2 (nav), D-026, D-027, D-035 (error pages deferred to Phase 1)
+- Decision: The nav is built by a context processor (`apps/support/context_processors.nav`) that resolves URL *patterns* and renders a link only for a page that exists. Posting `/accounts/logout/` is a form while that route exists and nothing otherwise. The `<h2>`-before-`<h1>` heading order was fixed in the listing templates, cards got names (A3), a skip link targets `<main id="main">`, and the nav carries `aria-label="Main"`. 403/404/500 templates extend `base.html`. The `hx-headers` CSRF attribute is gone until an HTMX interaction needs it (SEC2).
+- Why: A nav link is a promise; the old bar made eight promises to seven 404s, and no test could see it because the tests asserted the same literals. Building links from patterns makes a renamed route fail loudly at render time instead of surfacing later as a dead link, and the context processor keeps that honest without hand-maintained URL lists in templates.
+- Where in code: `templates/base.html`, `apps/support/context_processors.py`, `templates/{403,404,500}.html`, `tests/integration/test_base_template.py`
+
+## D-061: Performance budget for the listing: cached option lists, deferred HTMX, manifest assets, first/last pagination
+
+- Date: 2026-11-17
+- Decided by: Platform Lead, applying `docs/AUDIT-2026-11-17.md` (P1, P2, P3, P5, B3)
+- Status: Active
+- Design doc ref: §6.2.x (listing), D-026
+- Decision: (P1) The domain and location option lists are cached for 60 seconds per process (LocMem); a new option appears to an admin within a minute, and a busy directory stops reading two full tables per request. (P2) HTMX is `defer`red. (P3) Production uses `ManifestStaticFilesStorage`, so assets get versioned names and deploys bust caches; deploys must run `collectstatic` (Caddy serves `STATIC_ROOT`, already the prod story). (P5) Pagination gained first/last jump links when far from an edge, a charities count above the list, and the count is skipped for pages beyond the obvious bound (B3's one-snapshot page+count). No page size, TTL or query strategy beyond this until a load test says otherwise (D-025).
+- Why: The audit measured six queries on every listing request and a render-blocking 50 KB script. Each fix is a one-line decision point (TTL, defer, storage backend, jump threshold of 3) that is cheap to revisit.
+- Where in code: `config/settings/base.py` (CACHES), `config/settings/prod.py` (STORAGES), `apps/charities/repositories.py` (option cache), `apps/charities/services.py` (`Page` jump properties), `apps/charities/templates/charities/listing.html`, `templates/base.html`
+
+## D-062: Production ships a CSP and HSTS preload; the seed admin password is never public
+
+- Date: 2026-11-17
+- Decided by: Platform Lead, applying `docs/AUDIT-2026-11-17.md` (SEC1, SEC4)*
+- Status: Active
+- Design doc ref: §4.12 (security)
+- Decision: (SEC1) Production serves `Content-Security-Policy: default-src 'self'; img-src 'self' https:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'` from a middleware, except on `/django-admin/` paths where the admin's inline styles would be blocked; HSTS max-age defaults to one year and preload is on, because a sub-year max-age with preload would be refused by the preload list. Both are env-overridable (`CONTENT_SECURITY_POLICY`, `DJANGO_SECURE_HSTS_SECONDS`). (SEC4) `manage.py seed` no longer creates `admin`/`admin`; it generates a random password (printed once), or honours `ADMIN_SEED_PASSWORD`. The other dev users keep `password` (factories are dev tooling, D-022).
+- Why: Preload is a commitment (hard to leave) and CSP is a runtime header — both should be decided, not accidental. The seed already refuses non-empty databases (D-030), but a known default *admin* credential is the one thing D-030 cannot defend if both guards ever fail.
+- Where in code: `apps/support/middleware.py`, `config/settings/prod.py`, `apps/dashboards/management/commands/seed.py`, `config/settings/base.py` (`ADMIN_SEED_PASSWORD`)
+
+## D-063: django-auditlog leaves the app until a model actually registers
+
+- Date: 2026-11-17
+- Decided by: Platform Lead, applying `docs/AUDIT-2026-11-17.md` (S9), resolving the open question of 2026-11-11
+- Status: Active (resolves the 2026-11-11 "Which models get audit logging?" open question)
+- Design doc ref: §4.15.1.2, D-052, D-039
+- Decision: django-auditlog is removed from the dependency list, `INSTALLED_APPS` and `MIDDLEWARE`. The open question stays open in substance — which models get audit logging, deferred to Phase 1 — but a package that creates tables on every migration and wraps every request must earn its place by actually registering one. When Phase 1 registers CHARITY (D-052's note: the events trail says who/when; auditlog would add which fields changed), the package returns with a one-line `register`, which is the reversal cost.
+- Why: No registered model means not one row will ever be written; the cost (migration surface, per-request middleware) was being paid for a plan.
+- Where in code: `pyproject.toml`, `config/settings/base.py`
+
+## D-064: Small cleanliness items from the audit: loggers, protocols, one brand colour, honest factory defaults
+
+- Date: 2026-11-17
+- Decided by: Platform Lead, applying `docs/AUDIT-2026-11-17.md` (S2, S3, S5, S6, S8, A2, A4, M6)
+- Status: Active
+- Decision: (S2) `seed.py` imports `tests` lazily inside the command, so a production artifact that ships `apps/` only still imports cleanly; the command stays dev-only (D-022, D-030 documents it). (S3) The service layers now have module loggers and log the error paths that used to swallow. (S5) `FilterOptionsRepository` is a `Protocol`, and the sidebar's service functions are typed with it. (S6) The two near-identical brand blues became one `--brand-blue` custom property and the duplicate `.jump__input` rule is gone. (S8) `ReviewFactory.rating` and `HaskamaFactory.importance` default to fixed values. (A2) Disabled pagination steps are dimmed `<span>`s again — no `aria-disabled` on a thing nothing can focus. (A4) One `:focus-visible` rule site-wide, with a white ring on the blue current states.
+- Why: Each is the root fix the audit named — the seed's import is now after its guards, the loggers exist before the first production 500, the protocol matches the listing's, the stylesheet cannot drift into two blues, and a factory default of "random" stopped being a flaky-test landmine.
+- Where in code: `apps/charities/{services,repositories}.py`, `apps/events/services.py`, `apps/dashboards/management/commands/seed.py`, `static/css/site.css`, `tests/factories/charities.py`
+
+## D-065: `django-admin/`'s login is accepted without a lockout, for now
+
+- Date: 2026-11-17
+- Decided by: Platform Lead, applying `docs/AUDIT-2026-11-17.md` (SEC3)
+- Status: Active (accepted risk, revisit with the accounts login branch)
+- Design doc ref: §4.12, D-008
+- Decision: `/django-admin/` keeps Django's own login and gets no rate limiting or account lockout in Phase 0. What protects it is that it is staff-only (`is_staff`), reachable only behind D-008's deliberate URL, and that no staff account exists in production until one is created by hand. The rate-limit middleware the accounts login branch brings (`D-YOSEF-accounts-login`) must also cover `django-admin/login/`, at which point this entry is superseded rather than kept.
+- Why: The audit's alternative was "cover it in the same middleware or document that staff-only access makes it acceptable". There is no middleware here to cover it with, and inventing a second, weaker throttle for one URL ahead of the real one is the kind of divergence D-038 exists to prevent. Recording the risk with the trigger that closes it is the honest option.
+- Where in code: `config/urls.py` (the `/django-admin/` route), `config/settings/base.py` (auth backends unchanged)
+
+## D-066: Tests measure coverage on every run; three CSS tests read the stylesheet through a parser
+
+- Date: 2026-11-17
+- Decided by: Platform Lead, applying `docs/AUDIT-2026-11-17.md` (T1, T2, T3)
+- Status: Active
+- Decision: (T1) `pytest` now measures coverage of `apps/` and `config/` on every run and fails below 85%; the current figure is ~93%, so the gate is a floor, not a target, and it is edited in `pyproject.toml`, not in CI. `*/migrations/*` is excluded because generated code is not behaviour. (T2) The three tests that grepped `site.css` with a regex now resolve a property for a selector through `tests/support/css.py`, which merges blocks in source order, ignores at-rules it cannot evaluate, and ignores comments; the sidebar test also asserts the class is on the rendered page. Media queries and specificity are still not evaluated — a DOM measurement is the only full check, and there is no browser in the test suite. (T3) `tests/unit/test_views.py` is split into five files by feature, with the old path left as a docstring that says where each went.
+- Why: An unmeasured suite answers "is this path covered?" by reading; a CSS regex answers "is the rule in the file?" rather than "does it apply?"; and one 750-line test file makes a reviewer hunt. Each fix is one commit now, and expensive later.
+- Where in code: `pyproject.toml` (`--cov`, `[tool.coverage.*]`), `tests/support/css.py`, `tests/unit/test_css_helper.py`, `tests/unit/test_views_{listing,sort,filter,clamp,search}.py`
+
+## D-067: The listing's three state modules stay separate until a fourth state exists
+
+- Date: 2026-11-17
+- Decided by: Platform Lead, applying `docs/AUDIT-2026-11-17.md` (S1, S7, Q4)
+- Status: Active (deliberate deferral, with the trigger recorded)
+- Decision: `filters.py`, `sorting.py` and `search.py` keep their own frozen value object, `from_query`, `query_pairs`, `query_string` and form dataclass; they are not collapsed into one `PageState`. The repeated shape is real, but the three modules encode three different rules (clamping, mechanism/direction pairing, term length and advanced options), and collapsing them is a rewrite of five modules, six templates and every listing test with no behaviour change — the worst kind of change to make under an audit deadline. The trigger to revisit: a fourth URL state (a date range, or a saved search) or the first "form forgot an include" bug, whichever comes first. Q4 (accent-insensitive search) stays open: it changes `Search`, not the page state, and needs a Postgres extension decision.
+- Why: The audit ranked it a Medium smell, not a defect; every other finding in this audit that *was* a defect is fixed. Recording the deferral with the trigger keeps it a decision instead of a lost note.
+- Where in code: `apps/charities/{filters,sorting,search,services}.py`
+
 ## Open questions
 
-- **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1.
+- **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.
 - **2026-11-11: Default charity listing order.** §6.2.3 says alphabetical; UC-03 (§8.5) says "no particular order". Resolved as D-048 on 2026-11-14: alphabetical A→Z is the default sort.
 - **2026-11-12: How the charities listing learns visibility without depending on approvals.** D-023 makes visibility depend on approvals' tables, but §6.1 has approvals depending on charities, not the reverse, and D-006 limits calls to listed dependencies. To be decided before the Phase 1 listing. Resolved as D-038 on 2026-11-12.
 - **2026-11-11: Email verification method.** §6.2.2 has the user type a code from an email; UC-02 (§8.4) uses a link.

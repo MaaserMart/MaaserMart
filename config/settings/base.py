@@ -10,6 +10,10 @@ env = environ.Env()
 environ.Env.read_env(BASE_DIR / ".env")
 
 SECRET_KEY = env("DJANGO_SECRET_KEY")
+
+# Password for the admin user that `manage.py seed` creates. Unset on purpose:
+# locally the seed picks one at random and prints it (SEC4).
+ADMIN_SEED_PASSWORD = env("ADMIN_SEED_PASSWORD", default="")
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=[])
 
@@ -20,7 +24,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "auditlog",
     "apps.accounts",
     "apps.charities",
     "apps.events",
@@ -40,7 +43,6 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "auditlog.middleware.AuditlogMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -83,6 +85,17 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Filter option lists are cached briefly so the sidebar does not read the whole
+# domain and location tables on every listing request (audit P1). LocMem is per
+# process, which is exactly the point: a multi-megabyte directory is read once
+# a minute per worker instead of once per page. The cache never stores users.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "maasermart",
+    }
+}
 
 # Hosts a charity image may be loaded from, besides the repo's own static files
 # (D-021, audit B8). An entry starting with "." allows subdomains. Empty means

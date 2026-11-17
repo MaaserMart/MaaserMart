@@ -270,6 +270,18 @@ class FilterOptionsRepositoryTest(TestCase):
 
         self.assertEqual(DjangoFilterOptionsRepository().rabbis(), ())
 
+    def test_the_option_lists_are_read_once_a_minute(self) -> None:
+        """P1: a busy listing stops re-reading the whole domain table per request."""
+        from apps.charities.repositories import DjangoFilterOptionsRepository
+
+        Domain.objects.create(name="Education")
+        options = DjangoFilterOptionsRepository()
+
+        with self.assertNumQueries(1):
+            options.domains()
+        with self.assertNumQueries(0):
+            options.domains()
+
 
 class RatingClampTest(TestCase):
     """D-046: min_rating is clamped into the 1-5 scale, and the clamp is visible.

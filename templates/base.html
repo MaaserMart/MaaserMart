@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}MaaserMart{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'css/site.css' %}">
-  <script src="{% static 'vendor/htmx-2.0.4.min.js' %}"></script>
+  {# Htmx is unused today; `defer` keeps it from blocking first paint (P2). #}
+  <script defer src="{% static 'vendor/htmx-2.0.4.min.js' %}"></script>
   <script defer src="{% static 'vendor/alpinejs-3.14.8.min.js' %}"></script>
 </head>
 <body>

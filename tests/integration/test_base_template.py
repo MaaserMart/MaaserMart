@@ -6,6 +6,7 @@ import pytest
 from django.conf import settings
 
 from tests.factories import UserFactory
+from tests.support.css import value
 
 pytestmark = pytest.mark.django_db
 
@@ -56,12 +57,14 @@ def test_logged_in_nav_shows_no_login_or_signup(client):
 def test_nav_is_pinned_to_the_top():
     """D-037: the nav is sticky, so it stays visible while the page scrolls.
 
-    The rule lives in the stylesheet the page loads, not in a literal inline
-    <style> block, so this reads the CSS rather than the HTML.
+    The rule lives in the stylesheet the page loads, not in an inline <style>
+    block, so this resolves the property for `.nav` the way a browser would
+    (audit T2): a later block overriding `position` would fail this test, where
+    a regex for the declaration would pass.
     """
     css = (settings.BASE_DIR / "static" / "css" / "site.css").read_text(encoding="utf-8")
 
-    assert re.search(r"\.nav\s*\{[^}]*position:\s*sticky", css)
+    assert value(css, ".nav", "position") == "sticky"
 
 
 def test_nav_is_a_full_width_bar_above_the_content(client):

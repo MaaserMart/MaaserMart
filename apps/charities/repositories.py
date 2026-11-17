@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlsplit
 
+from django.core.cache import cache
 from django.db.models import (
     Avg,
     Count,
@@ -276,6 +277,8 @@ class DjangoCharityRepository:
         rabbi names come from accounts' services, never from its tables (D-006).
         """
         rows = self._annotated(reviews=True, approving=True, disapproving=True)
+        if self.published_only:
+            rows = rows.filter(is_visible=True)
         row = self._with_activity_values(rows, DEFAULT_SORT).filter(pk=charity_id).first()
         if row is None:
             return None
@@ -490,6 +493,28 @@ class DjangoCharityRepository:
         )
 
 
+class FilterOptionsRepository(Protocol):
+    """The sidebar's option lists, as the page-building code sees them.
+
+    The listing never touches Domain and Location rows directly; it asks for
+    their options. This protocol is what the services accept (S5), so a page
+    that only reads options can be served anything that provides them — a
+    cache, a read replica, or, as here, the shared list tables.
+    """
+
+    def domains(self) -> tuple[DomainOption, ...]:
+        """Every domain, in the order the sidebar offers them."""
+        ...
+
+    def locations(self) -> tuple[LocationOption, ...]:
+        """Every location, in the order the sidebar offers them."""
+        ...
+
+    def rabbis(self) -> tuple[RabbiOption, ...]:
+        """Every rabbi the filters can select, in the order the sidebar offers them."""
+        ...
+
+
 class DjangoFilterOptionsRepository:
     """The sidebar's choices: the domains, locations and rabbis one can filter by.
 
@@ -497,18 +522,40 @@ class DjangoFilterOptionsRepository:
     matching, so ticking one option cannot make the others disappear under the
     user's cursor. Domains and locations that no charity uses are still offered,
     because the domain and location lists are managed on their own (§5.2.10–11).
+
+    The domain and location lists are cached for a minute (audit P1): on a real
+    directory they run to thousands of rows and were being read in full on every
+    listing request. A minute is short enough that a new domain or location
+    appears while the admin is working, and long enough that a busy page stops
+    paying for it per request. Rabbis, being people, are never cached.
     """
 
+    # How long an option list stays fresh. Short: options change rarely and the
+    # cost of staleness is a checkbox appearing a minute late.
+    OPTIONS_TTL = 60
+
+    def _cached_options(self, key: str, load) -> tuple:
+        options = cache.get(key)
+        if options is None:
+            options = tuple(load())
+            cache.set(key, options, self.OPTIONS_TTL)
+        return options
+
     def domains(self) -> tuple[DomainOption, ...]:
-        return tuple(
-            DomainOption(id=row.id, name=row.name) for row in Domain.objects.order_by("name")
+        return self._cached_options(
+            "filter-options:domains",
+            lambda: (
+                DomainOption(id=row.id, name=row.name) for row in Domain.objects.order_by("name")
+            ),
         )
 
     def locations(self) -> tuple[LocationOption, ...]:
-        rows = Location.objects.order_by("name", "region", "country")
-        return tuple(
-            LocationOption(id=row.id, name=row.name, region=row.region, country=row.country)
-            for row in rows
+        return self._cached_options(
+            "filter-options:locations",
+            lambda: (
+                LocationOption(id=row.id, name=row.name, region=row.region, country=row.country)
+                for row in Location.objects.order_by("name", "region", "country")
+            ),
         )
 
     def rabbis(self) -> tuple[RabbiOption, ...]:
