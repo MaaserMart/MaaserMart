@@ -60,6 +60,14 @@ class SearchRepositoryTest(TestCase):
         self.assertEqual(self.names(Search(term="chess", whole_words=True)), [])
         self.assertEqual(self.names(Search(term="Chessed", whole_words=True)), ["Lev Chessed"])
 
+    def test_whole_words_is_case_insensitive_too(self) -> None:
+        """Both search modes fold case; the whole-word one is a different operator."""
+        Charity.objects.create(name="Lev Chessed")
+
+        for term in ["Chessed", "chessed", "CHESSED", "cHeSsEd"]:
+            with self.subTest(term=term):
+                self.assertEqual(self.names(Search(term=term, whole_words=True)), ["Lev Chessed"])
+
     def test_whole_words_matches_a_multi_word_term_as_typed(self) -> None:
         Charity.objects.create(name="Lev Chessed Fund")
 

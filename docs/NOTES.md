@@ -10,6 +10,14 @@ Where things go, so this file does not turn into a junk drawer:
 
 ---
 
+## 2026-11-17 (later) — Search checked against the dev database
+
+Checked by running the repository, not by reading the operators: with 200 seeded charities,
+"Chesed"/"chesed"/"CHESED" each return the same 29 rows, and the same holds in whole-word mode
+(regex `~*`, not `ILIKE`). So both modes fold case, as UC-03 requires. Accents are **not** folded and
+that is now a decision, not an open question — see D-069. `unaccent` 1.1 and `pg_trgm` 1.6 are both
+available on the dev cluster and neither is installed.
+
 ## 2026-11-17 — Findings while building the §6.2.6 search (none decided except D-054)
 
 **N9. The search cannot use an index, so it is a sequential scan.** `icontains`

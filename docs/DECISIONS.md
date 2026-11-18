@@ -719,6 +719,16 @@ Rules for this file:
 - Why: D-067 deferred this as a Medium smell with a trigger. The trigger is that it was the last finding in the audit without a disposition, it is a deletion rather than an addition (218 lines added, 226 removed, excluding this entry and the new tests), and the risk it was deferred for is now covered: `EveryFormCarriesTheWholeStateTest` requests the listing and asserts, per form, which slices it carries, so a form that drops one fails loudly. Every existing page test passed unchanged, and the addresses the tests pin stayed byte-identical — the two things that would have made this refactor unsafe.
 - Where in code: `apps/charities/state.py` (new), `apps/charities/services.py` (`Page`, `list_charities`), `apps/charities/views.py`, `apps/charities/templates/charities/state.html` (and the three `*_state.html` partials it replaces), `tests/unit/test_page_state.py`, `tests/unit/test_template_contract.py`
 
+## D-069: Search stays case-insensitive and accent-sensitive
+
+- Date: 2026-11-17
+- Decided by: CEO (Yosef), answering the audit's Q4 on task #42
+- Status: Active (closes the audit's Q4; supersedes nothing)
+- Design doc ref: §6.2.6 (search), UC-03 ("case-insensitive search")
+- Decision: The search matches case-insensitively and does **not** fold accents. No `unaccent` extension, no normalised column, no fuzzy matching. Verified against the dev database (200 charities) that every term matches the same set in all three cases in **both** search modes — "Chesed", "chesed" and "CHESED" each return the same 29 rows, whole-word included.
+- Why: Nobody types accents in real life, so a reader searching "chesed" for a charity registered as "Chésed" is the unusual case, not the common one; the extension would cost a migration, defeat the `name` index (Postgres does not mark `unaccent` immutable), and buy a narrowing that real readers rarely need. If the seeded or imported data ever *does* carry accents, the cheaper fix is at the write side — normalise the name on save — not at the read side, because that keeps one spelling in the database and the search simple. That write-side change is not made here; it needs its own decision if accented names appear.
+- Where in code: `apps/charities/search.py` (`lookup`, `pattern` — unchanged), `apps/charities/repositories.py` (`_search_condition` — unchanged), `tests/unit/test_search_repository.py` (`test_the_name_is_matched_case_insensitively`, `test_whole_words_is_case_insensitive_too`)
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.
