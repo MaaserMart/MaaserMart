@@ -1,8 +1,0 @@
-{% comment %}
-The active search as hidden inputs. A form that changes the filters, the order,
-the page size or the page number includes this so it cannot silently drop the
-term (§6.2.6). The search bar itself is the exception: it carries the term in
-its own input.
-{% endcomment %}
-{% for name, value in page.search_pairs %}<input type="hidden" name="{{ name }}" value="{{ value }}">
-{% endfor %}

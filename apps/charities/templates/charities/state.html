@@ -1,6 +1,15 @@
 {% comment %}
-Everything that makes the current result set: the search, the filters and the
-order. The page-size and jump forms include this, since they change none of
-it.
+Every parameter that describes the current result set — the search, the filters
+and the order — as hidden inputs, so a form that changes one of them cannot
+silently drop the others (§6.2.4–6, D-068).
+
+A form that prints one slice itself includes this with `skip`, naming the slice
+it owns:
+
+    {% include "charities/state.html" with skip="filters" %}
+
+The default (no `skip`) writes everything, so a new form that forgets the
+parameter still carries the whole state instead of dropping two thirds of it.
 {% endcomment %}
-{% include "charities/search_state.html" %}{% include "charities/filter_state.html" %}{% include "charities/sort_state.html" %}
+{% for name, pairs in page.state.groups %}{% if name != skip %}{% for key, value in pairs %}<input type="hidden" name="{{ key }}" value="{{ value }}">
+{% endfor %}{% endif %}{% endfor %}

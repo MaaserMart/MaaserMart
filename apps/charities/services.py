@@ -5,7 +5,7 @@ Other apps call only the functions defined here, never this app's models.
 
 import logging
 from dataclasses import dataclass
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.db import transaction
@@ -14,13 +14,10 @@ from apps.events.services import record_event
 
 from .contracts import CharityCard, CharityPage, DomainOption, LocationOption, RabbiOption
 from .filters import CharityFilters, FilterForm, sidebar_groups
-from .filters import query_pairs as filter_query_pairs
 from .models import Charity
 from .repositories import CharityRepository, FilterOptionsRepository
-from .search import Search
-from .search import query_pairs as search_query_pairs
-from .sorting import DEFAULT_SORT, CharitySort
-from .sorting import query_pairs as sort_query_pairs
+from .sorting import CharitySort
+from .state import MAX_PAGE_SIZE, PageState, page_count
 
 logger = logging.getLogger(__name__)
 
@@ -147,33 +144,34 @@ def _set_visible(charity_id, visible, by_user_id):
 # The rules below are the listing's: filters, order, page clamping, page sizes.
 # They know nothing about where the rows come from; the repository is injected.
 
-DEFAULT_PAGE_SIZE = 20
-MAX_PAGE_SIZE = 100
-
-
-def page_count(total: int, page_size: int) -> int:
-    """Pages needed for `total` rows; at least one, so a page always exists."""
-    return max(1, -(-total // page_size))
-
 
 @dataclass(frozen=True)
 class Page:
-    """One page of results, plus the links needed to move between pages.
+    """One page of results, plus the state and the links needed to move around it.
 
-    The chosen filters and sort belong to the result set, not to one page: every
-    link the page builds repeats both, or moving to page 2 would silently drop a
-    filter or reorder the list.
+    The search, the filters and the order belong to the result set, not to one
+    page: every link the page builds repeats all three, or moving to page 2 would
+    silently drop a filter. That whole address is `Page.state` — one value,
+    instead of the three pair-bundles this class used to concatenate by hand
+    (audit S1, S7; D-068).
     """
 
     items: tuple[CharityCard, ...]
     total: int
-    number: int
-    page_size: int
-    sort: CharitySort = DEFAULT_SORT
-    # The search as (parameter, value) pairs, for replaying it as hidden inputs.
-    search_pairs: tuple[tuple[str, object], ...] = ()
-    # The filters as (parameter, value) pairs, for replaying them as hidden inputs.
-    filter_pairs: tuple[tuple[str, object], ...] = ()
+    state: PageState = PageState()
+
+    @property
+    def number(self) -> int:
+        """Which page of the result set this is, already clamped to a real one."""
+        return self.state.page
+
+    @property
+    def page_size(self) -> int:
+        return self.state.page_size
+
+    @property
+    def sort(self) -> CharitySort:
+        return self.state.sort
 
     @property
     def page_count(self) -> int:
@@ -187,21 +185,9 @@ class Page:
     def has_next(self) -> bool:
         return self.number < self.page_count
 
-    @property
-    def sort_pairs(self) -> tuple[tuple[str, str], ...]:
-        """The sort as hidden-input pairs; empty for the default order."""
-        return sort_query_pairs(self.sort)
-
-    def _state_query(self, *, include_filters: bool = True, **parts: int) -> str:
-        """A query string of `parts`, followed by the search, filters and sort."""
-        base = urlencode(parts)
-        pairs = self.filter_pairs if include_filters else ()
-        state = urlencode(self.search_pairs + pairs + self.sort_pairs)
-        return f"{base}&{state}" if state else base
-
     def query(self, number: int) -> str:
         """Query string for another page of this same result set."""
-        return self._state_query(page=number, page_size=min(self.page_size, MAX_PAGE_SIZE))
+        return self.state.query_string(page=number, page_size=min(self.page_size, MAX_PAGE_SIZE))
 
     @property
     def previous_query(self) -> str:
@@ -234,7 +220,7 @@ class Page:
     @property
     def clear_filters_query(self) -> str:
         """The page with its size, search and order kept, but no filters (§6.2.4)."""
-        return self._state_query(include_filters=False, page_size=self.page_size)
+        return self.state.replaced(filters=CharityFilters()).query_string(page_size=self.page_size)
 
     def numbers(self, window: int = 2) -> list[tuple[int, str]]:
         """(page number, query string) pairs to render as links."""
@@ -243,22 +229,8 @@ class Page:
         return [(n, self.query(n)) for n in range(first, last + 1)]
 
 
-def clamp_page_size(requested: int | None) -> int:
-    """Bound a requested page size to a range the server is willing to serve."""
-    if requested is None:
-        return DEFAULT_PAGE_SIZE
-    return max(1, min(requested, MAX_PAGE_SIZE))
-
-
-def list_charities(
-    repository: CharityRepository,
-    filters: CharityFilters | None = None,
-    sort: CharitySort = DEFAULT_SORT,
-    page: int | None = 1,
-    page_size: int | None = None,
-    search: Search | None = None,
-) -> Page:
-    """Return one page of the charities `filters` and `search` keep, ordered by `sort`.
+def list_charities(repository: CharityRepository, state: PageState | None = None) -> Page:
+    """Return the page of charities the state describes.
 
     §6.2.6: the search is a term plus the advanced options that shape it, and it
     narrows the same set the filters do rather than starting a new one, so the
@@ -267,40 +239,31 @@ def list_charities(
     honoured so a shared link keeps its whole state (UC-03). §6.2.5's sort change
     and §6.2.4's filter change work the same way.
     """
-    filters = filters or CharityFilters()
-    search = search or Search()
-    page_size = clamp_page_size(page_size)
+    state = state or PageState()
     # One query answers the page and its total (see `page_and_count`), so a row
     # inserted between two statements cannot make a charity repeat or vanish
     # across a page boundary (audit B3).
     items, total = repository.page_and_count(
-        offset=(max(1, page or 1) - 1) * page_size,
-        limit=page_size,
-        filters=filters,
-        sort=sort,
-        search=search,
+        offset=(state.page - 1) * state.page_size,
+        limit=state.page_size,
+        filters=state.filters,
+        sort=state.sort,
+        search=state.search,
     )
-    count = page_count(total, page_size)
-    number = max(1, min(page or 1, count))
-    if number != max(1, page or 1) and total:
-        # The requested page was past the end; only then is a second read needed.
-        items = repository.page(
-            offset=(number - 1) * page_size,
-            limit=page_size,
-            filters=filters,
-            sort=sort,
-            search=search,
-        )
-
-    return Page(
-        items=items,
-        total=total,
-        number=number,
-        page_size=page_size,
-        sort=sort,
-        search_pairs=search_query_pairs(search),
-        filter_pairs=filter_query_pairs(filters),
-    )
+    count = page_count(total, state.page_size)
+    if state.page > count:
+        # The requested page was past the end: the state is answered with the
+        # last real page, and only when there are rows is a second read needed.
+        state = state.with_page(count)
+        if total:
+            items = repository.page(
+                offset=(count - 1) * state.page_size,
+                limit=state.page_size,
+                filters=state.filters,
+                sort=state.sort,
+                search=state.search,
+            )
+    return Page(items=items, total=total, state=state)
 
 
 # --- Charity page ------------------------------------------------------------

@@ -14,11 +14,11 @@ from apps.charities.filters import (
     from_query,
     keep_known_ids,
     query_pairs,
-    query_string,
     sidebar_groups,
 )
 from apps.charities.services import list_charities
 from apps.charities.sorting import DEFAULT_SORT
+from apps.charities.state import PageState
 
 
 class FakeRepository:
@@ -118,13 +118,18 @@ class FiltersQueryStringTest(SimpleTestCase):
     """A page link must repeat the filters it was made under."""
 
     def test_empty_filters_make_an_empty_string(self) -> None:
-        self.assertEqual(query_string(CharityFilters()), "")
+        self.assertEqual(PageState(filters=CharityFilters()).query_string(), "")
 
     def test_repeatable_and_numeric_groups_round_trip(self) -> None:
         filters = CharityFilters(domains=(1, 2), min_rating=4, min_reviews=0)
 
-        self.assertEqual(query_string(filters), "domain=1&domain=2&min_rating=4&min_reviews=0")
-        self.assertEqual(from_query(_Query(_parse(query_string(filters)))), filters)
+        self.assertEqual(
+            PageState(filters=filters).query_string(),
+            "domain=1&domain=2&min_rating=4&min_reviews=0",
+        )
+        self.assertEqual(
+            from_query(_Query(_parse(PageState(filters=filters).query_string()))), filters
+        )
 
     def test_pairs_keep_a_zero(self) -> None:
         self.assertIn(("min_reviews", 0), query_pairs(CharityFilters(min_reviews=0)))
@@ -222,7 +227,7 @@ class ListCharitiesPassesFiltersTest(SimpleTestCase):
         repository = FakeRepository()
         filters = CharityFilters(domains=(4,), min_rating=3)
 
-        page = list_charities(repository, filters=filters)
+        page = list_charities(repository, PageState(filters=filters))
 
         # One read, not a count followed by a page (audit B3).
         self.assertEqual(repository.seen, [filters])
@@ -300,10 +305,10 @@ class _Query:
         return values[-1] if values else None
 
 
-def _parse(query_string: str) -> dict[str, list[str]]:
+def _parse(query: str) -> dict[str, list[str]]:
     from urllib.parse import parse_qs
 
-    return parse_qs(query_string)
+    return parse_qs(query)
 
 
 class BlankNumberTest(SimpleTestCase):
@@ -313,7 +318,7 @@ class BlankNumberTest(SimpleTestCase):
 
         self.assertIsNone(filters.min_rating)
         self.assertIsNone(filters.min_reviews)
-        self.assertEqual(query_string(filters), "domain=3")
+        self.assertEqual(PageState(filters=filters).query_string(), "domain=3")
 
 
 class DocParameterNamesTest(SimpleTestCase):
@@ -339,7 +344,7 @@ class DocParameterNamesTest(SimpleTestCase):
         filters = from_query(_Query({"haskama_rabbi": ["7"]}))
 
         self.assertEqual(filters.haskama_rabbis, (7,))
-        self.assertEqual(query_string(filters), "haskama_rabbi=7")
+        self.assertEqual(PageState(filters=filters).query_string(), "haskama_rabbi=7")
 
     def test_the_plural_spelling_is_not_accepted(self) -> None:
         """D-045 used `haskama_rabbis`; D-046 replaced it, not aliased it."""

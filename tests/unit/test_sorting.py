@@ -24,9 +24,9 @@ from apps.charities.sorting import (
     CharitySort,
     from_query,
     query_pairs,
-    query_string,
     sort_form,
 )
+from apps.charities.state import PageState
 
 
 class SortQueryTest(SimpleTestCase):
@@ -80,7 +80,7 @@ class SortQueryTest(SimpleTestCase):
 class SortUrlTest(SimpleTestCase):
     def test_the_default_adds_no_parameters(self) -> None:
         self.assertEqual(query_pairs(DEFAULT_SORT), ())
-        self.assertEqual(query_string(DEFAULT_SORT), "")
+        self.assertEqual(PageState(sort=DEFAULT_SORT).query_string(), "")
 
     def test_an_explicit_default_is_spelled_as_the_default(self) -> None:
         """`alphabetical` ascending and no sort at all are the same view."""
@@ -90,7 +90,7 @@ class SortUrlTest(SimpleTestCase):
         sort = CharitySort(mechanism=RATING, descending=True)
 
         self.assertEqual(query_pairs(sort), (("sort", "rating"), ("direction", "desc")))
-        self.assertEqual(query_string(sort), "sort=rating&direction=desc")
+        self.assertEqual(PageState(sort=sort).query_string(), "sort=rating&direction=desc")
 
     def test_reversed_alphabetical_is_not_the_default(self) -> None:
         sort = CharitySort(mechanism=ALPHABETICAL, descending=True)

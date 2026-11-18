@@ -14,7 +14,6 @@ string would otherwise only show up as a silently unsorted listing.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from urllib.parse import urlencode
 
 SORT_PARAMETER = "sort"
 DIRECTION_PARAMETER = "direction"
@@ -143,11 +142,6 @@ def query_pairs(sort: CharitySort) -> tuple[tuple[str, str], ...]:
         (SORT_PARAMETER, sort.mechanism.value),
         (DIRECTION_PARAMETER, sort.direction),
     )
-
-
-def query_string(sort: CharitySort) -> str:
-    """The sort as a query string, for a page link that must keep it."""
-    return urlencode(query_pairs(sort))
 
 
 def _mechanism(value: str) -> Mechanism | None:
