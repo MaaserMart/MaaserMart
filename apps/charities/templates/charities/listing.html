@@ -43,6 +43,9 @@
       </div>
 
       {% if page.items %}
+        {% if page.total %}
+          <p class="listing__total">{{ page.total }} charit{{ page.total|pluralize:"y,ies" }}</p>
+        {% endif %}
         <ul class="charity-list">
           {% for charity in page.items %}
             <li>
@@ -107,9 +110,13 @@
             {% if page.has_previous %}
               <a class="pagination__step" href="?{{ page.previous_query }}" rel="prev">&larr; Prev</a>
             {% else %}
-              <span class="pagination__step" aria-disabled="true">&larr; Prev</span>
+              {# A disabled step is not a control: the dimmed span says enough (A2). #}
+              <span class="pagination__step pagination__step--disabled">&larr; Prev</span>
             {% endif %}
 
+            {% if page.can_jump_to_first %}
+              <a class="pagination__step" href="?{{ page.first_query }}" aria-label="First page">&laquo; 1</a>
+            {% endif %}
             <ul class="pagination__pages">
               {% for number, query in page.numbers %}
                 <li class="pagination__item">
@@ -122,10 +129,14 @@
               {% endfor %}
             </ul>
 
+            {% if page.can_jump_to_last %}
+              <a class="pagination__step" href="?{{ page.last_query }}" aria-label="Last page">{{ page.page_count }} &raquo;</a>
+            {% endif %}
             {% if page.has_next %}
               <a class="pagination__step" href="?{{ page.next_query }}" rel="next">Next &rarr;</a>
             {% else %}
-              <span class="pagination__step" aria-disabled="true">Next &rarr;</span>
+              {# A disabled step is not a control: the dimmed span says enough (A2). #}
+              <span class="pagination__step pagination__step--disabled">Next &rarr;</span>
             {% endif %}
 
             <form class="jump" method="get">

@@ -7,8 +7,6 @@ template relies on, so that renaming or reshaping a value breaks a test rather
 than quietly emptying the page.
 """
 
-import re
-
 from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
@@ -24,6 +22,7 @@ from apps.charities.contracts import (
 from apps.charities.models import Charity, Domain, Haskama, Location, Review
 from apps.events.models import Event
 from tests.factories.accounts import UserFactory
+from tests.support.css import declarations
 
 
 class FilterSidebarCssTest(TestCase):
@@ -34,14 +33,21 @@ class FilterSidebarCssTest(TestCase):
     """
 
     def test_the_sidebar_is_bounded_and_scrolls(self) -> None:
+        """Resolved the way a browser would (audit T2), not just searched for."""
         css = (settings.BASE_DIR / "static" / "css" / "site.css").read_text(encoding="utf-8")
-        rule = re.search(r"\.listing__sidebar\s*\{([^}]*)\}", css)
+        rule = declarations(css, ".listing__sidebar")
 
-        self.assertIsNotNone(rule, "the sidebar rule is missing from site.css")
-        declarations = rule.group(1)
-        self.assertIn("max-height", declarations)
-        self.assertIn("overflow-y: auto", declarations)
-        self.assertIn("position: sticky", declarations)
+        self.assertIn("max-height", rule)
+        self.assertEqual(rule.get("overflow-y"), "auto")
+        # A later `position: static` would break the scroll claim; a regex on the
+        # first matching block would not notice.
+        self.assertEqual(rule.get("position"), "sticky")
+
+    def test_the_sidebar_class_is_on_the_page(self) -> None:
+        """The rule above only matters if an element carries the class."""
+        body = self.client.get(reverse("charities:listing")).content.decode()
+
+        self.assertIn('class="listing__sidebar"', body)
 
 
 class ListingTemplateContractTest(TestCase):

@@ -2,10 +2,13 @@
 
 Dev tooling only (see CLAUDE.md): it builds every app's rows through the shared
 factories in tests/factories. It refuses to run unless DEBUG is on and every app
-table is empty (D-030).
+table is empty (D-030). The tests package is imported lazily (S2): seeding
+is the only runtime code that needs it, so a production install can leave the
+package out and never pay for it.
 """
 
 import random
+import secrets
 import uuid
 from datetime import timedelta
 
@@ -21,8 +24,6 @@ from apps.approvals.models import ApprovalRequest
 from apps.charities.models import Charity, Haskama, Link
 from apps.charities.services import publish_charity
 from apps.events.models import Event
-from tests import factories as f
-from tests.factories.accounts import DEFAULT_PASSWORD
 
 Role = RoleAssignment.Role
 Status = ApprovalRequest.Status
@@ -123,21 +124,29 @@ class Command(BaseCommand):
                 + ", ".join(sorted(filled))
                 + ". Drop and recreate the database, run migrate, then seed."
             )
+        # SEC4: the admin account must not come with the public password 'admin'. That
+        # is safe only on a throwaway local box, and the DB check above already refuses
+        # anything that might be real. Use a random password, or an explicit one.
+        admin_password = settings.ADMIN_SEED_PASSWORD or secrets.token_urlsafe(18)
         self.rng = random.Random(613)
         factory.random.reseed_random(613)
         self.now = timezone.now()
         with transaction.atomic():
-            self.seed()
+            self.seed(admin_password)
+        from tests.factories.accounts import DEFAULT_PASSWORD
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"Seeded {Charity.objects.count()} charities, {User.objects.count()} users, "
-                f"{Event.objects.count()} events. Log in as admin / admin; every other "
+                f"{Event.objects.count()} events. Log in as admin / {admin_password}; every other "
                 f"user (member1, owner1, rabbi1) has password '{DEFAULT_PASSWORD}'."
             )
         )
 
-    def seed(self):
-        admin = User.objects.create_superuser("admin", "admin@example.com", "admin")
+    def seed(self, admin_password):
+        from tests import factories as f
+
+        admin = User.objects.create_superuser("admin", "admin@example.com", admin_password)
         domains = [f.DomainFactory(name=name) for name in DOMAINS]
         locations = [f.LocationFactory(name=n, region=r, country=c) for n, r, c in LOCATIONS]
 
@@ -184,6 +193,8 @@ class Command(BaseCommand):
         self.events(approved, members)
 
     def users(self, prefix, count, role):
+        from tests import factories as f
+
         made = []
         for i in range(1, count + 1):
             user = f.UserFactory(username=f"{prefix}{i}")

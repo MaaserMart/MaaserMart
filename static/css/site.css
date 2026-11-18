@@ -1,4 +1,10 @@
 /* Minimal site styling; the templates are thin and server-rendered. */
+
+/* The one brand colour, defined once (S6): links, buttons and the current-page
+   highlight all draw from it, so they cannot drift apart again. */
+:root {
+  --brand-blue: #1a4d8f;
+}
 body {
   font-family: system-ui, sans-serif;
   margin: 0;
@@ -30,7 +36,7 @@ body {
 .nav__list button {
   background: none;
   border: 0;
-  color: #1a4d8f;
+  color: var(--brand-blue);
   cursor: pointer;
   font: inherit;
   padding: 0;
@@ -121,8 +127,8 @@ body {
 }
 
 .search__submit {
-  background: #1a4f8a;
-  border: 1px solid #1a4f8a;
+  background: var(--brand-blue);
+  border: 1px solid var(--brand-blue);
   border-radius: 0.25rem;
   color: #fff;
   cursor: pointer;
@@ -212,7 +218,7 @@ body {
 }
 
 .filters__options:focus-visible {
-  outline: 2px solid #1a4d8f;
+  outline: 2px solid var(--brand-blue);
   outline-offset: 2px;
 }
 
@@ -266,8 +272,8 @@ body {
 }
 
 .filters__apply {
-  background: #1a4d8f;
-  border: 1px solid #1a4d8f;
+  background: var(--brand-blue);
+  border: 1px solid var(--brand-blue);
   border-radius: 0.25rem;
   color: #fff;
   cursor: pointer;
@@ -280,7 +286,7 @@ body {
 }
 
 .filters__clear {
-  color: #1a4d8f;
+  color: var(--brand-blue);
   font-size: 0.875rem;
 }
 
@@ -439,7 +445,7 @@ body {
 .pagination__page,
 .pagination__step {
   border-radius: 0.25rem;
-  color: #1a4f8a;
+  color: var(--brand-blue);
   display: inline-block;
   padding: 0.375rem 0.75rem;
   text-decoration: none;
@@ -456,14 +462,13 @@ body {
 }
 
 .pagination__page--current {
-  background: #1a4f8a;
+  background: var(--brand-blue);
   color: #fff;
   font-weight: 600;
 }
 
-.pagination__step[aria-disabled="true"] {
+.pagination__step--disabled {
   color: #bbb;
-  pointer-events: none;
 }
 
 /* Sort control (§6.2.5, D-048): a dropdown and two direction buttons */
@@ -503,8 +508,8 @@ body {
 
 .sort__direction--current,
 .sort__direction--current:hover {
-  background: #1a4f8a;
-  border-color: #1a4f8a;
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
   color: #fff;
 }
 
@@ -528,7 +533,6 @@ body {
   border-radius: 0.25rem;
   font: inherit;
   padding: 0.25rem 0.375rem;
-  width: 4.5rem;
 }
 
 .jump {
@@ -536,6 +540,10 @@ body {
   display: flex;
   gap: 0.5rem;
   margin-left: 0.5rem;
+}
+
+.page-size__input {
+  width: 4.5rem;
 }
 
 .jump__input {
@@ -559,6 +567,26 @@ body {
 
 .empty {
   color: #555;
+}
+
+/* Result count above the list (P5). */
+.listing__total {
+  color: #555;
+  font-size: 0.875rem;
+  margin: 0 0 0.75rem;
+}
+
+/* One visible focus ring for every control, with a light variant on the blue
+   current states (A4). */
+:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+}
+
+.sort__direction--current:focus-visible,
+.pagination__page--current:focus-visible {
+  outline-color: #fff;
+  outline-offset: -2px;
 }
 
 /* Charity page (§6.2.7, D-057): one charity in full, the same values the card
@@ -708,7 +736,7 @@ body {
 /* Skip link (A3): invisible until a keyboard user focuses it, then it is the
    first thing on the page and lands on <main>. */
 .skip-link {
-  background: #1a4d8f;
+  background: var(--brand-blue);
   border-radius: 0 0 0.25rem 0.25rem;
   color: #fff;
   left: 1rem;

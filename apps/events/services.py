@@ -3,6 +3,7 @@
 Other apps call only the functions defined here, never this app's models.
 """
 
+import logging
 from datetime import datetime, timedelta
 
 from django.db import IntegrityError, transaction
@@ -23,6 +24,8 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from .models import Event
+
+logger = logging.getLogger(__name__)
 
 # §6.4.3 Trending: events in the past week count three, events in the past month
 # count two. The two windows do not overlap, or a row from this week would be
@@ -56,6 +59,13 @@ def record_event(charity_id, action, link_id=None, user_id=None):
                 charity_id=charity_id, action=action, link_id=link_id, user_id=user_id
             )
     except IntegrityError as error:
+        logger.warning(
+            "record_event rejected: charity_id=%s action=%s link_id=%s user_id=%s",
+            charity_id,
+            action,
+            link_id,
+            user_id,
+        )
         raise ValueError(
             f"Event refers to a row that does not exist: charity_id={charity_id}, "
             f"link_id={link_id}, user_id={user_id}"
