@@ -121,6 +121,40 @@ def test_a_stray_redirect_request_records_no_event(client, populated_charity):
     assert Event.objects.count() == 0
 
 
+def test_a_refused_visit_write_still_shows_the_charity(client, populated_charity, monkeypatch):
+    """§6.2.7: "Failed writes do not fail the page."
+
+    `record_event` refuses a reference that does not exist (audit B6), which a
+    deleted account behind a live session is enough to cause. Losing the count
+    must not cost the visitor the charity.
+    """
+
+    def refuse(*args, **kwargs):
+        raise ValueError("Event refers to a row that does not exist")
+
+    monkeypatch.setattr("apps.charities.views.record_event", refuse)
+
+    response = client.get(reverse("charities:detail", args=[populated_charity.id]))
+
+    assert response.status_code == 200
+    assert escape("Keren L'Dugma") in response.content.decode()
+
+
+def test_a_refused_click_write_still_sends_the_visitor_on(client, populated_charity, monkeypatch):
+    """The same promise on the click route: the charity's own site is the point."""
+
+    def refuse(*args, **kwargs):
+        raise ValueError("Event refers to a row that does not exist")
+
+    monkeypatch.setattr("apps.charities.views.record_event", refuse)
+    link = populated_charity.links.get(kind=Link.Kind.WEBSITE_DONATE)
+
+    response = client.get(reverse("charities:link", args=[populated_charity.id, link.id]))
+
+    assert response.status_code == 302
+    assert response["Location"] == link.url
+
+
 def test_the_listing_card_links_to_the_charity_page(client, populated_charity):
     response = client.get(reverse("charities:listing"))
 
