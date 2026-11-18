@@ -73,13 +73,16 @@ def event_count(charity_ref: OuterRef) -> Expression:
     """How many EVENT rows reference one charity (§6.2.5's "most events").
 
     Every action counts: a view, a link click, a rejection and a charity update
-    are all activity. A charity with no events has no row to aggregate, so the
-    expression coalesces to 0 rather than NULL: "no events" is zero activity,
-    and Postgres would otherwise sort NULL first when ordering high to low.
+    are all activity. An event the member hid from their own history does not
+    count (D-057): hiding it is a statement that it should not be remembered,
+    not a separate flag the totals may ignore. A charity with no events has no
+    row to aggregate, so the expression coalesces to 0 rather than NULL: "no
+    events" is zero activity, and Postgres would otherwise sort NULL first when
+    ordering high to low.
     """
     return Coalesce(
         Subquery(
-            Event.objects.filter(charity=charity_ref)
+            Event.objects.filter(charity=charity_ref, hidden_by_user=False)
             .order_by()
             .values("charity")
             .annotate(total=Count("pk"))
@@ -105,7 +108,7 @@ def trending_score(charity_ref: OuterRef, *, now: datetime | None = None) -> Exp
     month_ago = now - TRENDING_MONTH
     return Coalesce(
         Subquery(
-            Event.objects.filter(charity=charity_ref, created__gte=month_ago)
+            Event.objects.filter(charity=charity_ref, created__gte=month_ago, hidden_by_user=False)
             .order_by()
             .values("charity")
             .annotate(

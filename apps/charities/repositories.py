@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
+from urllib.parse import urlsplit
 
 from django.db.models import (
     Avg,
@@ -26,18 +27,31 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce
 
+from apps.accounts import services as accounts
 from apps.charities.contracts import (
     ActivitySummary,
     CharityCard,
+    CharityLink,
+    CharityPage,
     DomainOption,
     DomainTag,
+    HaskamaEntry,
     LocationOption,
     LocationTag,
     RabbiOption,
+    ReviewEntry,
     ReviewSummary,
 )
 from apps.charities.filters import CharityFilters
-from apps.charities.models import Charity, CharityDomain, CharityLocation, Domain, Haskama, Location
+from apps.charities.models import (
+    Charity,
+    CharityDomain,
+    CharityLocation,
+    Domain,
+    Haskama,
+    Link,
+    Location,
+)
 from apps.charities.search import Search
 from apps.charities.sorting import (
     ALPHABETICAL,
@@ -52,6 +66,19 @@ from apps.charities.sorting import (
     Mechanism,
 )
 from apps.events import services as events
+
+# §5.2.14's three link kinds, in the words the charity page offers them.
+LINK_LABELS = {
+    Link.Kind.WEBSITE_DONATE: "Donate",
+    Link.Kind.WEBSITE_ABOUT: "About",
+    Link.Kind.WEBSITE_CONTACT: "Contact",
+}
+
+
+def _rabbi_label(user_id: int, rabbis: dict, members: dict) -> str:
+    """A rabbi's public identity, falling back to the account name."""
+    identity = rabbis.get(user_id)
+    return identity.label if identity else members.get(user_id, "A rabbi")
 
 
 @dataclass(frozen=True)
@@ -112,6 +139,14 @@ class CharityRepository(Protocol):
         search: Search | None = None,
     ) -> tuple[tuple[CharityCard, ...], int]:
         """Return a page and the total it came from, read as one snapshot."""
+        ...
+
+    def detail(self, charity_id: int) -> CharityPage | None:
+        """Return everything the charity page shows for one charity, or None."""
+        ...
+
+    def link_url(self, charity_id: int, link_id: int) -> str | None:
+        """Return the outbound URL of one of a charity's links, or None."""
         ...
 
 
@@ -217,6 +252,90 @@ class DjangoCharityRepository:
 
     def count(self, filters: CharityFilters | None = None, search: Search | None = None) -> int:
         return self._narrowed(filters, search=search).count()
+
+    def link_url(self, charity_id: int, link_id: int) -> str | None:
+        """The target of one of a charity's links, only if it is an http(s) URL.
+
+        A link row written outside the form path could hold any scheme, so the
+        redirect view asks for a safe target rather than trusting `URLField`.
+        """
+        url = (
+            Link.objects.filter(charity_id=charity_id, pk=link_id)
+            .values_list("url", flat=True)
+            .first()
+        )
+        if url is None or urlsplit(url).scheme.lower() not in ("http", "https"):
+            return None
+        return url
+
+    def detail(self, charity_id: int) -> CharityPage | None:
+        """Everything §6.2.7's charity page shows for one charity, or None.
+
+        The counts (reviews, haskamas, events) are the same annotations the
+        listing uses, so the page and the card cannot disagree. Author and
+        rabbi names come from accounts' services, never from its tables (D-006).
+        """
+        rows = self._annotated(reviews=True, approving=True, disapproving=True)
+        row = self._with_activity_values(rows, DEFAULT_SORT).filter(pk=charity_id).first()
+        if row is None:
+            return None
+        reviews = tuple(row.reviews.order_by("-created", "-id"))
+        haskamas = tuple(row.haskamas.order_by("-updated", "-id"))
+        members = accounts.usernames(
+            [review.author_id for review in reviews]
+            + [haskama.rabbi_user_id for haskama in haskamas]
+        )
+        rabbis = accounts.rabbi_identities(haskama.rabbi_user_id for haskama in haskamas)
+        return CharityPage(
+            id=row.id,
+            name=row.name,
+            tagline=row.tagline,
+            description=row.description,
+            image=row.image,
+            domains=tuple(DomainTag(name=domain.name) for domain in row.domains.all()),
+            locations=tuple(
+                LocationTag(name=loc.name, region=loc.region, country=loc.country)
+                for loc in row.locations.all()
+            ),
+            links=tuple(
+                CharityLink(
+                    id=link.id,
+                    kind=link.kind,
+                    label=LINK_LABELS.get(link.kind, link.get_kind_display()),
+                    url=link.url,
+                )
+                for link in row.links.order_by("kind")
+            ),
+            reviews=tuple(
+                ReviewEntry(
+                    # A deleted account leaves the review; it is shown as anonymous.
+                    author=members.get(review.author_id, "A member"),
+                    rating=review.rating,
+                    body=review.body,
+                    created=review.created,
+                )
+                for review in reviews
+            ),
+            review_summary=ReviewSummary(count=row.review_count, average=row.average_rating),
+            haskamas=tuple(
+                HaskamaEntry(
+                    rabbi=_rabbi_label(haskama.rabbi_user_id, rabbis, members),
+                    approving=haskama.verdict == Haskama.Verdict.APPROVE,
+                    importance=haskama.importance,
+                    body=haskama.body or "",
+                    updated=haskama.updated,
+                )
+                for haskama in haskamas
+            ),
+            approving_haskamas=row.approving_haskamas,
+            disapproving_haskamas=row.disapproving_haskamas,
+            activity=ActivitySummary(
+                events=row.event_count,
+                approving_haskamas=row.approving_haskamas,
+                last_changed=row.last_changed,
+            ),
+            is_visible=row.is_visible,
+        )
 
     def page_and_count(
         self,
@@ -393,10 +512,13 @@ class DjangoFilterOptionsRepository:
         )
 
     def rabbis(self) -> tuple[RabbiOption, ...]:
-        """Empty for now: the rabbi list belongs to accounts (§6.1, D-045).
+        """The rabbis the Haskamos group offers (§6.2.4, D-045).
 
-        `HASKAMA` is read in its real shape, but a rabbi's public identity comes
-        from `accounts.services.search_rabbis`, which does not exist yet. When it
-        lands, this method returns its results and no other code changes.
+        A rabbi's public identity lives in accounts (§6.1), so this asks its
+        service rather than reading RABBI_PROFILE. The ids are user ids, which
+        is what HASKAMA stores and the filter compares (audit Q3).
         """
-        return ()
+        return tuple(
+            RabbiOption(id=rabbi.user_id, display_name=rabbi.display_name, title=rabbi.title)
+            for rabbi in accounts.search_rabbis()
+        )

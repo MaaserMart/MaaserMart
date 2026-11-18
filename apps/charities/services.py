@@ -11,7 +11,7 @@ from django.db import transaction
 
 from apps.events.services import record_event
 
-from .contracts import CharityCard, DomainOption, LocationOption, RabbiOption
+from .contracts import CharityCard, CharityPage, DomainOption, LocationOption, RabbiOption
 from .filters import CharityFilters, FilterForm, sidebar_groups
 from .filters import query_pairs as filter_query_pairs
 from .models import Charity
@@ -275,6 +275,21 @@ def list_charities(
         search_pairs=search_query_pairs(search),
         filter_pairs=filter_query_pairs(filters),
     )
+
+
+# --- Charity page ------------------------------------------------------------
+# §6.2.7's page shows one charity in full. It is read through the repository so
+# the page and the listing cards compute the same derived values (D-044, D-051).
+
+
+def get_charity_page(repository: CharityRepository, charity_id: int) -> CharityPage | None:
+    """One charity in full, or None when no row has that id."""
+    return repository.detail(charity_id)
+
+
+def get_link_url(repository: CharityRepository, charity_id: int, link_id: int) -> str | None:
+    """The safe target of one of a charity's links, or None."""
+    return repository.link_url(charity_id, link_id)
 
 
 # --- Filter sidebar ----------------------------------------------------------

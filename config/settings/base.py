@@ -56,6 +56,8 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                # The nav's links: only what a URL pattern actually resolves (B1).
+                "apps.support.context_processors.nav",
             ],
         },
     },
