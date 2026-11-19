@@ -6,6 +6,7 @@ table is empty (D-030).
 """
 
 import random
+import uuid
 from datetime import timedelta
 
 import factory.random
@@ -95,6 +96,11 @@ NAMES = [f"{prefix} {word}" for prefix in NAME_PREFIXES for word in NAME_WORDS]
 # Repo-relative paths, so the template serves them through {% static %}.
 IMAGE_PATHS = [f"charities/img/charity-{index:02d}.svg" for index in range(1, 13)]
 APPROVED, PENDING = 185, 15
+# Requests submitted together share one batch (§5.2.5), and the admin queue
+# decides a whole batch at once (§7.1.6). Batching the seed the same way gives
+# that screen something real to work on in dev (D-055, superseding D-006's own
+# single-request batches).
+BATCH_SIZE = 10
 MEMBERS, OWNERS, RABBIS = 100, 30, 10
 EVENTS = 8000
 
@@ -141,6 +147,8 @@ class Command(BaseCommand):
         for rabbi in rabbis:
             f.RabbiProfileFactory(user=rabbi)
 
+        # One batch id per group of requests, so the queue can decide several at once.
+        batch_ids = [uuid.uuid4() for _ in range(-(-(APPROVED + PENDING) // BATCH_SIZE))]
         charities = []
         names = self.rng.sample(NAMES, APPROVED + PENDING)
         for i, name in enumerate(names):
@@ -156,6 +164,7 @@ class Command(BaseCommand):
                 approval_request__submitted_by=self.rng.choice(owners),
                 approval_request__status=Status.APPROVED if approved else Status.PENDING,
                 approval_request__decided_by=admin if approved else None,
+                approval_request__batch_id=batch_ids[i // BATCH_SIZE],
             )
             if approved:
                 # Through the service, as approvals will do, so it records its event (D-038).

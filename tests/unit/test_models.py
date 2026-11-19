@@ -2,8 +2,11 @@
 
 import pytest
 from django.db import IntegrityError
+from django.utils import timezone
 
 from apps.approvals.models import ApprovalRequest, EditRequest
+from apps.charities.models import Charity
+from apps.tools.models import Transaction
 from tests.factories import (
     ApprovalRequestFactory,
     CharityFactory,
@@ -75,3 +78,41 @@ def test_one_link_per_kind_per_charity():
     LinkFactory(charity=link.charity, kind="website_about")
     with pytest.raises(IntegrityError):
         LinkFactory(charity=link.charity, kind="website_donate")
+
+
+def test_one_review_per_member_per_charity():
+    """§8.6, UC-05: a member reviews a charity once (D-055)."""
+    review = ReviewFactory()
+    with pytest.raises(IntegrityError):
+        ReviewFactory(charity=review.charity, author=review.author)
+
+
+def test_a_member_may_review_several_charities():
+    author = UserFactory()
+    ReviewFactory(author=author)
+    ReviewFactory(author=author)
+
+
+@pytest.mark.parametrize("amount", [0, -5])
+def test_transaction_amount_must_be_positive(amount):
+    """A maaser ledger line is a real amount of money (D-055)."""
+    with pytest.raises(IntegrityError):
+        Transaction.objects.create(user=UserFactory(), type=Transaction.Type.INCOME, amount=amount)
+
+
+def test_transaction_date_defaults_to_today():
+    transaction = Transaction.objects.create(
+        user=UserFactory(), type=Transaction.Type.INCOME, amount="100.00"
+    )
+    assert transaction.date == timezone.localdate()
+
+
+def test_the_listing_columns_are_indexed():
+    """The default and `newest` orders sort by columns nothing else indexes (D-055)."""
+    indexed = {",".join(index.fields) for index in Charity._meta.indexes}
+    assert {"name,id", "created"} <= indexed
+
+
+def test_pending_requests_can_be_read_by_batch():
+    indexed = {",".join(index.fields) for index in ApprovalRequest._meta.indexes}
+    assert "batch_id,status" in indexed

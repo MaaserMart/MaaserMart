@@ -5,6 +5,7 @@ Other apps call only the functions defined here, never this app's models.
 
 from datetime import datetime, timedelta
 
+from django.db import IntegrityError, transaction
 from django.db.models import (
     Count,
     DateTimeField,
@@ -33,10 +34,32 @@ TRENDING_MONTH = timedelta(days=30)
 
 
 def record_event(charity_id, action, link_id=None, user_id=None):
-    """Record one EVENT (§6.1). `action` must be one of Event.Action's values."""
+    """Record one EVENT (§6.1). `action` must be one of Event.Action's values.
+
+    A reference to a charity or a link that does not exist becomes a
+    `ValueError` naming what was passed, not a raw `IntegrityError` from the
+    foreign key (audit B6): the caller gets the same kind of error as a bad
+    action, with the id that was wrong in it.
+
+    Django creates foreign keys DEFERRABLE INITIALLY DEFERRED on PostgreSQL, so
+    when this runs inside a caller's transaction the check happens at that
+    outer commit and cannot be caught here. The callers that exist today
+    (`publish_charity`, `hide_charity`, `update_charity`) look the charity up
+    first, so a bad id never reaches this function from them; the guard covers
+    a direct call, which commits on its own.
+    """
     if action not in Event.Action.values:
         raise ValueError(f"Unknown event action {action!r}")
-    Event.objects.create(charity_id=charity_id, action=action, link_id=link_id, user_id=user_id)
+    try:
+        with transaction.atomic():
+            return Event.objects.create(
+                charity_id=charity_id, action=action, link_id=link_id, user_id=user_id
+            )
+    except IntegrityError as error:
+        raise ValueError(
+            f"Event refers to a row that does not exist: charity_id={charity_id}, "
+            f"link_id={link_id}, user_id={user_id}"
+        ) from error
 
 
 # --- Activity reads ----------------------------------------------------------

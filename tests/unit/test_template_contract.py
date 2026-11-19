@@ -89,10 +89,9 @@ class ListingTemplateContractTest(TestCase):
         self.assertIn("Lakewood", body)
 
     def test_review_summary_renders(self) -> None:
-        author = UserFactory()
         charity = Charity.objects.create(name="Keren L'Dugma")
         for rating in (4, 5):
-            Review.objects.create(charity=charity, author=author, rating=rating)
+            Review.objects.create(charity=charity, author=UserFactory(), rating=rating)
 
         body = self._render_single_charity()
 

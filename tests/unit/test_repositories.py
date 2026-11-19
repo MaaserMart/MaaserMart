@@ -86,10 +86,10 @@ class DjangoCharityRepositoryTest(TestCase):
 
     def test_maps_review_average_and_count(self) -> None:
         """§5.3: the average rating is derived from the reviews, not stored."""
-        author = UserFactory()
         charity = Charity.objects.create(name="Keren L'Dugma")
         for rating in (2, 4, 5):
-            Review.objects.create(charity=charity, author=author, rating=rating)
+            # One review per member per charity (D-055), so each rating has its own author.
+            Review.objects.create(charity=charity, author=UserFactory(), rating=rating)
 
         card = self.repository.page(filters=self.no_filters, offset=0, limit=1)[0]
 
@@ -169,3 +169,29 @@ class PublishedOnlyTest(TestCase):
             [c.name for c in repository.page(0, 10, CharityFilters())], ["Visible One"]
         )
         self.assertEqual(repository.count(CharityFilters()), 1)
+
+
+class PageAndCountTest(TestCase):
+    """The page and its total come from one read, so they see one snapshot (audit B3)."""
+
+    def setUp(self) -> None:
+        self.repository = DjangoCharityRepository()
+        for index in range(1, 31):
+            Charity.objects.create(name=f"Charity {index:02d}")
+
+    def test_reports_the_page_and_its_total(self) -> None:
+        cards, total = self.repository.page_and_count(offset=10, limit=10)
+
+        self.assertEqual(total, 30)
+        self.assertEqual([card.name for card in cards][0], "Charity 11")
+        self.assertEqual(len(cards), 10)
+
+    def test_the_page_costs_one_query_plus_the_prefetches(self) -> None:
+        with self.assertNumQueries(3):  # page, domains, locations
+            self.repository.page_and_count(offset=0, limit=10)
+
+    def test_a_window_past_the_end_still_reports_the_total(self) -> None:
+        cards, total = self.repository.page_and_count(offset=500, limit=10)
+
+        self.assertEqual(cards, ())
+        self.assertEqual(total, 30)

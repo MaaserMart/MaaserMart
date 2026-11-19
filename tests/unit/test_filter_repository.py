@@ -117,9 +117,9 @@ class MinRatingFilterTest(TestCase):
     def setUp(self) -> None:
         self.rated = Charity.objects.create(name="Rated")
         self.unrated = Charity.objects.create(name="Unrated")
-        author = UserFactory()
+        # One review per member per charity (D-055).
         for rating in (5, 4):
-            Review.objects.create(charity=self.rated, author=author, rating=rating)
+            Review.objects.create(charity=self.rated, author=UserFactory(), rating=rating)
 
     def test_filters_by_average_star_rating(self) -> None:
         cards = self._page(min_rating=4)
@@ -150,9 +150,8 @@ class MinReviewsFilterTest(TestCase):
     def test_counts_reviews(self) -> None:
         busy = Charity.objects.create(name="Busy")
         Charity.objects.create(name="Quiet")
-        author = UserFactory()
-        Review.objects.create(charity=busy, author=author, rating=5)
-        Review.objects.create(charity=busy, author=author, rating=3)
+        Review.objects.create(charity=busy, author=UserFactory(), rating=5)
+        Review.objects.create(charity=busy, author=UserFactory(), rating=3)
 
         cards = DjangoCharityRepository().page(0, 10, CharityFilters(min_reviews=2))
 
@@ -215,9 +214,8 @@ class CombinedFiltersTest(TestCase):
         also_in_food = Charity.objects.create(name="In food, poorly rated")
         in_food.domains.add(food)
         also_in_food.domains.add(food)
-        author = UserFactory()
-        Review.objects.create(charity=in_food, author=author, rating=5)
-        Review.objects.create(charity=also_in_food, author=author, rating=2)
+        Review.objects.create(charity=in_food, author=UserFactory(), rating=5)
+        Review.objects.create(charity=also_in_food, author=UserFactory(), rating=2)
 
         cards = DjangoCharityRepository().page(
             0, 10, CharityFilters(domains=(food.id,), min_rating=4)
@@ -230,10 +228,9 @@ class CombinedFiltersTest(TestCase):
         charity = Charity.objects.create(name="Alpha")
         other = Charity.objects.create(name="Beta")
         charity.domains.add(food)
-        author = UserFactory()
         for rating in (5, 5):
-            Review.objects.create(charity=charity, author=author, rating=rating)
-        Review.objects.create(charity=other, author=author, rating=5)
+            Review.objects.create(charity=charity, author=UserFactory(), rating=rating)
+        Review.objects.create(charity=other, author=UserFactory(), rating=5)
 
         cards = DjangoCharityRepository().page(
             0, 10, CharityFilters(domains=(food.id,), min_rating=5, min_reviews=2)
@@ -284,8 +281,7 @@ class RatingClampTest(TestCase):
     def setUp(self) -> None:
         self.rated = Charity.objects.create(name="Rated")
         self.unrated = Charity.objects.create(name="Unrated")
-        author = UserFactory()
-        Review.objects.create(charity=self.rated, author=author, rating=5)
+        Review.objects.create(charity=self.rated, author=UserFactory(), rating=5)
 
     def test_from_query_clamps_above_the_scale_to_five(self) -> None:
         filters = from_query(QueryDict("min_rating=99"))

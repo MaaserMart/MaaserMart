@@ -4,8 +4,9 @@ Other apps call only the functions defined here, never this app's models.
 """
 
 from dataclasses import dataclass
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
+from django.conf import settings
 from django.db import transaction
 
 from apps.events.services import record_event
@@ -23,6 +24,67 @@ from .sorting import query_pairs as sort_query_pairs
 # The charity fields a save may change. `is_visible` stays out: it changes only
 # through publish/hide, so a caller cannot flip visibility by passing it here.
 EDITABLE_FIELDS = ("name", "tagline", "description", "image")
+
+# Fields whose "absent" value is NULL, not "" (D-013, audit D5). A form submits
+# an empty string for a cleared box, and storing it would give one meaning two
+# encodings, so both entry points normalise before the row is written.
+NULLABLE_FIELDS = ("tagline", "description", "image")
+
+IMAGE_SCHEMES = ("http", "https")
+
+
+def validate_image(value: str | None) -> str | None:
+    """Return an image value the card can render, or refuse it (audit B8).
+
+    Two shapes are allowed: a repo-relative path under `static/` (what D-043's
+    seed writes) and an absolute http(s) URL on a host listed in
+    `settings.CHARITY_IMAGE_HOSTS`. Anything else is refused at write time, so
+    the template never has to guess and a card never loads an arbitrary
+    third-party image or a path that escapes `static/`.
+    """
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    parts = urlsplit(value)
+    if parts.scheme:
+        if parts.scheme.lower() not in IMAGE_SCHEMES or not parts.netloc:
+            raise ValueError(f"Charity image must be an http(s) URL or a static path: {value!r}")
+        if not _image_host_allowed(parts.hostname or ""):
+            raise ValueError(
+                f"Charity image host {parts.hostname!r} is not in CHARITY_IMAGE_HOSTS: {value!r}"
+            )
+        return value
+    if value.startswith(("/", "\\")) or ".." in value.split("/"):
+        raise ValueError(f"Charity image must not leave static/: {value!r}")
+    if ":" in value:
+        raise ValueError(f"Charity image is neither a URL nor a path: {value!r}")
+    return value
+
+
+def _image_host_allowed(hostname: str) -> bool:
+    """Whether `hostname` is on the configured image allowlist.
+
+    An entry starting with "." allows any subdomain (".example.com"). An empty
+    list allows no external image at all, which is the safe default.
+    """
+    hostname = hostname.lower()
+    hosts = [host.lower() for host in getattr(settings, "CHARITY_IMAGE_HOSTS", ())]
+    return any(
+        hostname == host or (host.startswith(".") and hostname.endswith(host)) for host in hosts
+    )
+
+
+def _clean_value(field: str, value):
+    """Normalise one field value at the entry point: trim, and "" becomes NULL."""
+    if isinstance(value, str):
+        value = value.strip()
+        if field in NULLABLE_FIELDS and not value:
+            return None
+    if field == "image":
+        return validate_image(value)
+    return value
 
 
 def publish_charity(charity_id, by_user_id=None):
@@ -47,6 +109,7 @@ def update_charity(charity_id, by_user_id=None, **changes):
     unknown = set(changes) - set(EDITABLE_FIELDS)
     if unknown:
         raise ValueError(f"Not an editable charity field: {', '.join(sorted(unknown))}")
+    changes = {field: _clean_value(field, value) for field, value in changes.items()}
     with transaction.atomic():
         charity = Charity.objects.select_for_update().filter(pk=charity_id).first()
         if charity is None:
@@ -181,15 +244,30 @@ def list_charities(
     filters = filters or CharityFilters()
     search = search or Search()
     page_size = clamp_page_size(page_size)
-    total = repository.count(filters, search=search)
+    # One query answers the page and its total (see `page_and_count`), so a row
+    # inserted between two statements cannot make a charity repeat or vanish
+    # across a page boundary (audit B3).
+    items, total = repository.page_and_count(
+        offset=(max(1, page or 1) - 1) * page_size,
+        limit=page_size,
+        filters=filters,
+        sort=sort,
+        search=search,
+    )
     count = page_count(total, page_size)
     number = max(1, min(page or 1, count))
-    offset = (number - 1) * page_size
+    if number != max(1, page or 1) and total:
+        # The requested page was past the end; only then is a second read needed.
+        items = repository.page(
+            offset=(number - 1) * page_size,
+            limit=page_size,
+            filters=filters,
+            sort=sort,
+            search=search,
+        )
 
     return Page(
-        items=repository.page(
-            offset=offset, limit=page_size, filters=filters, sort=sort, search=search
-        ),
+        items=items,
         total=total,
         number=number,
         page_size=page_size,

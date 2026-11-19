@@ -2,7 +2,7 @@
 
 import re
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from apps.accounts.models import User
@@ -145,14 +145,32 @@ class ListingPageTest(TestCase):
 
         self.assertContains(response, "/static/charities/img/charity-01.svg")
 
-    def test_absolute_image_url_is_not_wrapped_in_static(self) -> None:
-        # Seed data stores a full URL (D-024); {% static %} would mangle it into a 404.
+    @override_settings(CHARITY_IMAGE_HOSTS=["placehold.co"])
+    def test_allowed_absolute_image_url_is_not_wrapped_in_static(self) -> None:
+        # An allowlisted host is used verbatim; {% static %} would mangle it into a 404 (B8).
         Charity.objects.create(name="Keren L'Dugma", image="https://placehold.co/600x400.png")
 
         response = self.client.get(self.url)
 
         self.assertContains(response, 'src="https://placehold.co/600x400.png"')
         self.assertNotContains(response, "/static/https")
+
+    def test_unlisted_image_host_renders_no_image(self) -> None:
+        """A card never loads an arbitrary third-party image (B8)."""
+        Charity.objects.create(name="Keren L'Dugma", image="https://tracker.example/pixel.png")
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "charity-card__image--empty")
+        self.assertNotContains(response, "tracker.example")
+
+    def test_path_that_leaves_static_renders_no_image(self) -> None:
+        Charity.objects.create(name="Keren L'Dugma", image="../../secret/pixel.png")
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "charity-card__image--empty")
+        self.assertNotContains(response, "secret")
 
     def test_next_link_is_html_escaped(self) -> None:
         for index in range(1, 4):

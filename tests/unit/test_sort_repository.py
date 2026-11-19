@@ -95,15 +95,15 @@ class RatingSortTest(SortTest):
 
     def setUp(self) -> None:
         super().setUp()
-        author = UserFactory()
         self.top = make_charity("Alpha")
         self.mid = make_charity("Beta")
         self.low = make_charity("Gamma")
         self.unrated = make_charity("Delta")
         # Alpha 5.0, Beta 4.5, Gamma 3.0. Delta has no reviews, so no average.
+        # One review per member per charity (D-055), so each rating gets its own author.
         for charity, ratings in ((self.top, (5,)), (self.mid, (4, 5)), (self.low, (3,))):
             for rating in ratings:
-                Review.objects.create(charity=charity, author=author, rating=rating)
+                Review.objects.create(charity=charity, author=UserFactory(), rating=rating)
 
     def test_high_to_low_is_the_default(self) -> None:
         self.assertEqual(
