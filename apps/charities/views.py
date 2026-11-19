@@ -8,6 +8,8 @@ from django.shortcuts import render
 from .filters import from_query as read_filters
 from .filters import keep_known_ids, requested_numbers
 from .repositories import DjangoCharityRepository, DjangoFilterOptionsRepository
+from .search import from_query as read_search
+from .search import search_form
 from .services import (
     Page,
     filter_form,
@@ -32,8 +34,9 @@ def _positive_int(raw: str | None) -> int | None:
 
 
 def listing(request: HttpRequest) -> HttpResponse:
-    """Render the paginated list of charities, narrowed and ordered as chosen."""
+    """Render the paginated list of charities, searched, narrowed and ordered as chosen."""
     sort = read_sort(request.GET)
+    search = read_search(request.GET)
     options_repository = DjangoFilterOptionsRepository()
     # Keyed by the list each group draws from, not by URL parameter.
     options = {
@@ -52,6 +55,7 @@ def listing(request: HttpRequest) -> HttpResponse:
         sort=sort,
         page=_positive_int(request.GET.get("page")),
         page_size=_positive_int(request.GET.get("page_size")),
+        search=search,
     )
     form = filter_form(
         filters,
@@ -62,5 +66,10 @@ def listing(request: HttpRequest) -> HttpResponse:
     return render(
         request,
         "charities/listing.html",
-        {"page": page, "form": form, "sort_form": sort_form(sort)},
+        {
+            "page": page,
+            "form": form,
+            "sort_form": sort_form(sort),
+            "search_form": search_form(search),
+        },
     )

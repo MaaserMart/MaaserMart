@@ -27,11 +27,13 @@ class FakeRepository:
     def __init__(self) -> None:
         self.seen: list[CharityFilters] = []
 
-    def page(self, offset, limit, filters, sort=DEFAULT_SORT) -> tuple[CharityCard, ...]:
+    def page(
+        self, offset, limit, filters, sort=DEFAULT_SORT, search=None
+    ) -> tuple[CharityCard, ...]:
         self.seen.append(filters)
         return ()
 
-    def count(self, filters) -> int:
+    def count(self, filters, search=None) -> int:
         self.seen.append(filters)
         return 0
 

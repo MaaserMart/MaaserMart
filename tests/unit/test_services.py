@@ -15,6 +15,7 @@ from apps.charities.contracts import (
     ReviewSummary,
 )
 from apps.charities.filters import CharityFilters
+from apps.charities.search import Search
 from apps.charities.services import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
@@ -44,6 +45,7 @@ class FakeCharityRepository:
     def __init__(self, names: list[str]) -> None:
         self._cards = tuple(card(name) for name in sorted(names))
         self.requested_sort = None
+        self.requested_search = None
 
     def page(
         self,
@@ -51,11 +53,13 @@ class FakeCharityRepository:
         limit: int,
         filters: CharityFilters | None = None,
         sort: CharitySort = DEFAULT_SORT,
+        search: Search | None = None,
     ) -> tuple[CharityCard, ...]:
         self.requested_sort = sort
+        self.requested_search = search
         return self._cards[offset : offset + limit]
 
-    def count(self, filters: CharityFilters | None = None) -> int:
+    def count(self, filters: CharityFilters | None = None, search: Search | None = None) -> int:
         return len(self._cards)
 
 
@@ -146,6 +150,37 @@ class ListCharitiesSortTest(SimpleTestCase):
 
         self.assertEqual(repository.requested_sort, sort)
         self.assertEqual(page.sort, sort)
+
+
+class ListCharitiesSearchTest(SimpleTestCase):
+    """§6.2.6: the search is one more narrowing of the same result set."""
+
+    def test_no_search_is_an_empty_search(self) -> None:
+        repository = FakeCharityRepository(["Zohar Fund"])
+
+        page = list_charities(repository)
+
+        self.assertEqual(repository.requested_search, Search())
+        self.assertEqual(page.search_pairs, ())
+
+    def test_the_search_reaches_the_repository(self) -> None:
+        repository = FakeCharityRepository(["Zohar Fund"])
+        search = Search(term="zohar", tagline=True)
+
+        list_charities(repository, search=search)
+
+        self.assertEqual(repository.requested_search, search)
+
+    def test_the_search_is_replayed_by_every_page_link(self) -> None:
+        """A page of a search is still that search (§6.2.6), so links must carry it."""
+        repository = FakeCharityRepository([f"Charity {index:02d}" for index in range(1, 6)])
+
+        page = list_charities(repository, search=Search(term="chessed"), page_size=2)
+
+        self.assertEqual(page.search_pairs, (("q", "chessed"),))
+        self.assertIn("q=chessed", page.next_query)
+        self.assertIn("q=chessed", page.previous_query)
+        self.assertIn("q=chessed", page.clear_filters_query)
 
 
 class ClampPageSizeTest(SimpleTestCase):
