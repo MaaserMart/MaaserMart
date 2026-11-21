@@ -195,3 +195,31 @@ class PageAndCountTest(TestCase):
 
         self.assertEqual(cards, ())
         self.assertEqual(total, 30)
+
+
+class HiddenEventTest(TestCase):
+    """An event the member hid counts for nothing (D-057, audit M9)."""
+
+    def test_hidden_events_are_not_counted_as_activity(self) -> None:
+        charity = Charity.objects.create(name="Keren L'Dugma")
+        Event.objects.create(charity=charity, action=Event.Action.VIEW)
+        Event.objects.create(charity=charity, action=Event.Action.VIEW, hidden_by_user=True)
+
+        card = DjangoCharityRepository().page(0, 10)[0]
+
+        self.assertEqual(card.activity.events, 1)
+
+    def test_hidden_events_do_not_raise_the_trending_score(self) -> None:
+        from apps.charities.sorting import TRENDING
+        from apps.charities.sorting import CharitySort as Sort
+
+        shown = Charity.objects.create(name="Shown")
+        hidden = Charity.objects.create(name="Hidden")
+        Event.objects.create(charity=shown, action=Event.Action.VIEW)
+        Event.objects.create(charity=hidden, action=Event.Action.VIEW, hidden_by_user=True)
+
+        cards = DjangoCharityRepository().page(
+            0, 10, sort=Sort(mechanism=TRENDING, descending=True)
+        )
+
+        self.assertEqual([card.name for card in cards], ["Shown", "Hidden"])

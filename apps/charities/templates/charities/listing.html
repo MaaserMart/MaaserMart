@@ -46,8 +46,7 @@
         <ul class="charity-list">
           {% for charity in page.items %}
             <li>
-              {# TODO(comtai): point at the charity page once that bullet exists. #}
-              <a class="charity-card" href="#">
+              <a class="charity-card" href="{% url 'charities:detail' charity.id %}">
                 {# One filter decides the src, so an absolute URL and a repo path cannot be confused (B8). #}
                 {% with image=charity.image|image_src %}
                   {% if image %}

@@ -299,11 +299,9 @@ NONE_NOTES: dict[str, str] = {
     "max_disapproving_haskamas": "Leave blank for no limit.",
 }
 
-EMPTY_NOTES: dict[str, str] = {
-    # D-045: the group is real but its options come from accounts, which has no
-    # rabbi search yet. Saying so beats an empty box that looks broken.
-    "haskama_rabbi": "Rabbi search is not available yet.",
-}
+# No group has special text today: the rabbi list now comes from
+# accounts.services.search_rabbis (D-058), so an empty group is just empty.
+EMPTY_NOTES: dict[str, str] = {}
 
 
 def sidebar_groups(

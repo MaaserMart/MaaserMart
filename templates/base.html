@@ -8,30 +8,38 @@
   <script src="{% static 'vendor/htmx-2.0.4.min.js' %}"></script>
   <script defer src="{% static 'vendor/alpinejs-3.14.8.min.js' %}"></script>
 </head>
-<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-  {# Nav bar from design doc §7.2. Paths follow D-009; pages arrive with their features. #}
-  <nav class="nav">
+<body>
+  {# A11y: the first thing on the page is a way past the eight-item nav (A3). #}
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  {# Nav bar from design doc §7.2. Every link is built from a URL pattern, so #}
+  {# a route that does not exist yet is not advertised (B1, S4). #}
+  <nav class="nav" aria-label="Main">
     <ul class="nav__list">
-      <li><a href="/charity/">Charities</a></li>
-      <li><a href="/charity/add/">Request a charity</a></li>
-      <li><a href="/support/report/">Report a charity</a></li>
-      <li><a href="/tools/">Maaser tools</a></li>
-      <li><a href="/dashboard/">Dashboard</a></li>
-      <li><a href="/support/help/">Help</a></li>
+      {% for destination in nav.destinations %}
+        <li><a href="{{ destination.url }}">{{ destination.label }}</a></li>
+      {% endfor %}
+
       {% if user.is_authenticated %}
-        <li>
-          <form method="post" action="/accounts/logout/">
-            {% csrf_token %}
-            <button type="submit">Log out</button>
-          </form>
-        </li>
+        {% if nav.logout_url %}
+          <li>
+            <form method="post" action="{{ nav.logout_url }}">
+              {% csrf_token %}
+              <button type="submit">Log out</button>
+            </form>
+          </li>
+        {% endif %}
       {% else %}
-        <li><a href="/accounts/login/">Log in</a></li>
-        <li><a href="/accounts/signup/">Sign up</a></li>
+        {% if nav.login_url %}
+          <li><a href="{{ nav.login_url }}">Log in</a></li>
+        {% endif %}
+        {% if nav.signup_url %}
+          <li><a href="{{ nav.signup_url }}">Sign up</a></li>
+        {% endif %}
       {% endif %}
     </ul>
   </nav>
-  <main>
+  <main id="main" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
 </body>
