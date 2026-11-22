@@ -24,20 +24,27 @@ GOOD_ENV = {
 }
 
 
-def _import_prod(**overrides) -> subprocess.CompletedProcess:
-    """Import `config.settings.prod` in a clean interpreter and report the result."""
-    env = {key: value for key, value in os.environ.items() if not key.startswith("DJANGO_")}
+def _run_script(snippet: str, **overrides) -> subprocess.CompletedProcess:
+    """Run Python in a clean interpreter with production's environment."""
+    env = {
+        key: value for key, value in os.environ.items() if not key.startswith(("DJANGO_", "RDS_"))
+    }
     env["DJANGO_LOG_DIR"] = str(BASE_DIR / "logs")
     env.update(GOOD_ENV)
     env.update(overrides)
     return subprocess.run(
-        [sys.executable, "-c", "import config.settings.prod"],
+        [sys.executable, "-c", snippet],
         cwd=BASE_DIR,
         env=env,
         capture_output=True,
         text=True,
         check=False,
     )
+
+
+def _import_prod(**overrides) -> subprocess.CompletedProcess:
+    """Import `config.settings.prod` in a clean interpreter and report the result."""
+    return _run_script("import config.settings.prod", **overrides)
 
 
 def test_prod_settings_import_with_a_real_secret():
@@ -96,6 +103,34 @@ def test_prod_serves_a_csp_and_preload_hsts(tmp_path):
     assert preload == "True"
     assert middleware == "True"
     assert storage == "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
+
+
+def test_prod_checks_the_rds_instance_before_the_session_reads_it():
+    """D-070: the gate must run before anything whose first act is a query."""
+    snippet = (
+        "import config.settings.prod as s\n"
+        "gate = 'apps.support.middleware.DatabaseWakeMiddleware'\n"
+        "print(gate in s.MIDDLEWARE)\n"
+        "print(s.MIDDLEWARE.index(gate)"
+        " < s.MIDDLEWARE.index('django.contrib.sessions.middleware.SessionMiddleware'))\n"
+    )
+    result = _run_script(snippet, RDS_INSTANCE_ID="maasermart-db")
+
+    assert result.returncode == 0, result.stderr
+    installed, before_session = result.stdout.strip().splitlines()
+    assert installed == "True"
+    assert before_session == "True"
+
+
+def test_prod_calls_no_aws_api_without_an_instance_identifier():
+    """Unset means local Postgres, and the app never talks to AWS about it."""
+    result = _run_script(
+        "import config.settings.prod as s; "
+        "print('apps.support.middleware.DatabaseWakeMiddleware' in s.MIDDLEWARE)"
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "False"
 
 
 def test_the_celery_app_is_configured_and_discovers_no_tasks_yet():

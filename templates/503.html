@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}The database is waking up{% endblock %}
+
+{# The instance comes up on its own schedule, minutes after the request that
+   started it ended, so the page asks to be reloaded instead of holding the
+   connection open (D-070). #}
+{% block extra_head %}<meta http-equiv="refresh" content="{{ retry_after }}">{% endblock %}
+
+{% block content %}
+  <h1>The database is waking up</h1>
+  <p>
+    MaaserMart's database was stopped because nobody had used it for a while.
+    It is starting now, which usually takes a few minutes.
+  </p>
+  <p>
+    This page reloads itself every {{ retry_after }} seconds. If it stops doing
+    that, reload it yourself in a minute.
+  </p>
+{% endblock %}

@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# Pages that need something in the head (503's meta refresh, D-070). #}
+  {% block extra_head %}{% endblock %}
   <title>{% block title %}MaaserMart{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'css/site.css' %}">
   {# Htmx is unused today; `defer` keeps it from blocking first paint (P2). #}
