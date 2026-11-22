@@ -3,6 +3,7 @@
 Other apps call only the functions defined here, never this app's models.
 """
 
+import logging
 from dataclasses import dataclass
 from urllib.parse import urlencode, urlsplit
 
@@ -15,11 +16,13 @@ from .contracts import CharityCard, CharityPage, DomainOption, LocationOption, R
 from .filters import CharityFilters, FilterForm, sidebar_groups
 from .filters import query_pairs as filter_query_pairs
 from .models import Charity
-from .repositories import CharityRepository
+from .repositories import CharityRepository, FilterOptionsRepository
 from .search import Search
 from .search import query_pairs as search_query_pairs
 from .sorting import DEFAULT_SORT, CharitySort
 from .sorting import query_pairs as sort_query_pairs
+
+logger = logging.getLogger(__name__)
 
 # The charity fields a save may change. `is_visible` stays out: it changes only
 # through publish/hide, so a caller cannot flip visibility by passing it here.
@@ -108,6 +111,9 @@ def update_charity(charity_id, by_user_id=None, **changes):
     """
     unknown = set(changes) - set(EDITABLE_FIELDS)
     if unknown:
+        logger.error(
+            "update_charity refused for charity %s: unknown fields %s", charity_id, sorted(unknown)
+        )
         raise ValueError(f"Not an editable charity field: {', '.join(sorted(unknown))}")
     changes = {field: _clean_value(field, value) for field, value in changes.items()}
     with transaction.atomic():
@@ -206,6 +212,26 @@ class Page:
         return self.query(self.number + 1)
 
     @property
+    def can_jump_to_first(self) -> bool:
+        """Whether the first page is far enough to warrant a jump link (P5)."""
+        return self.number > 3
+
+    @property
+    def can_jump_to_last(self) -> bool:
+        """Whether the last page is far enough to warrant a jump link (P5)."""
+        return self.page_count - self.number > 2
+
+    @property
+    def first_query(self) -> str:
+        """The first page of this same result set, for a jump link (audit P5)."""
+        return self.query(1)
+
+    @property
+    def last_query(self) -> str:
+        """The last page of this same result set, for a jump link (audit P5)."""
+        return self.query(self.page_count)
+
+    @property
     def clear_filters_query(self) -> str:
         """The page with its size, search and order kept, but no filters (§6.2.4)."""
         return self._state_query(include_filters=False, page_size=self.page_size)
@@ -299,12 +325,12 @@ def get_link_url(repository: CharityRepository, charity_id: int, link_id: int) -
 # repository so the view could swap the source without changing this function.
 
 
-def list_domains(repository) -> tuple[DomainOption, ...]:
+def list_domains(repository: FilterOptionsRepository) -> tuple[DomainOption, ...]:
     """The Domain filter group's choices (§5.2.11)."""
     return repository.domains()
 
 
-def list_locations(repository) -> tuple[LocationOption, ...]:
+def list_locations(repository: FilterOptionsRepository) -> tuple[LocationOption, ...]:
     """The Location filter group's choices (§5.2.10, D-045)."""
     return repository.locations()
 
