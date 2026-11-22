@@ -9,8 +9,7 @@ sending no direction so the mechanism starts in its default one (D-053).
 {% endcomment %}
 <form class="sort" method="get" action="{% url 'charities:listing' %}" data-sort-form>
   <input type="hidden" name="page_size" value="{{ page.page_size }}">
-  {% include "charities/search_state.html" %}
-  {% include "charities/filter_state.html" %}
+  {% include "charities/state.html" with skip="sort" %}
 
   <label class="sort__label" for="{{ sort_form.parameter }}">Sort</label>
   {% comment %}Submitting here sends no direction, so the new mechanism starts in

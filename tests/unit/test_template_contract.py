@@ -7,6 +7,8 @@ template relies on, so that renaming or reshaping a value breaks a test rather
 than quietly emptying the page.
 """
 
+import re
+
 from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
@@ -304,3 +306,73 @@ class FilterSidebarContractTest(TestCase):
 
         self.assertNotIn("{#", body)
         self.assertNotIn("{%", body)
+
+
+class EveryFormCarriesTheWholeStateTest(TestCase):
+    """D-068 (audit S1): no form on the page can drop a slice it does not own.
+
+    Before the collapse, each form had to remember two `{% include %}` lines out
+    of three, and a new form that forgot them would silently reset the search or
+    the order. Now one partial writes the whole state and a form names the slice
+    it owns; this test is what makes forgetting visible.
+    """
+
+    def setUp(self) -> None:
+        domain = Domain.objects.create(name="Free loans")
+        location = Location.objects.create(name="Lakewood", region="NJ", country="USA")
+        charity = Charity.objects.create(name="Keren L'Dugma")
+        charity.domains.add(domain)
+        charity.locations.add(location)
+        self.domain = domain
+        self.url = reverse("charities:listing")
+
+    def _forms(self) -> dict[str, str]:
+        """The page's forms, keyed by their class."""
+        # More than one page of matches, so the jump form exists too.
+        for index in range(2):
+            filler = Charity.objects.create(name=f"Keren Filler {index}")
+            filler.domains.add(self.domain)
+        body = self.client.get(
+            self.url,
+            {
+                "q": "keren",
+                "domain": [str(self.domain.id)],
+                "sort": "rating",
+                "direction": "desc",
+                "page_size": 1,
+            },
+        ).content.decode()
+        found = re.findall(r'<form class="([\w-]+)"[^>]*>(.*?)</form>', body, re.S)
+        self.assertGreaterEqual(len(found), 5, "expected every form on the page")
+        return {class_name: html for class_name, html in found}
+
+    def _hidden_names(self, html: str) -> set[str]:
+        return set(re.findall(r'<input type="hidden" name="([^"]+)"', html))
+
+    def test_the_search_form_keeps_the_filters_and_the_order(self) -> None:
+        hidden = self._hidden_names(self._forms()["search"])
+
+        self.assertIn("domain", hidden)
+        self.assertIn("sort", hidden)
+        self.assertNotIn("q", hidden, "the search bar carries its own term")
+
+    def test_the_filter_form_keeps_the_search_and_the_order(self) -> None:
+        hidden = self._hidden_names(self._forms()["filters"])
+
+        self.assertIn("q", hidden)
+        self.assertIn("sort", hidden)
+        self.assertNotIn("domain", hidden, "the sidebar prints its own checkboxes")
+
+    def test_the_sort_form_keeps_the_search_and_the_filters(self) -> None:
+        hidden = self._hidden_names(self._forms()["sort"])
+
+        self.assertIn("q", hidden)
+        self.assertIn("domain", hidden)
+        self.assertNotIn("sort", hidden, "the dropdown carries the mechanism itself")
+
+    def test_the_window_forms_carry_all_three(self) -> None:
+        forms = self._forms()
+
+        for name in ("page-size", "jump"):
+            hidden = self._hidden_names(forms[name])
+            self.assertEqual({"q", "domain", "sort"}, {"q", "domain", "sort"} & hidden, name)

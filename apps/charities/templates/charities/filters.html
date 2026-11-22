@@ -15,8 +15,7 @@ and the browser's Back button works (UC-03's implementation constraints).
   filter resets the page to 1 (§6.2.4), which is what a missing `page` parameter
   means.{% endcomment %}
   <input type="hidden" name="page_size" value="{{ page.page_size }}">
-  {% include "charities/search_state.html" %}
-  {% include "charities/sort_state.html" %}
+  {% include "charities/state.html" with skip="filters" %}
 
   {% comment %}Each group is an open panel like Amazon's. <details> needs no
   JavaScript and keeps the page working if Alpine fails to load.{% endcomment %}

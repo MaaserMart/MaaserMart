@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from urllib.parse import urlencode
 
 # §6.2.6 names neither the search parameter nor the advanced ones; `q` is the
 # conventional short search parameter, and the options are named for what they
@@ -148,11 +147,6 @@ def query_pairs(search: Search) -> tuple[tuple[str, str], ...]:
         if getattr(search, option.attribute):
             parts.append((option.parameter, "1"))
     return tuple(parts)
-
-
-def query_string(search: Search) -> str:
-    """The search as a query string, so a page link can repeat it."""
-    return urlencode(query_pairs(search))
 
 
 @dataclass(frozen=True)

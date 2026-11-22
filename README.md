@@ -63,7 +63,8 @@ The listing lives in `apps/charities/` and is split into layers, each with its o
 - `filters.py` — §6.2.4's groups: reading them from the query string, clamping numbers into range, producing the sidebar's form, and rebuilding the query string a page link carries.
 - `sorting.py` — §6.2.5's mechanisms and directions, and the same three query-string helpers.
 - `search.py` — §6.2.6's term and advanced options, and the same three helpers again.
-- `services.py` — the listing rules (order, page clamping, page size, page+count as one snapshot) plus `publish_charity` / `hide_charity` (D-038).
+- `state.py` — the whole address as one `PageState`: search, filters, order and the page window, with the order they are read and written in stated once (D-068).
+- `services.py` — the listing rules (page clamping, page size, page+count as one snapshot) plus `publish_charity` / `hide_charity` (D-038).
 - `views.py` / `urls.py` — `GET /charity/` takes `page` and `page_size`, clamping both, plus `q`, the filter parameters and `sort`. `GET /charity/<id>/` is the charity page and `GET /charity/<id>/link/<id>/` records a link click and redirects.
 
 The listing currently shows every charity, including unpublished ones. Nothing publishes a charity yet, so reading `is_visible` would render an empty page; see D-042 for why, D-059 for where the flag is enforced, and what flips it back.
