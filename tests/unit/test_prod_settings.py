@@ -31,6 +31,10 @@ def _run_script(snippet: str, **overrides) -> subprocess.CompletedProcess:
     }
     env["DJANGO_LOG_DIR"] = str(BASE_DIR / "logs")
     env.update(GOOD_ENV)
+    # Base settings also read the developer's `.env` when there is one, and this
+    # file asserts what an *unset* RDS_INSTANCE_ID does. Pinning it empty keeps
+    # that assertion about the settings rather than about whose machine ran it.
+    env["RDS_INSTANCE_ID"] = ""
     env.update(overrides)
     return subprocess.run(
         [sys.executable, "-c", snippet],
