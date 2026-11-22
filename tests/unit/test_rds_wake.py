@@ -149,6 +149,36 @@ def test_a_missing_instance_is_a_configuration_error():
         instance(fake).state()
 
 
+def test_a_strict_refresh_reports_an_unreachable_api():
+    """`wake_db` asks strictly: telling an operator "available" would be a lie.
+
+    A request fails open because the query behind it is the real judge. A command
+    has nothing behind it, so a status it could not read has to be an error.
+    """
+    fake = FakeRds()
+    fake.describe_error = EndpointConnectionError(endpoint_url="https://rds.example.com")
+
+    with pytest.raises(EndpointConnectionError):
+        instance(fake).refresh(strict=True)
+
+
+def test_a_strict_refresh_reports_a_denied_api_too():
+    fake = FakeRds()
+    fake.describe_error = client_error("AccessDenied")
+
+    with pytest.raises(ClientError):
+        instance(fake).refresh(strict=True)
+
+
+def test_a_strict_refresh_reports_a_description_with_no_instance():
+    class Empty:
+        def describe_db_instances(self, **kwargs):
+            return {"DBInstances": []}
+
+    with pytest.raises(RdsConfigurationError):
+        RdsInstance("maasermart-db", client=Empty()).refresh(strict=True)
+
+
 def test_an_instance_needs_an_identifier():
     with pytest.raises(ValueError):
         RdsInstance("")

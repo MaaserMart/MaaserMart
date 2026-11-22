@@ -8,12 +8,13 @@ gate is allowed to block.
 from io import StringIO
 
 import pytest
+from botocore.exceptions import EndpointConnectionError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from apps.support.management.commands import wake_db
 from apps.support.rds import DatabaseState, RdsInstance
-from tests.support.rds import FakeRds
+from tests.support.rds import FakeRds, client_error
 
 
 @pytest.fixture
@@ -85,3 +86,18 @@ def test_a_wait_that_times_out_fails_the_command(fake, monkeypatch):
 
     with pytest.raises(CommandError, match="was not available"):
         call_command("wake_db", "--wait", stdout=StringIO())
+
+
+def test_an_unreachable_aws_api_fails_the_command_instead_of_guessing(fake):
+    """Printing "available" here would hand the operator a connection timeout next."""
+    fake.describe_error = EndpointConnectionError(endpoint_url="https://rds.example.com")
+
+    with pytest.raises(CommandError, match="Could not ask the AWS API"):
+        call_command("wake_db", stdout=StringIO())
+
+
+def test_an_instance_that_does_not_exist_says_which_setting_to_check(fake):
+    fake.describe_error = client_error("DBInstanceNotFound")
+
+    with pytest.raises(CommandError, match="does not exist"):
+        call_command("wake_db", stdout=StringIO())

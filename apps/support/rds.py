@@ -129,13 +129,18 @@ class RdsInstance:
             return DatabaseState(cached)
         return self.refresh()
 
-    def refresh(self) -> DatabaseState:
+    def refresh(self, *, strict: bool = False) -> DatabaseState:
         """Ask the AWS API now, and remember the answer.
 
         An AWS problem is not evidence that the database is down: credentials,
         throttling and a bad endpoint all say nothing about the instance. Those
         fail open and are logged, so the query decides — failing closed would
         turn an AWS hiccup into an outage of its own.
+
+        `strict=True` re-raises instead, and exists for `wake_db`: an operator
+        running it is asking *whether* the instance is up, so an unreachable
+        AWS API has to be reported rather than guessed over. A request has a
+        query to fall back on; a person reading the command's output does not.
         """
         try:
             described = self.client.describe_db_instances(DBInstanceIdentifier=self.identifier)
@@ -146,6 +151,8 @@ class RdsInstance:
                     f"RDS instance {self.identifier!r} does not exist "
                     f"in {self.region or 'the default region'}."
                 ) from exc
+            if strict:
+                raise
             logger.warning(
                 "RDS status check for %s failed (%s); assuming it is reachable.",
                 self.identifier,
@@ -153,6 +160,8 @@ class RdsInstance:
             )
             return DatabaseState.AVAILABLE
         except BotoCoreError as exc:
+            if strict:
+                raise
             logger.warning(
                 "RDS status check for %s failed (%s); assuming it is reachable.",
                 self.identifier,
@@ -162,6 +171,8 @@ class RdsInstance:
 
         instances = described.get("DBInstances") or []
         if not instances:
+            if strict:
+                raise RdsConfigurationError(f"RDS described no instance for {self.identifier!r}.")
             logger.warning(
                 "RDS described no instance for %s; assuming it is reachable.",
                 self.identifier,
@@ -197,6 +208,7 @@ class RdsInstance:
         timeout: int = 900,
         interval: int = 10,
         on_state: Callable[[DatabaseState], None] | None = None,
+        strict: bool = False,
     ) -> bool:
         """Poll until the instance is available, or give up. True if it is up.
 
@@ -205,7 +217,7 @@ class RdsInstance:
         deadline = time.monotonic() + timeout
         seen: DatabaseState | None = None
         while True:
-            state = self.refresh()
+            state = self.refresh(strict=strict)
             if on_state is not None and state is not seen:
                 on_state(state)
             seen = state

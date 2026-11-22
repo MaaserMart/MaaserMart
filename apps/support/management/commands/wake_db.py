@@ -8,10 +8,11 @@ request path refuses to do.
 
 from __future__ import annotations
 
+from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.support.rds import DatabaseState, RdsInstance
+from apps.support.rds import DatabaseState, RdsConfigurationError, RdsInstance
 
 LABELS = {
     DatabaseState.AVAILABLE: "available",
@@ -60,7 +61,21 @@ class Command(BaseCommand):
             waking_ttl=settings.DATABASE_WAKE_WAKING_TTL,
         )
 
-        state = instance.refresh()
+        # Strictly: this command exists to answer "is it up", so an AWS API that
+        # cannot be reached is an error to report, not a guess to fail open on.
+        # A wrong answer here is worse than no answer — it would print
+        # "available" and let the next command fail on a connection timeout.
+        try:
+            state = instance.refresh(strict=True)
+        except RdsConfigurationError as exc:
+            raise CommandError(f"{exc} Check RDS_INSTANCE_ID and AWS_REGION.") from exc
+        except (BotoCoreError, ClientError) as exc:
+            raise CommandError(
+                f"Could not ask the AWS API about {identifier}: {exc}. "
+                "Check that this machine has AWS credentials (AWS_ACCESS_KEY_ID "
+                "and AWS_SECRET_ACCESS_KEY, or a ~/.aws profile) and that the "
+                "identity allows rds:DescribeDBInstances on it."
+            ) from exc
         self.stdout.write(f"{identifier}: {LABELS[state]}")
         if state is DatabaseState.STOPPED:
             instance.wake()
