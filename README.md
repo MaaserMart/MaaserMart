@@ -54,6 +54,42 @@ uv run python manage.py runserver
 ```
 Open http://localhost:8000. `/` redirects to the charity listing at `/charity/` (D-028), and a card opens the charity's own page at `/charity/<id>/` (D-057). The admin is at http://localhost:8000/django-admin/: log in as `admin` with the random password `seed` printed when it ran (D-062), or set `ADMIN_SEED_PASSWORD` before seeding. Every other seeded user (`member1`, `owner1`, `rabbi1`, ...) has the password `password`.
 
+## Pointing at the RDS database
+
+The deployed database is AWS RDS, and it is stopped when nobody is using it: a
+running instance is most of the yearly budget (§4.9), and the design already puts
+the *host* on a developer's laptop, so the app is the only thing left that can
+start the database (D-070). Three env vars in `.env`:
+
+```bash
+DATABASE_URL=postgres://USER:PASSWORD@INSTANCE.xxxxx.REGION.rds.amazonaws.com:5432/DBNAME?sslmode=require
+RDS_INSTANCE_ID=maasermart-db
+AWS_REGION=us-east-1
+```
+
+- `sslmode=require` is not optional: RDS refuses unencrypted connections.
+- The instance's security group has to allow your address, and the instance has
+to be publicly accessible for a laptop to reach it. That is the trade-off the
+laptop-as-host shape makes; the alternative is a bastion or a VPN.
+- AWS credentials come from the usual variables (`AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`) or a `~/.aws` profile. The identity needs
+`rds:DescribeDBInstances` and `rds:StartDBInstance` on that instance only.
+- Leave `RDS_INSTANCE_ID` unset and the app never calls AWS: local Postgres
+keeps working exactly as before.
+
+What happens then: each request asks the AWS API for the instance's state (cached
+for a minute while it is up), and a stopped instance is started while the
+visitor gets a page that reloads itself. A query that fails because the instance
+went away starts it the same way — but an `OperationalError` against an instance
+that is *up* stays an error, because starting it again fixes nothing.
+
+`migrate`, `seed` and a deploy are not requests, so run the command first:
+
+```bash
+uv run python manage.py wake_db --wait
+uv run python manage.py migrate
+```
+
 ## The charity listing
 
 The listing lives in `apps/charities/` and is split into layers, each with its own tests:
