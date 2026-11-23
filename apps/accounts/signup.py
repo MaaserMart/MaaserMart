@@ -7,6 +7,10 @@ the database, so the code never reaches the browser.
 
 Step 2, verify_signup: the right code, within 15 minutes and 5 tries, creates the
 account with the member role and logs the user in.
+
+A rabbi signs up on his own page with the same form and steps (D-YOSEF-rabbi-signup).
+His right code creates the account with no role and logs him in; his only page is
+then the rabbi application, and its status until an admin decides.
 """
 
 import enum
@@ -29,7 +33,12 @@ from django.utils.crypto import constant_time_compare
 from .backends import find_user
 from .models import User
 from .ratelimit import client_network, take_token
-from .services import SignupOutcome, enqueue_signup_code, submit_member_signup
+from .services import (
+    SignupOutcome,
+    enqueue_signup_code,
+    submit_applicant_signup,
+    submit_member_signup,
+)
 
 SESSION_KEY = "member_signup"
 
@@ -61,6 +70,7 @@ class SignupResult(enum.Enum):
     INVALID = "invalid"  # The form says which fields.
     TOO_MANY_EMAILS = "too_many_emails"
     OK = "ok"
+    APPLICANT = "applicant"  # A rabbi's account, with no role until an admin approves.
     NO_SIGNUP = "no_signup"
     EXPIRED = "expired"
     WRONG_CODE = "wrong_code"
@@ -138,10 +148,11 @@ def _save_and_send(request, pending):
     enqueue_signup_code(pending["email"], pending["code"])
 
 
-def start_signup(request, form, next_url=""):
+def start_signup(request, form, next_url="", applying_for=None):
     """Check a filled-in SignupForm and, if it passes, email a code.
 
-    Returns a SignupResult. On INVALID the errors are on `form`.
+    `applying_for` is "rabbi" on the rabbi signup page. Returns a SignupResult.
+    On INVALID the errors are on `form`.
     """
     # 1. Cheapest: fields and password rules, no database and no limit spent,
     #    so fixing a typo doesn't use up the network's signups.
@@ -168,6 +179,7 @@ def start_signup(request, form, next_url=""):
         "email": data["email"],
         "password_hash": make_password(data["password"]),
         "next": next_url,
+        "applying_for": applying_for,
     }
     _save_and_send(request, pending)
     return SignupResult.CODE_SENT
@@ -242,13 +254,14 @@ def verify_signup(request, code):
         return SignupResult.WRONG_CODE, None
     # Used up: a copy of this session elsewhere can't try the code again.
     caches["login"].set(_tries_key(pending), MAX_CODE_TRIES + 1, CODE_LIFETIME_SECONDS + 60)
-    outcome, user = submit_member_signup(
-        pending["username"], pending["email"], pending["password_hash"]
-    )
     del request.session[SESSION_KEY]
+    create = submit_applicant_signup if pending.get("applying_for") else submit_member_signup
+    outcome, user = create(pending["username"], pending["email"], pending["password_hash"])
     if outcome is not SignupOutcome.CREATED:
         return SignupResult.TAKEN, None
     login(request, user, backend=BACKEND)
+    if pending.get("applying_for"):
+        return SignupResult.APPLICANT, user
     return SignupResult.OK, user
 
 

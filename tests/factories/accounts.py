@@ -42,6 +42,12 @@ class RabbiProfileFactory(DjangoModelFactory):
     title = "Rabbi"
     display_name = factory.LazyAttribute(lambda p: f"Rabbi {p.user.last_name}")
 
+    @factory.post_generation
+    def approved(profile, create, extracted, **kwargs):
+        """A profile means an approved rabbi unless approved=False (a pending applicant)."""
+        if create and extracted is not False:
+            RoleAssignment.objects.get_or_create(user=profile.user, role=RoleAssignment.Role.RABBI)
+
 
 class CharityOwnerFactory(DjangoModelFactory):
     class Meta:

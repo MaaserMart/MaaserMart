@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Your application · MaaserMart{% endblock %}
+{% block content %}
+<section class="auth">
+  {% if status == "pending" %}
+    <h1 class="auth__title">Application pending</h1>
+    <p class="empty">Your application for the {{ role }} role is still under review. You'll receive an email once its status changes.</p>
+  {% elif status == "rejected" %}
+    <h1 class="auth__title">Application not approved</h1>
+    <p class="empty">{{ message }}</p>
+  {% else %}
+    <h1 class="auth__title">Application approved</h1>
+    <p class="empty">{{ message }}</p>
+  {% endif %}
+</section>
+{% endblock %}

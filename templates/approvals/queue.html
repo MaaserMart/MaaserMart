@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+{% block bodyclass %}{{ block.super }} change-list{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'dashboards:admin' %}">Admin dashboard</a> › Approval queue
+</div>
+{% endblock %}
+{% block content %}
+<div id="content-main">
+  {% if requests %}
+    <div class="module">
+      <table style="width: 100%">
+        <thead>
+          <tr>
+            <th scope="col">Request</th>
+            <th scope="col">Details</th>
+            <th scope="col">From</th>
+            <th scope="col">Submitted (UTC)</th>
+            <th scope="col">Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in requests %}
+            <tr>
+              <td>{{ item.kind_label }}</td>
+              <td>{{ item.detail|default:"–" }}</td>
+              <td>{% if item.username %}{{ item.username }}<br><a href="mailto:{{ item.email }}">{{ item.email }}</a>{% else %}a deleted account{% endif %}</td>
+              <td>{{ item.submitted_at|date:"j M Y, H:i" }}</td>
+              <td>
+                {% if item.decidable %}
+                  <form method="post" action="{% url 'approvals:decide' item.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="button default" name="decision" value="approve">Approve</button>
+                    <button type="submit" class="button" name="decision" value="reject">Reject</button>
+                  </form>
+                {% else %}
+                  <span class="quiet">Not built yet</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>Nothing is waiting.</p>
+  {% endif %}
+</div>
+{% endblock %}

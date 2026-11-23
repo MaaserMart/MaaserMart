@@ -146,7 +146,8 @@ def test_the_celery_app_is_configured_and_discovers_the_signup_task():
     # an inline broker and eager tasks, and those are what the app must see.
     assert app.conf.broker_url == "memory://"
     assert app.conf.task_always_eager is True
-    # The only task so far is the signup code email (D-YOSEF-member-signup).
-    assert [name for name in app.tasks if not name.startswith("celery.")] == [
-        "apps.accounts.tasks.send_signup_code"
+    # The tasks so far: the signup code email and the admin decision email.
+    assert sorted(name for name in app.tasks if not name.startswith("celery.")) == [
+        "apps.accounts.tasks.send_notice",
+        "apps.accounts.tasks.send_signup_code",
     ]
