@@ -474,6 +474,14 @@ def test_a_member_cannot_decide_even_their_own_request(client):
     assert request.status == "pending"
 
 
+@pytest.mark.parametrize("who", [None, member, applicant])
+def test_the_decide_address_is_not_found_for_non_admins_even_by_get(client, who):
+    request = submitted(applicant())
+    if who is not None:
+        client.force_login(who())
+    assert client.get(reverse("approvals:decide", args=[request.pk])).status_code == 404
+
+
 def test_deciding_needs_a_post_and_a_real_choice(client):
     request = submitted(applicant())
     client.force_login(admin())

@@ -1,9 +1,9 @@
 """The admin approval queue (§6.2.13, §7.1.6). Admins only; anyone else gets 404."""
 
 from django.contrib import admin, messages
-from django.http import Http404, HttpResponseBadRequest
+from django.http import Http404, HttpResponseBadRequest, HttpResponseNotAllowed
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET
 
 from . import services
 
@@ -32,9 +32,12 @@ def queue_view(request):
     return render(request, "approvals/queue.html", context)
 
 
-@require_POST
 def decide_view(request, request_id):
+    # The admin check comes before the method check, so to anyone else even a GET
+    # is a 404 and the route gives nothing away.
     _require_admin(request)
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
     decision = request.POST.get("decision")
     if decision not in ("approve", "reject"):
         return HttpResponseBadRequest("Choose approve or reject.")
