@@ -69,6 +69,10 @@
         {{ charity.approving_haskamas }} approving &middot;
         {{ charity.disapproving_haskamas }} disapproving
       </p>
+      {% if haskama_action %}
+        {# §6.2.9.1: a rabbi writes or edits his haskama from here; it opens his dashboard's box. #}
+        <p><a class="filters__apply" href="{% url 'dashboards:rabbi_haskama' charity.id %}?from=charity">{{ haskama_action }}</a></p>
+      {% endif %}
       {% if charity.haskamas %}
         <ul class="haskama-list">
           {% for haskama in charity.haskamas %}

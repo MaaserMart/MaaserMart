@@ -3,6 +3,7 @@
 Other apps call only the functions defined here, never this app's models.
 """
 
+import enum
 import logging
 from dataclasses import dataclass
 from urllib.parse import urlsplit
@@ -10,12 +11,21 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.db import transaction
 
+from apps.accounts import services as accounts
 from apps.events.services import record_event
 
-from .contracts import CharityCard, CharityPage, DomainOption, LocationOption, RabbiOption
+from .contracts import (
+    CharityCard,
+    CharityPage,
+    DomainOption,
+    LocationOption,
+    OwnHaskama,
+    RabbiOption,
+)
 from .filters import CharityFilters, FilterForm, sidebar_groups
-from .models import Charity
-from .repositories import CharityRepository, FilterOptionsRepository
+from .models import Charity, Haskama
+from .repositories import CharityRepository, DjangoCharityRepository, FilterOptionsRepository
+from .search import MAX_TERM_LENGTH, Search
 from .sorting import CharitySort
 from .state import MAX_PAGE_SIZE, PageState, page_count
 
@@ -310,3 +320,109 @@ def filter_form(
 ) -> FilterForm:
     """Assemble the sidebar from the chosen filters and the option lists."""
     return FilterForm(filters=filters, groups=sidebar_groups(filters, options, requested or {}))
+
+
+# --- Haskamos ----------------------------------------------------------------
+# §6.2.9: a rabbi writes one haskama per charity and edits it in place (UC-06).
+# Only an approved rabbi may write one; the role comes from accounts (D-006).
+
+HASKAMA_VERDICTS = tuple(Haskama.Verdict.choices)
+HASKAMA_IMPORTANCE_RANGE = (1, 10)  # SRS 2.3.6, the table's check constraint.
+
+
+class HaskamaOutcome(enum.Enum):
+    CREATED = "created"
+    UPDATED = "updated"
+    NOT_A_RABBI = "not_a_rabbi"
+    NO_SUCH_CHARITY = "no_such_charity"
+
+
+def _own_haskama(haskama: Haskama) -> OwnHaskama:
+    return OwnHaskama(
+        charity_id=haskama.charity_id,
+        charity_name=haskama.charity.name,
+        verdict=haskama.verdict,
+        importance=haskama.importance,
+        body=haskama.body or "",
+        updated=haskama.updated,
+    )
+
+
+def get_haskama(user_id, charity_id) -> OwnHaskama | None:
+    """This rabbi's haskama for this charity, or None (§6.2.9.5).
+
+    Looked up by the pair, never by a haskama id, so a caller can only ever
+    reach the haskama the given user wrote.
+    """
+    haskama = (
+        Haskama.objects.select_related("charity")
+        .filter(rabbi_user_id=user_id, charity_id=charity_id)
+        .first()
+    )
+    return _own_haskama(haskama) if haskama else None
+
+
+def list_own_haskamas(user_id) -> tuple[OwnHaskama, ...]:
+    """Every haskama this rabbi wrote, most recently changed first, for his dashboard."""
+    rows = (
+        Haskama.objects.select_related("charity")
+        .filter(rabbi_user_id=user_id)
+        .order_by("-updated", "-id")
+    )
+    return tuple(_own_haskama(haskama) for haskama in rows)
+
+
+def get_charity_name(charity_id) -> str | None:
+    """A charity's name, or None when no row has that id. For a page about one charity."""
+    return Charity.objects.filter(pk=charity_id).values_list("name", flat=True).first()
+
+
+def search_charities(term: str, limit: int = 10) -> tuple[CharityCard, ...]:
+    """The first few charities matching a typed term, for a type-ahead (§6.2.9.6).
+
+    The same search the listing runs (§6.2.6, through `list_charities`), so a
+    rabbi finds a charity by the words a visitor would use. A blank or too-long
+    term finds nothing, rather than every charity.
+    """
+    term = " ".join((term or "").split())
+    if not term or len(term) > MAX_TERM_LENGTH:
+        return ()
+    page = list_charities(
+        # published_only stays False until the approval queue publishes
+        # charities, the same as the listing (D-042).
+        DjangoCharityRepository(published_only=False),
+        PageState(search=Search(term=term), page_size=limit),
+    )
+    return page.items
+
+
+def _check_haskama_values(verdict, importance) -> None:
+    if verdict not in Haskama.Verdict.values:
+        raise ValueError(f"Not a haskama verdict: {verdict!r}")
+    low, high = HASKAMA_IMPORTANCE_RANGE
+    if importance is not None and not (isinstance(importance, int) and low <= importance <= high):
+        raise ValueError(f"Haskama importance must be {low}-{high} or empty: {importance!r}")
+
+
+def save_haskama(user_id, charity_id, verdict, importance=None, body=None) -> HaskamaOutcome:
+    """Write this rabbi's haskama for a charity, or change the one he already wrote.
+
+    Every check runs before the write, cheapest first: the values (no query),
+    the role, then the charity. A value a form should already have refused is a
+    programming error and raises ValueError; a caller who is not a rabbi, or a
+    charity that is gone, is an outcome the caller turns into a 404.
+    """
+    _check_haskama_values(verdict, importance)
+    body = (body or "").strip() or None  # "" and NULL would be two encodings (D-056).
+    if not accounts.is_rabbi(user_id):
+        return HaskamaOutcome.NOT_A_RABBI
+    if not Charity.objects.filter(pk=charity_id).exists():
+        return HaskamaOutcome.NO_SUCH_CHARITY
+    # The (rabbi, charity) unique constraint makes this one row per pair even
+    # when two submits race: update_or_create retries the lookup on conflict.
+    _, created = Haskama.objects.update_or_create(
+        rabbi_user_id=user_id,
+        charity_id=charity_id,
+        defaults={"verdict": verdict, "importance": importance, "body": body},
+    )
+    return HaskamaOutcome.CREATED if created else HaskamaOutcome.UPDATED

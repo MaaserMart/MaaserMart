@@ -165,3 +165,23 @@ class CharityPage:
     disapproving_haskamas: int
     activity: ActivitySummary
     is_visible: bool
+
+
+@dataclass(frozen=True)
+class OwnHaskama:
+    """One rabbi's own haskama, as his dashboard and edit box show it (§6.2.9).
+
+    `verdict` is the stored value ("approve" or "disapprove") so a form can be
+    filled from it; `approving` is the same fact for a template.
+    """
+
+    charity_id: int
+    charity_name: str
+    verdict: str
+    importance: int | None
+    body: str
+    updated: datetime
+
+    @property
+    def approving(self) -> bool:
+        return self.verdict == "approve"

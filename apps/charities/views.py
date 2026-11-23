@@ -7,6 +7,7 @@ import logging
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 
+from apps.accounts import services as accounts
 from apps.events.services import record_event
 
 from .filters import keep_known_ids, requested_numbers
@@ -16,6 +17,7 @@ from .services import (
     Page,
     filter_form,
     get_charity_page,
+    get_haskama,
     get_link_url,
     list_charities,
     list_domains,
@@ -107,7 +109,21 @@ def detail(request: HttpRequest, charity_id: int) -> HttpResponse:
     if charity is None:
         raise Http404("No charity with that id")
     _count_visit(charity_id, "view", user_id=_actor_id(request))
-    return render(request, "charities/detail.html", {"charity": charity})
+    return render(
+        request,
+        "charities/detail.html",
+        {"charity": charity, "haskama_action": _haskama_action(request, charity_id)},
+    )
+
+
+def _haskama_action(request: HttpRequest, charity_id: int) -> str | None:
+    """The rabbi's button label for this charity (§6.2.9.1), or None for anyone else.
+
+    A visitor costs no query; a signed-in user one, and a rabbi one more.
+    """
+    if not accounts.is_rabbi(_actor_id(request)):
+        return None
+    return "Edit your haskama" if get_haskama(request.user.id, charity_id) else "Add a haskama"
 
 
 def link_redirect(request: HttpRequest, charity_id: int, link_id: int) -> HttpResponse:
