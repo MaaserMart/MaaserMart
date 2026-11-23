@@ -839,6 +839,20 @@ Rules for this file:
 - Why: The original seed produced plausible-looking but invented charities and endorsement links. Once the directory shows real organizations, the same generated endorsements attach a donor's name or a rabbi's approval to a real party who never gave it. Keeping the rest of the generated activity preserves the listing, filter, trending and admin-queue demos without asserting anything untrue about a named charity.
 - Where in code: `apps/dashboards/management/commands/seed.py` (`REAL_CHARITIES`, `SeedCharity`, `seed()`), `tests/integration/test_seed.py`
 
+## D-YOSEF-rabbi-haskama: A rabbi writes haskamos from his dashboard; the charity page links to the same box
+
+- Date: 2026-11-23
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.2.9, §8.8 (UC-06), §7.1.5
+- Decision:
+  - The rabbi dashboard is `/dashboard/rabbi/` (URL name `dashboards:rabbi`). It lists the rabbi's own haskamos, newest first, and an "Add a haskama" search that lists matching charities as he types (htmx asks the same page; without JavaScript the search submits as a normal form). The search is the listing's own (§6.2.6).
+  - §6.2.9.2 says the haskama box has the dashboard's URL. It lives under it instead: `/dashboard/rabbi/haskama/<charity id>/`. The address names the charity, never the haskama, and the haskama is always looked up as (signed-in rabbi, charity), so there is no id to swap for another rabbi's. If he already wrote one, the box opens filled in and saving edits it (UC-06 1a).
+  - The charity page shows a rabbi "Add a haskama" or "Edit your haskama", linking to the same box with `?from=charity`, which returns him to the charity page after saving. `from` is a fixed word, never a URL, so it cannot redirect off the site. An inline box on the charity page (§6.2.9.7) is left for later.
+  - Only approved rabbis (`accounts.services.is_rabbi`); everyone else gets 404. `charities.services.save_haskama` checks the values, the role and the charity before it writes, so no caller can skip them.
+- Why: One box serves both entry points, and naming the charity instead of the haskama makes id swapping impossible by construction rather than by a check.
+- Where in code: `apps/dashboards/views.py` (`rabbi_dashboard_view`, `rabbi_haskama_view`), `apps/dashboards/forms.py`, `apps/dashboards/urls.py`, `apps/charities/services.py` (`get_haskama`, `save_haskama`, `list_own_haskamas`, `search_charities`, `get_charity_name`), `apps/charities/views.py` (`_haskama_action`), `apps/accounts/services.py` (`is_rabbi`), `templates/dashboards/`, `tests/integration/test_rabbi_haskama.py`
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.
