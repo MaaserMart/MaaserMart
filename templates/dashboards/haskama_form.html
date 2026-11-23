@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Haskama for {{ charity_name }} · MaaserMart{% endblock %}
+{% block content %}
+<section class="auth">
+  <h1 class="auth__title">{% if editing %}Edit your haskama{% else %}Add a haskama{% endif %}</h1>
+  <p class="empty">For <a href="{% url 'charities:detail' charity_id %}">{{ charity_name }}</a></p>
+  <form class="auth__form" method="post" action="{{ action }}" novalidate>
+    {% csrf_token %}
+    <fieldset class="auth__field">
+      <legend class="auth__label">Your verdict</legend>
+      {% for choice in form.verdict %}
+        <label class="auth__check">{{ choice.tag }} <span>{{ choice.choice_label }}</span></label>
+      {% endfor %}
+      {% for e in form.verdict.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
+    </fieldset>
+    <label class="auth__field">
+      <span class="auth__label">How important (1 to 10, optional)</span>
+      <input class="auth__input" type="number" name="importance" min="1" max="10"
+             value="{{ form.importance.value|default_if_none:'' }}">
+      {% for e in form.importance.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
+    </label>
+    <label class="auth__field">
+      <span class="auth__label">Message (optional)</span>
+      <textarea class="auth__input" name="body" rows="6" maxlength="5000">{{ form.body.value|default_if_none:'' }}</textarea>
+      {% for e in form.body.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
+    </label>
+    <button class="filters__apply auth__submit" type="submit">{% if editing %}Save changes{% else %}Submit haskama{% endif %}</button>
+  </form>
+  <p class="auth__switch">
+    {% if back_to_charity %}<a href="{% url 'charities:detail' charity_id %}">Back to the charity</a>
+    {% else %}<a href="{% url 'dashboards:rabbi' %}">Back to your dashboard</a>{% endif %}
+  </p>
+</section>
+{% endblock %}

@@ -131,6 +131,17 @@ def find_role(user):
     return [str(role) for role in _ROLE_ORDER if role in roles]
 
 
+def is_rabbi(user_id) -> bool:
+    """Whether this user holds the rabbi role, i.e. an admin approved them (§6.2.9.3).
+
+    By id, so a service can check the author of a write without a user object.
+    None (a visitor) is never a rabbi and costs no query.
+    """
+    if user_id is None:
+        return False
+    return RoleAssignment.objects.filter(user_id=user_id, role=RoleAssignment.Role.RABBI).exists()
+
+
 class SignupOutcome(enum.Enum):
     CREATED = "created"
     USERNAME_TAKEN = "username_taken"

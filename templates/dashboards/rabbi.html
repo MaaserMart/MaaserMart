@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Rabbi dashboard · MaaserMart{% endblock %}
+{% block content %}
+<section class="charity-page">
+  <h1 class="charity-page__name">Rabbi dashboard</h1>
+
+  {# §6.2.9.1: "Add a haskama" opens a search for the charity. #}
+  <details class="charity-page__section" {% if term %}open{% endif %}>
+    <summary class="filters__apply">Add a haskama</summary>
+    <form method="get" action="{% url 'dashboards:rabbi' %}" role="search">
+      <label class="auth__field">
+        <span class="auth__label">Search for a charity</span>
+        <input class="auth__input" type="search" name="q" value="{{ term }}" maxlength="100"
+               autocomplete="off"
+               hx-get="{% url 'dashboards:rabbi' %}"
+               hx-trigger="input changed delay:300ms, search"
+               hx-target="#charity-results">
+      </label>
+    </form>
+    <div id="charity-results">{% include "dashboards/_charity_results.html" %}</div>
+  </details>
+
+  <section class="charity-page__section" aria-labelledby="own-haskamos">
+    <h2 class="charity-page__heading" id="own-haskamos">Your haskamos</h2>
+    {% if haskamas %}
+      <ul class="haskama-list">
+        {% for haskama in haskamas %}
+          <li class="haskama">
+            <p class="haskama__head">
+              <a class="haskama__rabbi" href="{% url 'charities:detail' haskama.charity_id %}">{{ haskama.charity_name }}</a>
+              <span class="haskama__verdict{% if not haskama.approving %} haskama__verdict--no{% endif %}">
+                {% if haskama.approving %}Approves{% else %}Does not approve{% endif %}
+              </span>
+              {% if haskama.importance %}
+                <span class="haskama__importance">Importance {{ haskama.importance }}/10</span>
+              {% endif %}
+            </p>
+            {% if haskama.body %}<p class="haskama__body">{{ haskama.body|linebreaksbr }}</p>{% endif %}
+            <p class="haskama__date">
+              Updated {{ haskama.updated|date:"j M Y" }} &middot;
+              <a href="{% url 'dashboards:rabbi_haskama' haskama.charity_id %}">Edit</a>
+            </p>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">You haven't written a haskama yet.</p>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}
