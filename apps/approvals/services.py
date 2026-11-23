@@ -44,7 +44,7 @@ def rejected_message(role):
 
 class SubmitOutcome(enum.Enum):
     SUBMITTED = "submitted"
-    ALREADY_PENDING = "already_pending"
+    ALREADY_APPLIED = "already_applied"  # One application per account, whatever its outcome.
     ALREADY_GRANTED = "already_granted"
 
 
@@ -86,21 +86,11 @@ def submit_rabbi_request(user, display_name, title):
         _lock_requests_of(user.pk)
         if accounts.RABBI in accounts.find_role(user):
             return SubmitOutcome.ALREADY_GRANTED
-        if has_pending(user, Kind.RABBI):
-            return SubmitOutcome.ALREADY_PENDING
+        if ApprovalRequest.objects.filter(submitted_by=user, kind=Kind.RABBI).exists():
+            return SubmitOutcome.ALREADY_APPLIED
         accounts.save_rabbi_profile(user.pk, display_name, title)
         ApprovalRequest.objects.create(submitted_by=user, kind=Kind.RABBI, batch_id=uuid.uuid4())
     return SubmitOutcome.SUBMITTED
-
-
-def pending_kinds(user):
-    """The labels of a user's pending requests, oldest first, e.g. ["Rabbi"]."""
-    kinds = (
-        ApprovalRequest.objects.filter(submitted_by=user, status=Status.PENDING)
-        .order_by("submitted_at", "id")
-        .values_list("kind", flat=True)
-    )
-    return [Kind(kind).label for kind in kinds]
 
 
 def has_pending(user, kind):
@@ -110,25 +100,21 @@ def has_pending(user, kind):
     ).exists()
 
 
-def latest_application_status(user):
-    """The status of the user's latest request ("pending", "rejected"...), or None."""
-    return (
+def latest_application(user):
+    """The user's latest request as (role in words, status), e.g. ("rabbi", "pending").
+
+    None if the user never applied.
+    """
+    row = (
         ApprovalRequest.objects.filter(submitted_by=user)
         .order_by("-submitted_at", "-id")
-        .values_list("status", flat=True)
+        .values_list("kind", "status")
         .first()
     )
-
-
-def latest_application_label(user):
-    """The role the user's latest request asks for, in words, e.g. "rabbi"."""
-    kind = (
-        ApprovalRequest.objects.filter(submitted_by=user)
-        .order_by("-submitted_at", "-id")
-        .values_list("kind", flat=True)
-        .first()
-    )
-    return Kind(kind).label.lower() if kind else "account"
+    if row is None:
+        return None
+    kind, status = row
+    return Kind(kind).label.lower(), status
 
 
 def pending_count():

@@ -1,5 +1,6 @@
 """Login, logout, signup, role requests and the dashboard chooser (§6.2.1, §6.2.2)."""
 
+from django.conf import settings
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
@@ -170,7 +171,7 @@ def rabbi_application_view(request):
     elsewhere = _applicant_or_redirect(request)
     if elsewhere:
         return elsewhere
-    if approvals.latest_application_status(request.user) is not None:
+    if approvals.latest_application(request.user) is not None:
         return redirect("accounts:pending")  # Already sent: one application per account.
     form = RabbiApplicationForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -187,11 +188,17 @@ def pending_view(request):
     elsewhere = _applicant_or_redirect(request)
     if elsewhere:
         return elsewhere
-    status = approvals.latest_application_status(request.user)
-    if status is None:
+    application = approvals.latest_application(request.user)
+    if application is None:
         return redirect("accounts:rabbi_application")
-    role = approvals.latest_application_label(request.user)
-    context = {"role": role, "rejected": status == approvals.Status.REJECTED}
-    if context["rejected"]:
+    role, status = application
+    context = {"role": role, "status": status}
+    if status == approvals.Status.REJECTED:
         context["message"] = approvals.rejected_message(role)
+    elif status == approvals.Status.APPROVED:
+        # Approved, yet the account holds no role (e.g. the role was removed later).
+        context["message"] = (
+            f"Your {role} application was approved, but your account isn't set up yet. "
+            f"Please email {settings.SUPPORT_EMAIL}."
+        )
     return render(request, "accounts/pending.html", context)

@@ -94,7 +94,7 @@ def test_a_second_request_while_one_waits_is_refused():
     user = applicant()
     approvals.submit_rabbi_request(user, "Moshe Cohen", "Rav")
     outcome = approvals.submit_rabbi_request(user, "Moshe Cohen", "Rav")
-    assert outcome is approvals.SubmitOutcome.ALREADY_PENDING
+    assert outcome is approvals.SubmitOutcome.ALREADY_APPLIED
     assert ApprovalRequest.objects.filter(submitted_by=user).count() == 1
 
 
@@ -106,13 +106,14 @@ def test_a_rabbi_cannot_apply_again():
     assert RabbiProfile.objects.get(user=rabbi).display_name != "Someone Else"
 
 
-def test_after_a_rejection_the_user_may_apply_again_with_new_details():
+def test_after_a_rejection_the_user_cannot_apply_again():
+    """One application per account, whatever its outcome (D-YOSEF-rabbi-signup)."""
     user = applicant()
     request = submitted(user)
     approvals.decide_request(request.pk, False, admin())
     outcome = approvals.submit_rabbi_request(user, "Moshe Cohen", "Rabbi")
-    assert outcome is approvals.SubmitOutcome.SUBMITTED
-    assert RabbiProfile.objects.get(user=user).title == "Rabbi"
+    assert outcome is approvals.SubmitOutcome.ALREADY_APPLIED
+    assert ApprovalRequest.objects.filter(submitted_by=user).count() == 1
 
 
 def test_another_users_pending_request_does_not_block_this_one():
@@ -153,7 +154,7 @@ def test_approving_grants_the_role_and_emails_the_user(django_capture_on_commit_
     assert "approved" in mail.outbox[-1].subject
 
 
-def test_rejecting_keeps_the_user_a_member_and_emails_them(django_capture_on_commit_callbacks):
+def test_rejecting_grants_no_role_and_emails_them(django_capture_on_commit_callbacks):
     user = applicant()
     request = submitted(user)
     with django_capture_on_commit_callbacks(execute=True):
@@ -541,3 +542,14 @@ def test_an_email_that_cannot_be_queued_still_saves_the_decision(client):
     request.refresh_from_db()
     assert request.status == "approved"
     assert is_rabbi(user)
+
+
+def test_an_approved_application_without_the_role_says_so(client):
+    user = applicant()
+    request = submitted(user)
+    approvals.decide_request(request.pk, True, admin())
+    RoleAssignment.objects.filter(user=user).delete()
+    client.force_login(user)
+    page = client.get(STATUS).content.decode()
+    assert "approved, but your account isn" in page
+    assert "still under review" not in page
