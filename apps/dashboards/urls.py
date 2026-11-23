@@ -1,5 +1,9 @@
-from django.urls import path  # noqa: F401
+from django.urls import path
+
+from . import views
 
 app_name = "dashboards"
 
-urlpatterns = []
+urlpatterns = [
+    path("admin/", views.admin_dashboard_view, name="admin"),
+]

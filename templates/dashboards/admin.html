@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'admin/css/dashboard.css' %}">{% endblock %}
+{% block coltype %}colMS{% endblock %}
+{% block bodyclass %}{{ block.super }} dashboard{% endblock %}
+{% block nav-breadcrumbs %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+{% block content %}
+<div id="content-main">
+  <div class="module">
+    <table>
+      <caption>MaaserMart queues</caption>
+      <tr>
+        <th scope="row"><a href="{% url 'approvals:queue' %}">Approval queue</a></th>
+        <td>{{ pending_count }} waiting</td>
+      </tr>
+    </table>
+  </div>
+  <div class="module">
+    <table>
+      <caption>All data</caption>
+      <tr>
+        <th scope="row"><a href="{% url 'admin:index' %}">Django admin</a></th>
+        <td>Every table: users, charities, requests and more.</td>
+      </tr>
+    </table>
+  </div>
+</div>
+{% endblock %}

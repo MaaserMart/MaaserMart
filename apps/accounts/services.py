@@ -8,13 +8,14 @@ a view of USER or RABBI_PROFILE (D-006).
 from __future__ import annotations
 
 import enum
+import logging
 from dataclasses import dataclass
 
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from .models import RabbiProfile, RoleAssignment, User
-from .tasks import send_signup_code
+from .tasks import send_notice, send_signup_code
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,13 @@ def search_rabbis(term: str = "") -> tuple[RabbiIdentity, ...]:
     can be put on the group later without a second function. An empty term
     returns every rabbi, which is what the filter's checkbox list shows.
     """
-    profiles = RabbiProfile.objects.select_related("user").order_by("display_name", "user_id")
+    # Only approved rabbis: a pending or rejected applicant also has a profile
+    # (§6.2.2.5 saves it with the request), but must not appear as a rabbi.
+    profiles = (
+        RabbiProfile.objects.filter(user__role_assignments__role=RoleAssignment.Role.RABBI)
+        .select_related("user")
+        .order_by("display_name", "user_id")
+    )
     if term.strip():
         needle = term.strip()
         profiles = profiles.filter(
@@ -77,6 +84,14 @@ def rabbi_identities(user_ids) -> dict[int, RabbiIdentity]:
     }
 
 
+def emails(user_ids) -> dict[int, str]:
+    """The email addresses of the given users, keyed by id. For admins' eyes only."""
+    ids = list(dict.fromkeys(user_ids))
+    if not ids:
+        return {}
+    return dict(User.objects.filter(pk__in=ids).values_list("pk", "email"))
+
+
 def usernames(user_ids) -> dict[int, str]:
     """The account names of the given users, keyed by id, for showing authorship."""
     ids = list(dict.fromkeys(user_ids))
@@ -85,7 +100,10 @@ def usernames(user_ids) -> dict[int, str]:
     return dict(User.objects.filter(pk__in=ids).values_list("pk", "username"))
 
 
+logger = logging.getLogger(__name__)
+
 ADMIN = "admin"
+RABBI = RoleAssignment.Role.RABBI.value
 
 # The order roles appear in, e.g. on the dashboard chooser.
 _ROLE_ORDER = [
@@ -119,6 +137,14 @@ class SignupOutcome(enum.Enum):
     EMAIL_TAKEN = "email_taken"
 
 
+def is_applicant(user):
+    """A rabbi applicant: an account with no role that isn't staff (D-YOSEF-rabbi-signup).
+
+    Staff without a role use Django admin, not the rabbi application.
+    """
+    return user.is_authenticated and not user.is_staff and not find_role(user)
+
+
 def submit_member_signup(username, email, password_hash):
     """Create a USER with the member role (§6.2.2.5). Both rows or neither.
 
@@ -126,10 +152,25 @@ def submit_member_signup(username, email, password_hash):
     kept between signup steps. The unique indexes decide if two people race for
     the same username or email. Returns (SignupOutcome, user or None).
     """
+    return _create_account(username, email, password_hash, RoleAssignment.Role.MEMBER)
+
+
+def submit_applicant_signup(username, email, password_hash):
+    """Create a USER with no role yet: a rabbi applicant (D-YOSEF-rabbi-signup).
+
+    The account logs in, but sees only its application and its status until an
+    admin approves it and grants the role. Returns (SignupOutcome, user or None),
+    as submit_member_signup does.
+    """
+    return _create_account(username, email, password_hash, None)
+
+
+def _create_account(username, email, password_hash, role):
     try:
         with transaction.atomic():
             user = User.objects.create(username=username, email=email, password=password_hash)
-            RoleAssignment.objects.create(user=user, role=RoleAssignment.Role.MEMBER)
+            if role is not None:
+                RoleAssignment.objects.create(user=user, role=role)
     except IntegrityError as error:
         constraint = getattr(getattr(error.__cause__, "diag", None), "constraint_name", None)
         if constraint == "user_username_ci_uniq":
@@ -143,3 +184,32 @@ def submit_member_signup(username, email, password_hash):
 def enqueue_signup_code(email, code):
     """Queue the email with a signup code (§6.2.2.5 enqueue_email). Sent by Celery."""
     send_signup_code.delay(email, code)
+
+
+def grant_role(user_id, role):
+    """Give a user a role (§6.2.13.5). Granting a role they already hold changes nothing."""
+    RoleAssignment.objects.get_or_create(user_id=user_id, role=role)
+
+
+def save_rabbi_profile(user_id, display_name, title):
+    """Save the name and title a rabbi applied with (§5.2.3), replacing any earlier ones.
+
+    The profile is public only once the user holds the rabbi role (see search_rabbis).
+    """
+    RabbiProfile.objects.update_or_create(
+        user_id=user_id, defaults={"display_name": display_name, "title": title or None}
+    )
+
+
+def notify_user(user_id, subject, message):
+    """Queue an email to a user by id. The address is read when it is sent.
+
+    Returns False if the queue can't take it (e.g. the broker is down), so the
+    caller can say the email didn't go instead of failing what it already saved.
+    """
+    try:
+        send_notice.delay(user_id, subject, message)
+    except Exception:
+        logger.exception("Could not queue an email to user %s", user_id)
+        return False
+    return True

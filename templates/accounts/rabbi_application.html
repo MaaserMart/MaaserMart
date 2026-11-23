@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Rabbi application · MaaserMart{% endblock %}
+{% block content %}
+<section class="auth">
+  <h1 class="auth__title">Your rabbi application</h1>
+  <p class="empty">An admin reads every application and may email you to check it's you.</p>
+  <form class="auth__form" method="post" action="{% url 'accounts:rabbi_application' %}" novalidate>
+    {% csrf_token %}
+    <label class="auth__field">
+      <span class="auth__label">Your name, as it should be shown</span>
+      <input class="auth__input" name="display_name" value="{{ form.display_name.value|default:'' }}" required maxlength="150">
+      {% for e in form.display_name.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
+    </label>
+    <label class="auth__field">
+      <span class="auth__label">Title (optional), e.g. Rav</span>
+      <input class="auth__input" name="title" value="{{ form.title.value|default:'' }}" maxlength="100">
+      {% for e in form.title.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
+    </label>
+    <div class="auth__terms">
+      {# Placeholder until the real hashkafa statement is written. #}
+      <p>Hashkafa statement: I give haskamos only to charities I believe are trustworthy and run according to halacha, and I'll withdraw a haskama if that changes.</p>
+      <label class="auth__check">
+        <input type="checkbox" name="agree_hashkafa" {% if form.agree_hashkafa.value %}checked{% endif %}>
+        <span>I agree to the hashkafa statement</span>
+      </label>
+      {% for e in form.agree_hashkafa.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
+    </div>
+    <button class="filters__apply auth__submit" type="submit">Submit application</button>
+  </form>
+</section>
+{% endblock %}

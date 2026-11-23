@@ -120,9 +120,9 @@ def test_one_role_never_goes_to_the_chooser():
     assert go(user_with(Role.RABBI)) != "/accounts/choose-dashboard/"
 
 
-@pytest.mark.urls(STUB)
-def test_a_user_with_no_roles_goes_home():
-    assert go(user_with()) == "/"
+def test_a_user_with_no_roles_goes_to_their_application_status():
+    """An account with no role is a rabbi applicant (D-YOSEF-rabbi-signup)."""
+    assert go(user_with()) == reverse("accounts:pending")
 
 
 # --- by role, before the dashboards exist (the real URLconf today) -----------

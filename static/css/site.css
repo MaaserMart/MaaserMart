@@ -4,8 +4,13 @@
    highlight all draw from it, so they cannot drift apart again. */
 :root {
   --brand-blue: #1a4d8f;
+  /* The site is designed light only. Saying so stops a browser in dark mode from
+     painting the page black behind the site's dark text. */
+  color-scheme: light;
 }
 body {
+  background: #fff;
+  color: #1a1a1a;
   font-family: system-ui, sans-serif;
   margin: 0;
 }

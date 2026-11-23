@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Sign up as a rabbi · MaaserMart{% endblock %}
+{% block content %}
+<section class="auth">
+  <h1 class="auth__title">Sign up as a rabbi</h1>
+  <p class="empty">First create your account. Next you'll fill in your rabbi application, and an admin checks it before your rabbi account opens. Use a different email from any member account you have.</p>
+  {% if error %}<p class="auth__error" role="alert">{{ error }}</p>{% endif %}
+  <form class="auth__form" method="post" action="{% url 'accounts:rabbi_signup' %}" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <label class="auth__field">
+      <span class="auth__label">Username</span>
+      <input class="auth__input" name="username" value="{{ form.username.value|default:'' }}" required autofocus autocomplete="username" maxlength="150">
+      {% for e in form.username.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
+    </label>
+    <label class="auth__field">
+      <span class="auth__label">Email</span>
+      <input class="auth__input" type="email" name="email" value="{{ form.email.value|default:'' }}" required autocomplete="email">
+      {% for e in form.email.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
+    </label>
+    <label class="auth__field">
+      <span class="auth__label">Password</span>
+      {% include "accounts/_password_input.html" with autocomplete="new-password" %}
+      {% for e in form.password.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
+    </label>
+    <div class="auth__terms">
+      {# Placeholder until the real terms are written (D-YOSEF-member-signup). #}
+      <p>By creating an account you agree to use MaaserMart honestly, to keep your login to yourself, and that we may email you about your account.</p>
+      <label class="auth__check">
+        <input type="checkbox" name="agree" {% if form.agree.value %}checked{% endif %}>
+        <span>I agree to the terms</span>
+      </label>
+      {% for e in form.agree.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
+    </div>
+    <button class="filters__apply auth__submit" type="submit">Send code</button>
+  </form>
+  <p class="auth__switch">Already have an account? <a href="{% url 'accounts:login' %}">Log in</a></p>
+</section>
+{% endblock %}

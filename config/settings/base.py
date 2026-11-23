@@ -164,3 +164,5 @@ CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="memory://")
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
 
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@maasermart.com")
+# Where users write when they disagree with a decision (D-YOSEF-rabbi-signup).
+SUPPORT_EMAIL = env("SUPPORT_EMAIL", default="support@maasermart.com")

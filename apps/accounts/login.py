@@ -17,7 +17,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .backends import find_user
 from .ratelimit import client_network, take_token
-from .services import find_role
+from .services import find_role, is_applicant
 
 # Per client IP: a burst of 20 tries, then one every 3 seconds (20 a minute).
 RATE_CAPACITY = 20
@@ -120,6 +120,7 @@ DASHBOARD_URL_NAMES = {
     "admin": "dashboards:admin",
 }
 CHOOSER_URL_NAME = "accounts:choose_dashboard"
+APPLICATION_STATUS_URL_NAME = "accounts:pending"
 
 
 def _url_or_home(name):
@@ -148,14 +149,17 @@ def redirect_after_login(request, user):
     """Where to send a user who just logged in or signed up (§6.2.1.6).
 
     A safe ?next= first; otherwise the dashboard of their one role, or the
-    chooser if they hold several.
+    chooser if they hold several. A rabbi applicant (D-YOSEF-rabbi-signup) always
+    goes to its application's status page.
     """
+    if is_applicant(user):
+        return reverse(APPLICATION_STATUS_URL_NAME)
     next_url = safe_next_url(request)
     if next_url:
         return next_url
     roles = find_role(user)
+    if not roles:
+        return reverse("home")  # Staff with no role: Django admin is linked from there.
     if len(roles) > 1:
         return _url_or_home(CHOOSER_URL_NAME)
-    if len(roles) == 1:
-        return dashboard_url(roles[0])
-    return reverse("home")
+    return dashboard_url(roles[0])
