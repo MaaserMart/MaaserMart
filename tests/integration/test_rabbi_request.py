@@ -1,6 +1,7 @@
 """Rabbi signup, the application, its status page and the admin queue (D-YOSEF-rabbi-signup)."""
 
 import re
+from unittest import mock
 
 import pytest
 from django.contrib.auth import SESSION_KEY
@@ -521,3 +522,22 @@ def test_a_staff_user_with_no_role_is_not_a_rabbi_applicant(client):
     client.force_login(staff)
     client.post(APPLY, APPLICATION)
     assert not ApprovalRequest.objects.exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_an_email_that_cannot_be_queued_still_saves_the_decision(client):
+    """Real commits, so the email is queued right after the decision is saved (S2)."""
+    user = applicant()
+    request = submitted(user)
+    client.force_login(admin())
+    with mock.patch(
+        "apps.accounts.services.send_notice.delay", side_effect=ConnectionError("broker down")
+    ):
+        response = client.post(
+            reverse("approvals:decide", args=[request.pk]), {"decision": "approve"}, follow=True
+        )
+    assert response.status_code == 200
+    assert "email to the applicant didn" in response.content.decode()
+    request.refresh_from_db()
+    assert request.status == "approved"
+    assert is_rabbi(user)

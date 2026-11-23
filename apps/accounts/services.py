@@ -8,6 +8,7 @@ a view of USER or RABBI_PROFILE (D-006).
 from __future__ import annotations
 
 import enum
+import logging
 from dataclasses import dataclass
 
 from django.db import IntegrityError, transaction
@@ -98,6 +99,8 @@ def usernames(user_ids) -> dict[int, str]:
         return {}
     return dict(User.objects.filter(pk__in=ids).values_list("pk", "username"))
 
+
+logger = logging.getLogger(__name__)
 
 ADMIN = "admin"
 RABBI = RoleAssignment.Role.RABBI.value
@@ -199,5 +202,14 @@ def save_rabbi_profile(user_id, display_name, title):
 
 
 def notify_user(user_id, subject, message):
-    """Email a user by id. The address is read when the email is sent."""
-    send_notice.delay(user_id, subject, message)
+    """Queue an email to a user by id. The address is read when it is sent.
+
+    Returns False if the queue can't take it (e.g. the broker is down), so the
+    caller can say the email didn't go instead of failing what it already saved.
+    """
+    try:
+        send_notice.delay(user_id, subject, message)
+    except Exception:
+        logger.exception("Could not queue an email to user %s", user_id)
+        return False
+    return True

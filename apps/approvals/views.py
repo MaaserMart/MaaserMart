@@ -39,8 +39,11 @@ def decide_view(request, request_id):
     if decision not in ("approve", "reject"):
         return HttpResponseBadRequest("Choose approve or reject.")
     outcome = services.decide_request(request_id, decision == "approve", request.user)
+    done = "Approved." if decision == "approve" else "Rejected."
     if outcome is services.DecideOutcome.DONE:
-        messages.success(request, "Approved." if decision == "approve" else "Rejected.")
+        messages.success(request, done)
+    elif outcome is services.DecideOutcome.DONE_EMAIL_FAILED:
+        messages.warning(request, f"{done} The email to the applicant didn't send; write to them.")
     else:
         messages.error(request, DECIDE_MESSAGES[outcome])
     return redirect("approvals:queue")

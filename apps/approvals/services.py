@@ -50,6 +50,7 @@ class SubmitOutcome(enum.Enum):
 
 class DecideOutcome(enum.Enum):
     DONE = "done"
+    DONE_EMAIL_FAILED = "done_email_failed"  # Decided and saved; the email didn't queue.
     NOT_FOUND = "not_found"
     ALREADY_DECIDED = "already_decided"  # Another admin got there first (§6.2.13.8).
     NOT_DECIDABLE = "not_decidable"  # A kind the queue can't decide yet.
@@ -168,6 +169,7 @@ def get_requests():
 
 def decide_request(request_id, approve, admin_user):
     """Approve or reject one request, and email the person who sent it (§6.2.13.5)."""
+    emailed = []
     with transaction.atomic():
         # The row lock makes a second admin wait, then see it is already decided.
         request = ApprovalRequest.objects.select_for_update().filter(pk=request_id).first()
@@ -187,5 +189,9 @@ def decide_request(request_id, approve, admin_user):
                 accounts.grant_role(user_id, accounts.RABBI)
             subject, message = decision_email(request.kind, approve)
             # Only once the decision is saved, so a rolled-back decision sends nothing.
-            transaction.on_commit(lambda: accounts.notify_user(user_id, subject, message))
+            transaction.on_commit(
+                lambda: emailed.append(accounts.notify_user(user_id, subject, message))
+            )
+    if emailed == [False]:
+        return DecideOutcome.DONE_EMAIL_FAILED
     return DecideOutcome.DONE
