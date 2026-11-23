@@ -26,3 +26,12 @@ def test_a_search_term_still_narrows_approved_rabbis_only():
     hidden = RabbiProfileFactory(display_name="Moshe Levi", approved=False)
     found = [rabbi.user_id for rabbi in search_rabbis("moshe")]
     assert shown.user_id in found and hidden.user_id not in found
+
+
+def test_a_seeded_rabbi_label_never_repeats_the_title():
+    """The factory feeds the seed; "Rabbi Rabbi Robinson" came from it (2026-11-23)."""
+    RabbiProfileFactory()
+    (rabbi,) = search_rabbis()
+    assert rabbi.title == "Rabbi"
+    assert not rabbi.display_name.lower().startswith("rabbi ")
+    assert "Rabbi Rabbi" not in rabbi.label
