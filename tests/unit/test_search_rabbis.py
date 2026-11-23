@@ -2,7 +2,7 @@
 
 import pytest
 
-from apps.accounts.services import search_rabbis
+from apps.accounts.services import RabbiIdentity, search_rabbis
 from tests.factories.accounts import RabbiProfileFactory
 
 pytestmark = pytest.mark.django_db
@@ -35,3 +35,17 @@ def test_a_seeded_rabbi_label_never_repeats_the_title():
     assert rabbi.title == "Rabbi"
     assert not rabbi.display_name.lower().startswith("rabbi ")
     assert "Rabbi Rabbi" not in rabbi.label
+
+
+@pytest.mark.parametrize(
+    ("title", "name", "label"),
+    [
+        ("Rabbi", "Moshe Cohen", "Rabbi Moshe Cohen"),
+        ("Rabbi", "Rabbi Moshe Cohen", "Rabbi Moshe Cohen"),  # Typed into both boxes.
+        ("Rav", "rav Moshe Cohen", "rav Moshe Cohen"),  # Any capitals.
+        ("Rav", "Ravitz", "Rav Ravitz"),  # Near miss: a name that only begins with it.
+        (None, "Moshe Cohen", "Moshe Cohen"),
+    ],
+)
+def test_the_label_shows_the_title_once(title, name, label):
+    assert RabbiIdentity(user_id=1, display_name=name, title=title).label == label
