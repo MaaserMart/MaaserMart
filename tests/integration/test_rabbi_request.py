@@ -495,3 +495,20 @@ def test_the_django_admin_home_hides_the_queue_from_staff_only_users(client):
     client.force_login(UserFactory(is_staff=True, is_superuser=False))
     page = client.get(reverse("admin:index")).content.decode()
     assert reverse("approvals:queue") not in page
+
+
+# --- review fixes ---------------------------------------------------------
+
+
+def test_django_admin_cannot_change_a_request(client):
+    """A status set in Django admin would skip the role and the email (B1)."""
+    request = submitted(applicant())
+    client.force_login(admin())
+    url = reverse("admin:approvals_approvalrequest_change", args=[request.pk])
+    page = client.get(url)
+    assert page.status_code == 200  # Viewing is still allowed.
+    assert 'name="_save"' not in page.content.decode()  # But there's nothing to save.
+    assert client.get(reverse("admin:approvals_approvalrequest_add")).status_code == 403
+    delete = reverse("admin:approvals_approvalrequest_delete", args=[request.pk])
+    assert client.post(delete, {"post": "yes"}).status_code == 403
+    assert ApprovalRequest.objects.filter(pk=request.pk, status="pending").exists()
