@@ -1,15 +1,17 @@
-"""The cache is shared through PostgreSQL (D-YOSEF-shared-cache)."""
+"""The rate-limit cache is shared through PostgreSQL (D-YOSEF-shared-cache)."""
 
 from datetime import timedelta
 from unittest import mock
 
 import pytest
-from django.core.cache import cache, caches
+from django.core.cache import caches
 from django.core.cache.backends.db import DatabaseCache
 from django.db import connection
 from django.utils import timezone
 
 pytestmark = pytest.mark.django_db
+
+cache = caches["ratelimit"]
 
 
 def stored_rows():
@@ -19,7 +21,7 @@ def stored_rows():
 
 
 def test_cache_is_the_database_cache():
-    assert isinstance(caches["default"], DatabaseCache)
+    assert isinstance(caches["ratelimit"], DatabaseCache)
 
 
 def test_a_value_is_stored_in_postgres_not_in_memory():

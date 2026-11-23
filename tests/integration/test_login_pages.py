@@ -142,7 +142,7 @@ def test_chooser_lists_only_my_roles(client, member):
 
 
 def test_chooser_labels_admin(client):
-    admin = UserFactory(is_staff=True)
+    admin = UserFactory(is_superuser=True)
     RoleAssignmentFactory(user=admin)
     client.force_login(admin)
     content = client.get("/accounts/choose-dashboard/").content

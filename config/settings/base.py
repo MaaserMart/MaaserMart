@@ -84,19 +84,6 @@ DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
 # A DatabaseCache over MAX_ENTRIES deletes its alphabetically lowest keys, live or
 # not. Login failures and locks get their own table, so a flood of other keys
 # (e.g. one rate-limit bucket per IP) can never delete a lock.
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
-        "LOCATION": "django_cache",
-        "OPTIONS": {"MAX_ENTRIES": 100_000},
-    },
-    "login": {
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
-        "LOCATION": "login_cache",
-        "OPTIONS": {"MAX_ENTRIES": 1_000_000},
-    },
-}
-
 # Addresses whose X-Forwarded-For header is believed: Caddy on the same machine.
 # Gunicorn must listen on TCP (e.g. 127.0.0.1:8000), not a unix socket: over a
 # socket REMOTE_ADDR is empty, every visitor would share one rate-limit bucket,
@@ -130,7 +117,20 @@ CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "maasermart",
-    }
+    },
+    # Rate limits and login locks must be seen by every worker, so they live in
+    # PostgreSQL, in separate tables so a flood of rate-limit buckets can't cull
+    # a lock (D-YOSEF-shared-cache).
+    "ratelimit": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "django_cache",
+        "OPTIONS": {"MAX_ENTRIES": 100_000},
+    },
+    "login": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "login_cache",
+        "OPTIONS": {"MAX_ENTRIES": 1_000_000},
+    },
 }
 
 # --- RDS wake-up (D-070) -----------------------------------------------------

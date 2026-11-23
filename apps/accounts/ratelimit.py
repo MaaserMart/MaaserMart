@@ -10,7 +10,7 @@ import ipaddress
 import time
 
 from django.conf import settings
-from django.core.cache import cache
+from django.core.cache import caches
 
 
 def _now():
@@ -21,6 +21,7 @@ def take_token(key, capacity, refill_seconds):
     """Spend one token from the bucket `key`. Return False if it is empty."""
     cache_key = "ratelimit:" + hashlib.sha256(key.encode()).hexdigest()
     now = _now()
+    cache = caches["ratelimit"]
     tokens, last = cache.get(cache_key, (capacity, now))
     tokens = min(capacity, tokens + (now - last) / refill_seconds)
     allowed = tokens >= 1

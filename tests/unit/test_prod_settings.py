@@ -137,7 +137,7 @@ def test_prod_calls_no_aws_api_without_an_instance_identifier():
     assert result.stdout.strip() == "False"
 
 
-def test_the_celery_app_is_configured_and_discovers_no_tasks_yet():
+def test_the_celery_app_is_configured_and_discovers_the_signup_task():
     """`config/__init__.py` imports this app, so a bad name breaks every command."""
     from config.celery import app
 
@@ -146,5 +146,7 @@ def test_the_celery_app_is_configured_and_discovers_no_tasks_yet():
     # an inline broker and eager tasks, and those are what the app must see.
     assert app.conf.broker_url == "memory://"
     assert app.conf.task_always_eager is True
-    # No app defines a task yet; the audit's M7 list is where the first one lands.
-    assert not [name for name in app.tasks if not name.startswith("celery.")]
+    # The only task so far is the signup code email (D-YOSEF-member-signup).
+    assert [name for name in app.tasks if not name.startswith("celery.")] == [
+        "apps.accounts.tasks.send_signup_code"
+    ]
