@@ -32,8 +32,14 @@ class RabbiIdentity:
 
     @property
     def label(self) -> str:
-        """The name as it is shown: title and name when there is a title."""
-        return f"{self.title} {self.display_name}" if self.title else self.display_name
+        """The name as it is shown: title and name when there is a title.
+
+        A rabbi may type his title into the name too ("Rabbi Moshe Cohen" with the
+        title "Rabbi"); the title is then not added a second time.
+        """
+        if not self.title or self.display_name.lower().startswith(self.title.lower() + " "):
+            return self.display_name
+        return f"{self.title} {self.display_name}"
 
 
 def search_rabbis(term: str = "") -> tuple[RabbiIdentity, ...]:
