@@ -33,6 +33,7 @@
     </div>
     <button class="filters__apply auth__submit" type="submit">Send code</button>
   </form>
+  <p class="auth__switch">A rabbi? <a href="{% url 'accounts:rabbi_signup' %}">Sign up as a rabbi</a></p>
   <p class="auth__switch">Already have an account? <a href="{% url 'accounts:login' %}">Log in</a></p>
 </section>
 {% endblock %}

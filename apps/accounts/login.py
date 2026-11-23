@@ -15,6 +15,8 @@ from django.core.cache import caches
 from django.urls import NoReverseMatch, reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from apps.approvals import services as approvals
+
 from .backends import find_user
 from .ratelimit import client_network, take_token
 from .services import find_role
@@ -35,6 +37,9 @@ class LoginResult(enum.Enum):
     MISSING_CREDENTIALS = "missing_credentials"
     WRONG_CREDENTIALS = "wrong_credentials"
     LOCKED_OUT = "locked_out"
+    # Right password, but the account's application isn't approved (D-YOSEF-rabbi-signup).
+    APPLICATION_PENDING = "application_pending"
+    APPLICATION_REJECTED = "application_rejected"
 
 
 def _store():
@@ -105,8 +110,28 @@ def attempt_login(request, username, password):
             return LoginResult.LOCKED_OUT, None
         return LoginResult.WRONG_CREDENTIALS, None
     _clear_failures(account)
+    # Only after the password is right, so this never tells a stranger who applied.
+    waiting = _unapproved_application(user)
+    if waiting is not None:
+        return waiting, user
     login(request, user)
     return LoginResult.OK, user
+
+
+def _unapproved_application(user):
+    """For an account with no role yet: its application's state; else None.
+
+    A rabbi's account is created with no role and waits for an admin. It can't
+    log in until the admin approves and grants the role.
+    """
+    if find_role(user):
+        return None
+    status = approvals.latest_application_status(user)
+    if status == approvals.Status.PENDING:
+        return LoginResult.APPLICATION_PENDING
+    if status == approvals.Status.REJECTED:
+        return LoginResult.APPLICATION_REJECTED
+    return None
 
 
 # Where each role lands after login (§6.2.1.6). These URL names belong to the

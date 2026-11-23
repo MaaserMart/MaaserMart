@@ -17,5 +17,6 @@
     </label>
     <button class="filters__apply auth__submit" type="submit">Log in</button>
   </form>
+  <p class="auth__switch">New here? <a href="{% url 'accounts:signup' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Sign up</a></p>
 </section>
 {% endblock %}

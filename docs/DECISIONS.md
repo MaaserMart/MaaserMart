@@ -380,6 +380,22 @@ Rules for this file:
 - Why: A charity_updated event moves the derived "last updated" date (§5.2.21), so it must mean a real change. The admin form must not bypass the services, or changes would skip the event that D-039 relies on.
 - Where in code: `apps/charities/services.py` (`_set_visible`), `apps/charities/admin.py` (`CharityAdmin`), `apps/dashboards/management/commands/seed.py`, `tests/unit/test_charity_services.py`, `tests/integration/test_charity_admin.py`
 
+## D-YOSEF-rabbi-signup: A rabbi signs up as his own account, which waits for an admin before it can log in
+- Date: 2026-11-22
+- Decided by: CEO (Yosef), on Shaul's proposal
+- Status: Active
+- Design doc ref: §6.2.2, §8.4 (alternate 6a: "the user can sign in only after the admin approves"), §6.2.13
+- Decision:
+  - `/accounts/rabbi-signup/` is a guest signup: the member fields (username, email, password, terms) plus name, optional title and agreeing to the hashkafa statement. It uses the member signup's checks, limits and emailed code (D-YOSEF-member-signup); "email already in use" is caught before any code is sent.
+  - The right code creates, together or not at all, an account with no role, its RABBI_PROFILE and a pending APPROVAL_REQUEST(kind=rabbi). The user is not logged in and sees `/accounts/pending/`.
+  - Login checks the password first. Then an account with no role whose latest request is pending is told "Your application for the rabbi role is still under review…", and one whose request was rejected is told it wasn't approved and to write to `SUPPORT_EMAIL`. Neither gets a session. A wrong password reveals nothing about an application.
+  - A rabbi who also wants to be a member makes a separate member account with a different email (one account per email, D-032). A rejected applicant can't reapply with the same email.
+  - Admins are `is_superuser` (D-YOSEF-admin-superuser). An admin logs in to `/dashboard/admin/`, which links the approval queue and Django admin. The queue at `/admin/approvals/` lists pending requests oldest first, with the applicant's username and email, so the admin can check by email who it is before deciding. Approve grants the rabbi role; reject keeps the account locked. Each decision emails the applicant after it is saved. A request already decided by another admin says so. Non-admins get 404. Only rabbi requests can be decided so far; other kinds show as not decidable yet.
+  - `search_rabbis` (the Haskamos filter) lists only users with the rabbi role, so a pending or rejected applicant's profile is never shown as a rabbi.
+  - accounts' signup and login call `approvals.services` (§6.2.2.5 names `approvals.services.submit_rabbi_request` for the signup), while approvals calls `accounts.services` to grant the role. Both go only through services (D-006).
+- Why: Keeping the rabbi account separate means a rabbi's account only ever has rabbi pages, so no role switching is needed to keep the Maaser tools out of his view, and it matches §8.4. Checking the password before showing the application's state stops strangers learning who applied.
+- Where in code: `apps/accounts/signup.py` (`RabbiSignupForm`, `_create_applicant`), `apps/accounts/login.py` (`_unapproved_application`), `apps/accounts/services.py` (`submit_applicant_signup`, `grant_role`, `save_rabbi_profile`, `emails`, `notify_user`, `search_rabbis`), `apps/accounts/tasks.py` (`send_notice`), `apps/approvals/services.py`, `apps/approvals/views.py`, `apps/dashboards/views.py`, `config/settings/base.py` (`SUPPORT_EMAIL`), `templates/accounts/rabbi_signup.html`, `templates/accounts/pending.html`, `templates/approvals/queue.html`, `templates/dashboards/admin.html`, `tests/integration/test_rabbi_request.py`, `tests/unit/test_search_rabbis.py`
+
 ## D-042: The listing shows every charity until something can publish one
 
 - Date: 2026-11-12
@@ -396,8 +412,8 @@ Rules for this file:
 - Design doc ref: §6.2.1, §6.2.2, §7.1.1, §8.3, §8.4
 - Decision:
   - Sign-in is username and password through Django's built-in auth. Google sign-in may be added later alongside it.
-  - There is one signup for everyone, at `/accounts/signup/`. It creates the user and the `member` role, so every account is a member. There is no "pick a role" page and no guest version of the rabbi or owner forms.
-  - A logged-in user asks for an extra role at `/accounts/rabbi-signup/` or `/accounts/owner-signup/`. Both require login, take no user id in the URL (the user comes from the session), and end pending until an admin approves.
+  - ~~There is one signup for everyone, at `/accounts/signup/`. It creates the user and the `member` role, so every account is a member. There is no "pick a role" page and no guest version of the rabbi or owner forms.~~ Changed 2026-11-22 by D-YOSEF-rabbi-signup: `/accounts/signup/` is the member signup; a rabbi signs up on his own page with his own email.
+  - ~~A logged-in user asks for an extra role at `/accounts/rabbi-signup/` or `/accounts/owner-signup/`. Both require login, take no user id in the URL (the user comes from the session), and end pending until an admin approves.~~ Changed 2026-11-22 by D-YOSEF-rabbi-signup: these pages are guest signups that create an account waiting for an admin.
   - The other accounts URLs are `/accounts/login/`, `/accounts/logout/`, `/accounts/pending/` and `/accounts/choose-dashboard/`. These are flat, hyphenated names under the D-009 prefix.
   - "Admin" means `User.is_staff`, read through a `User.is_admin` property. It is not a role row and not a new column.
   - Login looks usernames up with `LOWER(username)`, which uses the `user_username_ci_uniq` index (D-032). Django's `iexact` compiles to `UPPER(...)` on PostgreSQL and scans the whole table.

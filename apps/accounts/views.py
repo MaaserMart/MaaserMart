@@ -1,9 +1,11 @@
-"""Login, logout, member signup and the dashboard chooser (§6.2.1, §6.2.2)."""
+"""Login, logout, signup, role requests and the dashboard chooser (§6.2.1, §6.2.2)."""
 
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
+
+from apps.approvals import services as approvals
 
 from . import signup
 from .login import LoginResult, attempt_login, dashboard_url, redirect_after_login
@@ -16,6 +18,18 @@ MESSAGES = {
     LoginResult.LOCKED_OUT: "Too many failed tries. This account is locked for one hour.",
     LoginResult.RATE_LIMITED: "Too many tries from your connection. Wait a minute and try again.",
 }
+
+
+def _login_message(result, user):
+    if result is LoginResult.APPLICATION_PENDING:
+        role = approvals.latest_application_label(user)
+        return (
+            f"Your application for the {role} role is still under review. "
+            "You'll receive an email once its status changes."
+        )
+    if result is LoginResult.APPLICATION_REJECTED:
+        return approvals.rejected_message(approvals.latest_application_label(user))
+    return MESSAGES[result]
 
 
 def role_label(role):
@@ -34,7 +48,7 @@ def login_view(request):
         result, user = attempt_login(request, username, request.POST.get("password", ""))
         if result is LoginResult.OK:
             return redirect(redirect_after_login(request, user))
-        context.update(username=username, error=MESSAGES[result])
+        context.update(username=username, error=_login_message(result, user))
         status = 429 if result is LoginResult.RATE_LIMITED else 200
         return render(request, "accounts/login.html", context, status=status)
     return render(request, "accounts/login.html", context)
@@ -70,12 +84,20 @@ def _next(request):
     return request.POST.get("next") or request.GET.get("next", "")
 
 
-@require_http_methods(["GET", "POST"])
-def signup_view(request):
+# Each signup page: its form and template. Both continue at the same code page.
+SIGNUP_PAGES = {
+    "member": (signup.SignupForm, "accounts/signup.html"),
+    "rabbi": (signup.RabbiSignupForm, "accounts/rabbi_signup.html"),
+}
+
+
+def _signup_page(request, kind):
     if request.user.is_authenticated:
-        # Already a member: signing up again isn't a path (D-033).
+        # Already has an account: signing up again isn't a path (D-033). A rabbi
+        # signs up with a different email (D-YOSEF-rabbi-signup).
         return redirect(redirect_after_login(request, request.user))
-    form = signup.SignupForm(request.POST or None)
+    form_class, template = SIGNUP_PAGES[kind]
+    form = form_class(request.POST or None)
     context = {"form": form, "next": _next(request)}
     if request.method == "POST":
         result = signup.start_signup(request, form, next_url=_next(request))
@@ -83,8 +105,18 @@ def signup_view(request):
             return redirect("accounts:signup_verify")
         context["error"] = SIGNUP_MESSAGES.get(result)
         status = 429 if result is signup.SignupResult.RATE_LIMITED else 200
-        return render(request, "accounts/signup.html", context, status=status)
-    return render(request, "accounts/signup.html", context)
+        return render(request, template, context, status=status)
+    return render(request, template, context)
+
+
+@require_http_methods(["GET", "POST"])
+def signup_view(request):
+    return _signup_page(request, "member")
+
+
+@require_http_methods(["GET", "POST"])
+def rabbi_signup_view(request):
+    return _signup_page(request, "rabbi")
 
 
 @require_http_methods(["GET", "POST"])
@@ -106,12 +138,16 @@ def signup_verify_view(request):
             result, user = signup.verify_signup(request, request.POST.get("code", ""))
             if result is signup.SignupResult.OK:
                 return redirect(redirect_after_login(request, user))
+            if result is signup.SignupResult.APPLIED:
+                return redirect("accounts:pending")
             if result is signup.SignupResult.RATE_LIMITED:
                 status = 429
             if result in (signup.SignupResult.OUT_OF_TRIES, signup.SignupResult.TAKEN):
-                form = signup.SignupForm(initial={"username": pending["username"]})
+                kind = (pending.get("application") or {}).get("kind", "member")
+                form_class, template = SIGNUP_PAGES[kind]
+                form = form_class(initial={"username": pending["username"]})
                 context = {"form": form, "error": SIGNUP_MESSAGES[result], "next": pending["next"]}
-                return render(request, "accounts/signup.html", context)
+                return render(request, template, context)
             error = SIGNUP_MESSAGES.get(result)
     context = {
         "email": signup.masked_email(pending["email"]),
@@ -123,3 +159,8 @@ def signup_verify_view(request):
         "max_tries": signup.MAX_CODE_TRIES,
     }
     return render(request, "accounts/signup_verify.html", context, status=status)
+
+
+def pending_view(request):
+    """Shown after a rabbi confirms his email: the account waits for an admin."""
+    return render(request, "accounts/pending.html")
