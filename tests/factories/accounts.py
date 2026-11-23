@@ -40,7 +40,9 @@ class RabbiProfileFactory(DjangoModelFactory):
 
     user = factory.SubFactory(UserFactory)
     title = "Rabbi"
-    display_name = factory.LazyAttribute(lambda p: f"Rabbi {p.user.last_name}")
+    # The name only: the title is shown in front of it, so "Rabbi" here would
+    # print as "Rabbi Rabbi Cohen".
+    display_name = factory.LazyAttribute(lambda p: f"{p.user.first_name} {p.user.last_name}")
 
     @factory.post_generation
     def approved(profile, create, extracted, **kwargs):
