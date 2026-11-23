@@ -287,7 +287,7 @@ def test_submitting_files_the_application_and_shows_pending(client):
     response = apply(client)
     assert response.url == STATUS
     user = User.objects.get(username="mcohen")
-    assert approvals.has_pending(user, "rabbi")
+    assert approvals.latest_application(user) == ("rabbi", "pending")
     profile = RabbiProfile.objects.get(user=user)
     assert (profile.display_name, profile.title) == ("Moshe Cohen", "Rav")
     page = client.get(STATUS).content.decode()
@@ -335,7 +335,10 @@ def test_the_application_takes_no_user_id_from_the_post(client):
     sign_up_as_rabbi(client)
     apply(client, user=victim.pk, user_id=victim.pk, submitted_by=victim.pk)
     assert not ApprovalRequest.objects.filter(submitted_by=victim).exists()
-    assert approvals.has_pending(User.objects.get(username="mcohen"), "rabbi")
+    assert approvals.latest_application(User.objects.get(username="mcohen")) == (
+        "rabbi",
+        "pending",
+    )
 
 
 # --- logging in while the application waits -------------------------------

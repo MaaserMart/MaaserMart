@@ -93,13 +93,6 @@ def submit_rabbi_request(user, display_name, title):
     return SubmitOutcome.SUBMITTED
 
 
-def has_pending(user, kind):
-    """Whether the user already has a pending request of this kind, e.g. "rabbi"."""
-    return ApprovalRequest.objects.filter(
-        submitted_by=user, kind=kind, status=Status.PENDING
-    ).exists()
-
-
 def latest_application(user):
     """The user's latest request as (role in words, status), e.g. ("rabbi", "pending").
 
