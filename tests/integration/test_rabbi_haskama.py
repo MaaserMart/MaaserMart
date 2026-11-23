@@ -133,6 +133,7 @@ def test_a_rabbi_adds_a_haskama_and_sees_it_on_the_charity_page(client):
     )
     page = client.get(response.url)
     assert b"Trustworthy." in page.content
+    assert b"Edit your haskama" in page.content
 
 
 def test_from_the_dashboard_saving_returns_to_the_dashboard(client):
@@ -230,6 +231,25 @@ def test_a_posted_rabbi_or_haskama_id_is_ignored(client):
     )
     assert Haskama.objects.filter(rabbi_user=rabbi_a).count() == 1
     assert Haskama.objects.filter(rabbi_user=rabbi_b).count() == 1
+
+
+# --- The charity page button -------------------------------------------------
+
+
+def test_the_charity_page_offers_a_rabbi_the_button(client):
+    charity = CharityFactory()
+    response = logged_in(client, rabbi()).get(f"/charity/{charity.id}/")
+    assert b"Add a haskama" in response.content
+    assert f"{box(charity.id)}?from=charity".encode() in response.content
+
+
+@pytest.mark.parametrize("who", [None, member, pending_rabbi, admin])
+def test_the_charity_page_hides_the_button_from_everyone_else(client, who):
+    if who:
+        client.force_login(who())
+    response = client.get(f"/charity/{CharityFactory().id}/")
+    assert b"Add a haskama" not in response.content
+    assert b"Edit your haskama" not in response.content
 
 
 # --- The service on its own --------------------------------------------------
