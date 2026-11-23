@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Approval queue · MaaserMart{% endblock %}
+{% block content %}
+<section class="queue">
+  <h1 class="auth__title">Approval queue</h1>
+  <p><a href="{% url 'dashboards:admin' %}">Back to the admin dashboard</a></p>
+  {% for message in messages %}
+    <p class="{% if message.level_tag == 'error' %}auth__error{% else %}auth__notice{% endif %}" role="status">{{ message }}</p>
+  {% endfor %}
+  {% if requests %}
+    <ul class="charity-list">
+      {% for item in requests %}
+        <li class="charity-card queue__item">
+          <p class="queue__what"><strong>{{ item.kind_label }}</strong>{% if item.detail %}: {{ item.detail }}{% endif %}</p>
+          <p class="queue__who">From {% if item.username %}{{ item.username }} (<a href="mailto:{{ item.email }}">{{ item.email }}</a>){% else %}a deleted account{% endif %}, {{ item.submitted_at|date:"j M Y, H:i" }} UTC</p>
+          {% if item.decidable %}
+            <form class="queue__actions" method="post" action="{% url 'approvals:decide' item.id %}">
+              {% csrf_token %}
+              <button class="filters__apply" type="submit" name="decision" value="approve">Approve</button>
+              <button class="queue__reject" type="submit" name="decision" value="reject">Reject</button>
+            </form>
+          {% else %}
+            <p class="queue__later">Deciding this kind of request isn't built yet.</p>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">Nothing is waiting.</p>
+  {% endif %}
+</section>
+{% endblock %}
