@@ -131,27 +131,39 @@ if [ -z "${DJANGO_SECRET_KEY:-}" ]; then
 fi
 
 # Dev database: maasermart_dev if it exists (it is the one that is kept seeded),
-# otherwise whatever DATABASE_URL says.
+# otherwise whatever DATABASE_URL says. An external URL (RDS) points at a
+# database owned elsewhere: never try to create or drop it through local psql.
+LOCAL_DB=1
 if [ -z "${DATABASE_URL:-}" ]; then
   export DATABASE_URL="postgres://${PGUSER_LOCAL}@127.0.0.1:${PGPORT}/maasermart_dev"
+else
+  LOCAL_DB=0
 fi
 DBNAME="${DATABASE_URL##*/}"
+DBNAME="${DBNAME%%\?*}"
+DBNAME="${DBNAME%%#*}"
+
+if [ "$FRESH" = 1 ] && [ "$LOCAL_DB" = 0 ]; then
+  die "--fresh only works with the bundled local Postgres, not $DBNAME on an external server"
+fi
 
 # --- database prep ---------------------------------------------------------
 exists() { "$PG_BIN/psql" -h 127.0.0.1 -p "$PGPORT" -U "$PGUSER_LOCAL" -d postgres -tAc \
   "SELECT 1 FROM pg_database WHERE datname='$1'" 2>/dev/null | grep -q 1; }
 
-if [ "$FRESH" = 1 ]; then
-  say "dropping and recreating $DBNAME"
-  "$PG_BIN/psql" -h 127.0.0.1 -p "$PGPORT" -U "$PGUSER_LOCAL" -d postgres -q \
-    -c "DROP DATABASE IF EXISTS \"$DBNAME\"" >/dev/null
-  exists "$DBNAME" || "$PG_BIN/psql" -h 127.0.0.1 -p "$PGPORT" -U "$PGUSER_LOCAL" -d postgres -q \
-    -c "CREATE DATABASE \"$DBNAME\"" >/dev/null
-elif ! exists "$DBNAME"; then
-  say "creating database $DBNAME"
-  "$PG_BIN/psql" -h 127.0.0.1 -p "$PGPORT" -U "$PGUSER_LOCAL" -d postgres -q \
-    -c "CREATE DATABASE \"$DBNAME\"" >/dev/null
-  DO_SEED=1
+if [ "$LOCAL_DB" = 1 ]; then
+  if [ "$FRESH" = 1 ]; then
+    say "dropping and recreating $DBNAME"
+    "$PG_BIN/psql" -h 127.0.0.1 -p "$PGPORT" -U "$PGUSER_LOCAL" -d postgres -q \
+      -c "DROP DATABASE IF EXISTS \"$DBNAME\"" >/dev/null
+    exists "$DBNAME" || "$PG_BIN/psql" -h 127.0.0.1 -p "$PGPORT" -U "$PGUSER_LOCAL" -d postgres -q \
+      -c "CREATE DATABASE \"$DBNAME\"" >/dev/null
+  elif ! exists "$DBNAME"; then
+    say "creating database $DBNAME"
+    "$PG_BIN/psql" -h 127.0.0.1 -p "$PGPORT" -U "$PGUSER_LOCAL" -d postgres -q \
+      -c "CREATE DATABASE \"$DBNAME\"" >/dev/null
+    DO_SEED=1
+  fi
 fi
 
 if [ "$DO_MIGRATE" = 1 ]; then
