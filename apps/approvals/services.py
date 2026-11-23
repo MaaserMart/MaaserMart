@@ -148,6 +148,9 @@ def get_requests():
 
 def decide_request(request_id, approve, admin_user):
     """Approve or reject one request, and email the person who sent it (§6.2.13.5)."""
+    # Filled by the on_commit callback. It runs before we return only when this
+    # atomic block is the outermost transaction (no ATOMIC_REQUESTS, no caller's
+    # atomic); otherwise it runs later and a failed email still reports DONE.
     emailed = []
     with transaction.atomic():
         # The row lock makes a second admin wait, then see it is already decided.
