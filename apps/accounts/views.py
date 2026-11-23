@@ -11,7 +11,7 @@ from . import signup
 from .forms import RabbiApplicationForm
 from .login import LoginResult, attempt_login, dashboard_url, redirect_after_login
 from .models import RoleAssignment
-from .services import ADMIN, find_role
+from .services import ADMIN, find_role, is_applicant
 
 MESSAGES = {
     LoginResult.MISSING_CREDENTIALS: "Enter your username and password.",
@@ -154,11 +154,11 @@ def signup_verify_view(request):
 
 
 def _applicant_or_redirect(request):
-    """None for a rabbi applicant (an account with no role); else where to send them.
+    """None for a rabbi applicant; else where to send them.
 
-    A member or an approved rabbi has their own pages and nothing to apply for here.
+    A member, an approved rabbi or a staff user has nothing to apply for here.
     """
-    if find_role(request.user):
+    if not is_applicant(request.user):
         return redirect(redirect_after_login(request, request.user))
     return None
 

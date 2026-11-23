@@ -512,3 +512,12 @@ def test_django_admin_cannot_change_a_request(client):
     delete = reverse("admin:approvals_approvalrequest_delete", args=[request.pk])
     assert client.post(delete, {"post": "yes"}).status_code == 403
     assert ApprovalRequest.objects.filter(pk=request.pk, status="pending").exists()
+
+
+def test_a_staff_user_with_no_role_is_not_a_rabbi_applicant(client):
+    staff = UserFactory(is_staff=True)
+    response = log_in(client, staff.username, "password")
+    assert response.url != STATUS
+    client.force_login(staff)
+    client.post(APPLY, APPLICATION)
+    assert not ApprovalRequest.objects.exists()
