@@ -960,6 +960,11 @@ body {
   padding: 3rem 1.5rem 4rem;
 }
 
+/* A queue card stacks its lines; the listing card's row layout doesn't fit it. */
+.charity-card.queue__item {
+  display: block;
+}
+
 .queue__what,
 .queue__who,
 .queue__later {
