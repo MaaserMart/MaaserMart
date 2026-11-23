@@ -1,9 +1,0 @@
-<div class="module">
-  <table>
-    <caption>MaaserMart queues</caption>
-    <tr>
-      <th scope="row"><a href="{% url 'approvals:queue' %}">Approval queue</a></th>
-      <td>{% if pending_count is not None %}{{ pending_count }} waiting{% else %}Approve or reject requests{% endif %}</td>
-    </tr>
-  </table>
-</div>

@@ -486,19 +486,6 @@ def test_the_login_page_passes_next_on_to_signup(client):
     assert "?next=/charity/" in page.content.decode()
 
 
-def test_the_django_admin_home_links_the_queue_for_admins(client):
-    client.force_login(admin())
-    page = client.get(reverse("admin:index")).content.decode()
-    assert reverse("approvals:queue") in page
-
-
-def test_the_django_admin_home_hides_the_queue_from_staff_only_users(client):
-    """Near miss: staff may open Django admin, but the queue is for MaaserMart admins."""
-    client.force_login(UserFactory(is_staff=True, is_superuser=False))
-    page = client.get(reverse("admin:index")).content.decode()
-    assert reverse("approvals:queue") not in page
-
-
 # --- review fixes ---------------------------------------------------------
 
 

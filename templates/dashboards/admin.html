@@ -7,7 +7,15 @@
 {% block nav-sidebar %}{% endblock %}
 {% block content %}
 <div id="content-main">
-  {% include "approvals/_queue_module.html" %}
+  <div class="module">
+    <table>
+      <caption>MaaserMart queues</caption>
+      <tr>
+        <th scope="row"><a href="{% url 'approvals:queue' %}">Approval queue</a></th>
+        <td>{{ pending_count }} waiting</td>
+      </tr>
+    </table>
+  </div>
   <div class="module">
     <table>
       <caption>All data</caption>
