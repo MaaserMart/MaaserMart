@@ -8,6 +8,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from apps.approvals import services as approvals
 
 from . import signup
+from .forms import RabbiApplicationForm
 from .login import LoginResult, attempt_login, dashboard_url, redirect_after_login
 from .models import RoleAssignment
 from .services import ADMIN, find_role
@@ -18,18 +19,6 @@ MESSAGES = {
     LoginResult.LOCKED_OUT: "Too many failed tries. This account is locked for one hour.",
     LoginResult.RATE_LIMITED: "Too many tries from your connection. Wait a minute and try again.",
 }
-
-
-def _login_message(result, user):
-    if result is LoginResult.APPLICATION_PENDING:
-        role = approvals.latest_application_label(user)
-        return (
-            f"Your application for the {role} role is still under review. "
-            "You'll receive an email once its status changes."
-        )
-    if result is LoginResult.APPLICATION_REJECTED:
-        return approvals.rejected_message(approvals.latest_application_label(user))
-    return MESSAGES[result]
 
 
 def role_label(role):
@@ -48,7 +37,7 @@ def login_view(request):
         result, user = attempt_login(request, username, request.POST.get("password", ""))
         if result is LoginResult.OK:
             return redirect(redirect_after_login(request, user))
-        context.update(username=username, error=_login_message(result, user))
+        context.update(username=username, error=MESSAGES[result])
         status = 429 if result is LoginResult.RATE_LIMITED else 200
         return render(request, "accounts/login.html", context, status=status)
     return render(request, "accounts/login.html", context)
@@ -87,7 +76,7 @@ def _next(request):
 # Each signup page: its form and template. Both continue at the same code page.
 SIGNUP_PAGES = {
     "member": (signup.SignupForm, "accounts/signup.html"),
-    "rabbi": (signup.RabbiSignupForm, "accounts/rabbi_signup.html"),
+    "rabbi": (signup.SignupForm, "accounts/rabbi_signup.html"),
 }
 
 
@@ -100,7 +89,10 @@ def _signup_page(request, kind):
     form = form_class(request.POST or None)
     context = {"form": form, "next": _next(request)}
     if request.method == "POST":
-        result = signup.start_signup(request, form, next_url=_next(request))
+        applying_for = None if kind == "member" else kind
+        result = signup.start_signup(
+            request, form, next_url=_next(request), applying_for=applying_for
+        )
         if result is signup.SignupResult.CODE_SENT:
             return redirect("accounts:signup_verify")
         context["error"] = SIGNUP_MESSAGES.get(result)
@@ -138,12 +130,12 @@ def signup_verify_view(request):
             result, user = signup.verify_signup(request, request.POST.get("code", ""))
             if result is signup.SignupResult.OK:
                 return redirect(redirect_after_login(request, user))
-            if result is signup.SignupResult.APPLIED:
-                return redirect("accounts:pending")
+            if result is signup.SignupResult.APPLICANT:
+                return redirect("accounts:rabbi_application")
             if result is signup.SignupResult.RATE_LIMITED:
                 status = 429
             if result in (signup.SignupResult.OUT_OF_TRIES, signup.SignupResult.TAKEN):
-                kind = (pending.get("application") or {}).get("kind", "member")
+                kind = pending.get("applying_for") or "member"
                 form_class, template = SIGNUP_PAGES[kind]
                 form = form_class(initial={"username": pending["username"]})
                 context = {"form": form, "error": SIGNUP_MESSAGES[result], "next": pending["next"]}
@@ -161,6 +153,45 @@ def signup_verify_view(request):
     return render(request, "accounts/signup_verify.html", context, status=status)
 
 
+def _applicant_or_redirect(request):
+    """None for a rabbi applicant (an account with no role); else where to send them.
+
+    A member or an approved rabbi has their own pages and nothing to apply for here.
+    """
+    if find_role(request.user):
+        return redirect(redirect_after_login(request, request.user))
+    return None
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def rabbi_application_view(request):
+    """The rabbi's details for the admin. The user is the one logged in, never from the URL."""
+    elsewhere = _applicant_or_redirect(request)
+    if elsewhere:
+        return elsewhere
+    if approvals.latest_application_status(request.user) is not None:
+        return redirect("accounts:pending")  # Already sent: one application per account.
+    form = RabbiApplicationForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        approvals.submit_rabbi_request(
+            request.user, form.cleaned_data["display_name"], form.cleaned_data["title"]
+        )
+        return redirect("accounts:pending")
+    return render(request, "accounts/rabbi_application.html", {"form": form})
+
+
+@login_required
 def pending_view(request):
-    """Shown after a rabbi confirms his email: the account waits for an admin."""
-    return render(request, "accounts/pending.html")
+    """A rabbi applicant's only page: the state of the application."""
+    elsewhere = _applicant_or_redirect(request)
+    if elsewhere:
+        return elsewhere
+    status = approvals.latest_application_status(request.user)
+    if status is None:
+        return redirect("accounts:rabbi_application")
+    role = approvals.latest_application_label(request.user)
+    context = {"role": role, "rejected": status == approvals.Status.REJECTED}
+    if context["rejected"]:
+        context["message"] = approvals.rejected_message(role)
+    return render(request, "accounts/pending.html", context)

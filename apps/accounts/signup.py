@@ -8,9 +8,9 @@ the database, so the code never reaches the browser.
 Step 2, verify_signup: the right code, within 15 minutes and 5 tries, creates the
 account with the member role and logs the user in.
 
-A rabbi signs up on his own page with the same steps (D-YOSEF-rabbi-signup). His
-right code creates an account with no role and a pending application instead, and
-he is not logged in: the account waits until an admin approves it.
+A rabbi signs up on his own page with the same form and steps (D-YOSEF-rabbi-signup).
+His right code creates the account with no role and logs him in; his only page is
+then the rabbi application, and its status until an admin decides.
 """
 
 import enum
@@ -29,8 +29,6 @@ from django.db import connection, transaction
 from django.db.models import Value
 from django.db.models.functions import Lower
 from django.utils.crypto import constant_time_compare
-
-from apps.approvals import services as approvals
 
 from .backends import find_user
 from .models import User
@@ -72,7 +70,7 @@ class SignupResult(enum.Enum):
     INVALID = "invalid"  # The form says which fields.
     TOO_MANY_EMAILS = "too_many_emails"
     OK = "ok"
-    APPLIED = "applied"  # A rabbi's account was created and waits for an admin.
+    APPLICANT = "applicant"  # A rabbi's account, with no role until an admin approves.
     NO_SIGNUP = "no_signup"
     EXPIRED = "expired"
     WRONG_CODE = "wrong_code"
@@ -104,26 +102,6 @@ class SignupForm(forms.Form):
             except ValidationError as error:
                 self.add_error("password", error)
         return data
-
-
-class RabbiSignupForm(SignupForm):
-    """The member fields plus what an admin needs to judge the application."""
-
-    display_name = forms.CharField(
-        max_length=150, error_messages={"required": "Enter your name as it should be shown."}
-    )
-    title = forms.CharField(max_length=100, required=False)
-    agree_hashkafa = forms.BooleanField(
-        error_messages={"required": "Tick the box to agree to the hashkafa statement."}
-    )
-
-    def application(self):
-        """What is kept in the session until the code is confirmed."""
-        return {
-            "kind": "rabbi",
-            "display_name": self.cleaned_data["display_name"],
-            "title": self.cleaned_data["title"],
-        }
 
 
 def email_taken(email):
@@ -170,10 +148,11 @@ def _save_and_send(request, pending):
     enqueue_signup_code(pending["email"], pending["code"])
 
 
-def start_signup(request, form, next_url=""):
+def start_signup(request, form, next_url="", applying_for=None):
     """Check a filled-in SignupForm and, if it passes, email a code.
 
-    Returns a SignupResult. On INVALID the errors are on `form`.
+    `applying_for` is "rabbi" on the rabbi signup page. Returns a SignupResult.
+    On INVALID the errors are on `form`.
     """
     # 1. Cheapest: fields and password rules, no database and no limit spent,
     #    so fixing a typo doesn't use up the network's signups.
@@ -200,7 +179,7 @@ def start_signup(request, form, next_url=""):
         "email": data["email"],
         "password_hash": make_password(data["password"]),
         "next": next_url,
-        "application": form.application() if isinstance(form, RabbiSignupForm) else None,
+        "applying_for": applying_for,
     }
     _save_and_send(request, pending)
     return SignupResult.CODE_SENT
@@ -275,30 +254,15 @@ def verify_signup(request, code):
         return SignupResult.WRONG_CODE, None
     # Used up: a copy of this session elsewhere can't try the code again.
     caches["login"].set(_tries_key(pending), MAX_CODE_TRIES + 1, CODE_LIFETIME_SECONDS + 60)
-    application = pending.get("application")
     del request.session[SESSION_KEY]
-    if application is not None:
-        user = _create_applicant(pending, application)
-        return (SignupResult.APPLIED, user) if user else (SignupResult.TAKEN, None)
-    outcome, user = submit_member_signup(
-        pending["username"], pending["email"], pending["password_hash"]
-    )
+    create = submit_applicant_signup if pending.get("applying_for") else submit_member_signup
+    outcome, user = create(pending["username"], pending["email"], pending["password_hash"])
     if outcome is not SignupOutcome.CREATED:
         return SignupResult.TAKEN, None
     login(request, user, backend=BACKEND)
+    if pending.get("applying_for"):
+        return SignupResult.APPLICANT, user
     return SignupResult.OK, user
-
-
-def _create_applicant(pending, application):
-    """The account with no role and its pending application: both or neither."""
-    with transaction.atomic():
-        outcome, user = submit_applicant_signup(
-            pending["username"], pending["email"], pending["password_hash"]
-        )
-        if outcome is not SignupOutcome.CREATED:
-            return None
-        approvals.submit_rabbi_request(user, application["display_name"], application["title"])
-    return user
 
 
 def tries_left(request):

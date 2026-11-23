@@ -1,4 +1,4 @@
-"""Rabbi signup, the account waiting for an admin, and the admin queue (D-YOSEF-rabbi-signup)."""
+"""Rabbi signup, the application, its status page and the admin queue (D-YOSEF-rabbi-signup)."""
 
 import re
 
@@ -20,15 +20,15 @@ pytestmark = pytest.mark.django_db
 RABBI = RoleAssignment.Role.RABBI
 SIGNUP = "/accounts/rabbi-signup/"
 VERIFY = "/accounts/signup/verify/"
-FORM = {
+ACCOUNT = {
     "username": "mcohen",
     "email": "mcohen@example.com",
     "password": "a-long-pass-42",
     "agree": "on",
-    "display_name": "Moshe Cohen",
-    "title": "Rav",
-    "agree_hashkafa": "on",
 }
+APPLICATION = {"display_name": "Moshe Cohen", "title": "Rav", "agree_hashkafa": "on"}
+APPLY = "/accounts/rabbi-application/"
+STATUS = "/accounts/pending/"
 
 
 def member():
@@ -54,13 +54,18 @@ def submitted(user):
 
 
 def sign_up_as_rabbi(client, **changes):
-    """Fill in the rabbi page and type the emailed code. Returns the code page's response."""
-    client.post(SIGNUP, {k: v for k, v in {**FORM, **changes}.items() if v is not None})
+    """Fill in the rabbi signup page and type the emailed code. Returns the code page's reply."""
+    client.post(SIGNUP, {k: v for k, v in {**ACCOUNT, **changes}.items() if v is not None})
     code = re.search(r"\d{6}", mail.outbox[-1].body).group()
     return client.post(VERIFY, {"code": code})
 
 
-def log_in(client, username="mcohen", password=FORM["password"]):
+def apply(client, **changes):
+    return client.post(APPLY, {**APPLICATION, **changes})
+
+
+def log_in(client, username="mcohen", password=ACCOUNT["password"]):
+    client.logout()
     return client.post(reverse("accounts:login"), {"username": username, "password": password})
 
 
@@ -210,71 +215,44 @@ def test_the_queue_lists_pending_requests_oldest_first_with_the_name():
 # --- the rabbi signup page ------------------------------------------------
 
 
-def test_the_page_asks_for_the_account_and_the_rabbi_details(client):
+def test_the_signup_page_asks_only_for_the_account(client):
     page = client.get(SIGNUP).content.decode()
-    for field in ("username", "email", "password", "agree", "display_name", "title"):
+    for field in ("username", "email", "password", "agree"):
         assert f'name="{field}"' in page
-    assert 'name="agree_hashkafa"' in page
+    assert 'name="display_name"' not in page
 
 
 def test_the_member_signup_page_links_to_it(client):
     assert f'href="{SIGNUP}"' in client.get(reverse("accounts:signup")).content.decode()
 
 
-def test_the_right_code_creates_a_waiting_account_and_shows_pending(client):
+def test_the_right_code_logs_in_an_account_with_no_role_and_opens_the_application(client):
     response = sign_up_as_rabbi(client)
-    assert response.status_code == 302
-    assert response.url == reverse("accounts:pending")
+    assert response.url == APPLY
     user = User.objects.get(username="mcohen")
     assert not RoleAssignment.objects.filter(user=user).exists()
-    assert approvals.has_pending(user, "rabbi")
-    profile = RabbiProfile.objects.get(user=user)
-    assert (profile.display_name, profile.title) == ("Moshe Cohen", "Rav")
-    assert SESSION_KEY not in client.session  # Not logged in.
-    assert "with an admin" in client.get(response.url).content.decode()
+    assert int(client.session[SESSION_KEY]) == user.pk
+    assert not ApprovalRequest.objects.exists()  # Nothing is sent until the application.
 
 
 def test_nothing_is_created_before_the_code(client):
-    client.post(SIGNUP, FORM)
+    client.post(SIGNUP, ACCOUNT)
     assert not User.objects.filter(username="mcohen").exists()
-    assert not ApprovalRequest.objects.exists()
 
 
 def test_an_email_already_in_use_is_refused_before_any_code(client):
     member_account = member()
-    response = client.post(SIGNUP, {**FORM, "email": member_account.email.upper()})
+    response = client.post(SIGNUP, {**ACCOUNT, "email": member_account.email.upper()})
     assert "already has an account" in response.content.decode()
     assert mail.outbox == []
 
 
-def test_without_the_hashkafa_tick_no_code_is_sent(client):
-    response = client.post(SIGNUP, {**FORM, "agree_hashkafa": ""})
-    assert "agree to the hashkafa statement" in response.content.decode()
-    assert mail.outbox == []
-
-
-def test_without_a_name_no_code_is_sent(client):
-    response = client.post(SIGNUP, {**FORM, "display_name": ""})
-    assert "Enter your name" in response.content.decode()
-    assert mail.outbox == []
-
-
-def test_a_logged_in_user_is_sent_away(client):
+def test_a_logged_in_member_is_sent_away(client):
     client.force_login(member())
     assert client.get(SIGNUP).status_code == 302
 
 
-def test_if_the_email_is_taken_while_the_code_is_out_nothing_is_created(client):
-    client.post(SIGNUP, FORM)
-    code = re.search(r"\d{6}", mail.outbox[-1].body).group()
-    UserFactory(email="MCohen@example.com")
-    response = client.post(VERIFY, {"code": code})
-    assert "Someone took that username or email" in response.content.decode()
-    assert not ApprovalRequest.objects.exists()
-    assert not RabbiProfile.objects.exists()
-
-
-def test_a_member_signup_still_logs_in_with_the_member_role(client):
+def test_a_member_signup_still_gets_the_member_role(client):
     """Near miss: the member page is unchanged by the rabbi path."""
     client.post(
         reverse("accounts:signup"),
@@ -286,57 +264,132 @@ def test_a_member_signup_still_logs_in_with_the_member_role(client):
         },
     )
     code = re.search(r"\d{6}", mail.outbox[-1].body).group()
-    client.post(VERIFY, {"code": code})
+    response = client.post(VERIFY, {"code": code})
     user = User.objects.get(username="sarah")
     assert RoleAssignment.objects.filter(user=user, role="member").exists()
-    assert not ApprovalRequest.objects.filter(submitted_by=user).exists()
-    assert int(client.session[SESSION_KEY]) == user.pk
+    assert response.url != APPLY
 
 
-# --- logging in while the account waits ----------------------------------
+# --- the application page -------------------------------------------------
 
 
-def test_a_waiting_rabbi_cannot_log_in_and_is_told_why(client):
+def test_the_application_asks_for_name_title_and_the_hashkafa_tick(client):
+    sign_up_as_rabbi(client)
+    page = client.get(APPLY).content.decode()
+    for field in ("display_name", "title", "agree_hashkafa"):
+        assert f'name="{field}"' in page
+
+
+def test_submitting_files_the_application_and_shows_pending(client):
+    sign_up_as_rabbi(client)
+    response = apply(client)
+    assert response.url == STATUS
+    user = User.objects.get(username="mcohen")
+    assert approvals.has_pending(user, "rabbi")
+    profile = RabbiProfile.objects.get(user=user)
+    assert (profile.display_name, profile.title) == ("Moshe Cohen", "Rav")
+    page = client.get(STATUS).content.decode()
+    assert "Your application for the rabbi role is still under review" in page
+
+
+def test_without_the_hashkafa_tick_nothing_is_filed(client):
+    sign_up_as_rabbi(client)
+    response = apply(client, agree_hashkafa="")
+    assert "agree to the hashkafa statement" in response.content.decode()
+    assert not ApprovalRequest.objects.exists()
+
+
+def test_without_a_name_nothing_is_filed(client):
+    sign_up_as_rabbi(client)
+    response = apply(client, display_name="")
+    assert "Enter your name" in response.content.decode()
+    assert not ApprovalRequest.objects.exists()
+
+
+def test_a_sent_application_cannot_be_sent_again(client):
+    sign_up_as_rabbi(client)
+    apply(client)
+    assert client.get(APPLY).url == STATUS
+    apply(client, display_name="Someone Else")
+    assert ApprovalRequest.objects.count() == 1
+    assert RabbiProfile.objects.get().display_name == "Moshe Cohen"
+
+
+def test_a_member_has_no_application_page(client):
+    client.force_login(member())
+    assert client.get(APPLY).status_code == 302
+    client.post(APPLY, APPLICATION)
+    assert not ApprovalRequest.objects.exists()
+
+
+def test_a_guest_is_sent_to_log_in(client):
+    response = client.get(APPLY)
+    assert response.url.startswith(reverse("accounts:login"))
+
+
+def test_the_application_takes_no_user_id_from_the_post(client):
+    """Swap test: a posted user id is ignored; the application is the logged-in user's."""
+    victim = applicant()
+    sign_up_as_rabbi(client)
+    apply(client, user=victim.pk, user_id=victim.pk, submitted_by=victim.pk)
+    assert not ApprovalRequest.objects.filter(submitted_by=victim).exists()
+    assert approvals.has_pending(User.objects.get(username="mcohen"), "rabbi")
+
+
+# --- logging in while the application waits -------------------------------
+
+
+def test_logging_in_before_applying_opens_the_application(client):
     sign_up_as_rabbi(client)
     response = log_in(client)
-    assert response.status_code == 200
-    assert "Your application for the rabbi role is still under review" in response.content.decode()
-    assert SESSION_KEY not in client.session
+    assert client.get(response.url).url == APPLY
 
 
-def test_a_wrong_password_does_not_reveal_the_application(client):
+def test_logging_in_while_pending_shows_the_pending_page(client):
     sign_up_as_rabbi(client)
-    response = log_in(client, password="not-it")
-    page = response.content.decode()
-    assert "Wrong username or password" in page
-    assert "under review" not in page
+    apply(client)
+    response = log_in(
+        client,
+    )
+    assert response.url == STATUS
+    assert "still under review" in client.get(STATUS).content.decode()
 
 
-def test_a_rejected_rabbi_is_told_where_to_write(client, settings):
+def test_a_waiting_applicant_is_sent_to_the_status_page_even_with_next(client):
+    sign_up_as_rabbi(client)
+    apply(client)
+    client.logout()
+    response = client.post(
+        reverse("accounts:login") + "?next=/charity/",
+        {"username": "mcohen", "password": ACCOUNT["password"], "next": "/charity/"},
+    )
+    assert response.url == STATUS
+
+
+def test_a_rejected_applicant_is_told_where_to_write(client, settings):
     settings.SUPPORT_EMAIL = "help@example.org"
     sign_up_as_rabbi(client)
-    request = ApprovalRequest.objects.get()
-    approvals.decide_request(request.pk, False, admin())
-    response = log_in(client)
-    page = response.content.decode()
+    apply(client)
+    approvals.decide_request(ApprovalRequest.objects.get().pk, False, admin())
+    log_in(client)
+    page = client.get(STATUS).content.decode()
     assert "Your rabbi application wasn&#x27;t approved" in page
     assert "help@example.org" in page
-    assert SESSION_KEY not in client.session
+    assert client.get(APPLY).url == STATUS  # Can't apply again.
 
 
-def test_an_approved_rabbi_logs_in(client):
+def test_an_approved_rabbi_logs_in_to_his_pages_not_the_status(client):
     sign_up_as_rabbi(client)
+    apply(client)
     approvals.decide_request(ApprovalRequest.objects.get().pk, True, admin())
     response = log_in(client)
-    assert response.status_code == 302
-    assert int(client.session[SESSION_KEY]) == User.objects.get(username="mcohen").pk
+    assert response.url != STATUS
+    assert client.get(STATUS).status_code == 302
 
 
-def test_a_user_with_no_role_and_no_application_still_logs_in(client):
-    """Near miss: only an account with an application waiting or refused is held back."""
-    user = UserFactory()
-    response = log_in(client, user.username, "password")
-    assert response.status_code == 302
+def test_a_member_has_no_status_page(client):
+    client.force_login(member())
+    assert client.get(STATUS).status_code == 302
 
 
 # --- the queue page and admin dashboard -----------------------------------

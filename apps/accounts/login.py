@@ -15,8 +15,6 @@ from django.core.cache import caches
 from django.urls import NoReverseMatch, reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from apps.approvals import services as approvals
-
 from .backends import find_user
 from .ratelimit import client_network, take_token
 from .services import find_role
@@ -37,9 +35,6 @@ class LoginResult(enum.Enum):
     MISSING_CREDENTIALS = "missing_credentials"
     WRONG_CREDENTIALS = "wrong_credentials"
     LOCKED_OUT = "locked_out"
-    # Right password, but the account's application isn't approved (D-YOSEF-rabbi-signup).
-    APPLICATION_PENDING = "application_pending"
-    APPLICATION_REJECTED = "application_rejected"
 
 
 def _store():
@@ -110,28 +105,8 @@ def attempt_login(request, username, password):
             return LoginResult.LOCKED_OUT, None
         return LoginResult.WRONG_CREDENTIALS, None
     _clear_failures(account)
-    # Only after the password is right, so this never tells a stranger who applied.
-    waiting = _unapproved_application(user)
-    if waiting is not None:
-        return waiting, user
     login(request, user)
     return LoginResult.OK, user
-
-
-def _unapproved_application(user):
-    """For an account with no role yet: its application's state; else None.
-
-    A rabbi's account is created with no role and waits for an admin. It can't
-    log in until the admin approves and grants the role.
-    """
-    if find_role(user):
-        return None
-    status = approvals.latest_application_status(user)
-    if status == approvals.Status.PENDING:
-        return LoginResult.APPLICATION_PENDING
-    if status == approvals.Status.REJECTED:
-        return LoginResult.APPLICATION_REJECTED
-    return None
 
 
 # Where each role lands after login (§6.2.1.6). These URL names belong to the
@@ -145,6 +120,7 @@ DASHBOARD_URL_NAMES = {
     "admin": "dashboards:admin",
 }
 CHOOSER_URL_NAME = "accounts:choose_dashboard"
+APPLICATION_STATUS_URL_NAME = "accounts:pending"
 
 
 def _url_or_home(name):
@@ -173,14 +149,15 @@ def redirect_after_login(request, user):
     """Where to send a user who just logged in or signed up (§6.2.1.6).
 
     A safe ?next= first; otherwise the dashboard of their one role, or the
-    chooser if they hold several.
+    chooser if they hold several. An account with no role is a rabbi applicant
+    (D-YOSEF-rabbi-signup): it always goes to its application's status page.
     """
+    roles = find_role(user)
+    if not roles:
+        return reverse(APPLICATION_STATUS_URL_NAME)
     next_url = safe_next_url(request)
     if next_url:
         return next_url
-    roles = find_role(user)
     if len(roles) > 1:
         return _url_or_home(CHOOSER_URL_NAME)
-    if len(roles) == 1:
-        return dashboard_url(roles[0])
-    return reverse("home")
+    return dashboard_url(roles[0])

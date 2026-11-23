@@ -3,7 +3,7 @@
 {% block content %}
 <section class="auth">
   <h1 class="auth__title">Sign up as a rabbi</h1>
-  <p class="empty">An admin checks every rabbi account before it opens. Use a different email from any member account you have.</p>
+  <p class="empty">First create your account. Next you'll fill in your rabbi application, and an admin checks it before your rabbi account opens. Use a different email from any member account you have.</p>
   {% if error %}<p class="auth__error" role="alert">{{ error }}</p>{% endif %}
   <form class="auth__form" method="post" action="{% url 'accounts:rabbi_signup' %}" novalidate>
     {% csrf_token %}
@@ -23,25 +23,6 @@
       {% include "accounts/_password_input.html" with autocomplete="new-password" %}
       {% for e in form.password.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
     </label>
-    <label class="auth__field">
-      <span class="auth__label">Your name, as it should be shown</span>
-      <input class="auth__input" name="display_name" value="{{ form.display_name.value|default:'' }}" required maxlength="150">
-      {% for e in form.display_name.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
-    </label>
-    <label class="auth__field">
-      <span class="auth__label">Title (optional), e.g. Rav</span>
-      <input class="auth__input" name="title" value="{{ form.title.value|default:'' }}" maxlength="100">
-      {% for e in form.title.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
-    </label>
-    <div class="auth__terms">
-      {# Placeholder until the real hashkafa statement is written. #}
-      <p>Hashkafa statement: I give haskamos only to charities I believe are trustworthy and run according to halacha, and I'll withdraw a haskama if that changes.</p>
-      <label class="auth__check">
-        <input type="checkbox" name="agree_hashkafa" {% if form.agree_hashkafa.value %}checked{% endif %}>
-        <span>I agree to the hashkafa statement</span>
-      </label>
-      {% for e in form.agree_hashkafa.errors %}<span class="auth__field-error">{{ e }}</span>{% endfor %}
-    </div>
     <div class="auth__terms">
       {# Placeholder until the real terms are written (D-YOSEF-member-signup). #}
       <p>By creating an account you agree to use MaaserMart honestly, to keep your login to yourself, and that we may email you about your account.</p>
