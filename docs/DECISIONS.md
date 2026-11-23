@@ -746,6 +746,16 @@ Rules for this file:
 - Why: The budget is about $200 a year and an RDS instance billed by the hour is most of it, so the database cannot run when nobody is looking; §4.9 already puts the host on a developer's laptop, which leaves the application as the only component present to start it. The design constraint fixes that the check and the start use the AWS API. What this entry settles is the part the constraint leaves open: the waiting belongs in a command and a self-reloading page, not in a request, and "the database is down" has to be decided by the AWS status rather than by any error that happens to be an `OperationalError`. It lives in support because §6.1's nine apps are fixed (a tenth is a stack change), support depends on nothing, and the CSP middleware is already there (D-062).
 - Where in code: `apps/support/rds.py` (`RdsInstance`), `apps/support/middleware.py` (`DatabaseWakeMiddleware`), `apps/support/management/commands/wake_db.py`, `templates/503.html`, `templates/base.html` (`extra_head`), `config/settings/base.py` (`RDS_INSTANCE_ID`, `AWS_REGION`, `DATABASE_WAKE_*`, the `DATABASES` options and the `MIDDLEWARE` insert), `tests/unit/test_rds_wake.py`, `tests/unit/test_database_wake.py`, `tests/unit/test_wake_db_command.py`, `tests/unit/test_database_settings.py`
 
+## D-071: The dev seed uses real charities and never fabricates reviews or haskamas
+
+- Date: 2026-11-22
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: D-030 (dev seed), D-049 (no repeated names), D-043 (repo-local images)
+- Decision: `manage.py seed` draws its charities from a curated `REAL_CHARITIES` list rather than generated name pairs. Names, taglines, causes, locations and about/donate links are taken from each organization's own site or a charity registry; users and view/click events are still generated, but reviews and haskamas are not. A fabricated review or rabbinic endorsement of a named real organization is a false statement about that organization, not harmless demo data. The list is dev seed data, not a vetted guide for donors.
+- Why: The original seed produced plausible-looking but invented charities and endorsement links. Once the directory shows real organizations, the same generated endorsements attach a donor's name or a rabbi's approval to a real party who never gave it. Keeping the rest of the generated activity preserves the listing, filter, trending and admin-queue demos without asserting anything untrue about a named charity.
+- Where in code: `apps/dashboards/management/commands/seed.py` (`REAL_CHARITIES`, `SeedCharity`, `seed()`), `tests/integration/test_seed.py`
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.

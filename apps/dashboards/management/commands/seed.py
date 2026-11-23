@@ -1,16 +1,18 @@
-"""Fill an empty local database with fake data: `manage.py seed`.
+"""Fill an empty local database from a small directory of real charities.
 
 Dev tooling only (see CLAUDE.md): it builds every app's rows through the shared
-factories in tests/factories. It refuses to run unless DEBUG is on and every app
-table is empty (D-030). The tests package is imported lazily (S2): seeding
-is the only runtime code that needs it, so a production install can leave the
-package out and never pay for it.
+factories in tests/factories. Names, causes and links come from REAL_CHARITIES;
+users and events are still generated, but reviews and haskamas are not. It
+refuses to run unless DEBUG is on and every app table is empty (D-030). The
+tests package is imported lazily (S2): seeding is the only runtime code that needs it, so a
+production install can leave the package out and never pay for it.
 """
 
 import random
 import secrets
 import uuid
 from datetime import timedelta
+from typing import NamedTuple
 
 import factory.random
 from django.apps import apps as django_apps
@@ -21,7 +23,7 @@ from django.utils import timezone
 
 from apps.accounts.models import RoleAssignment, User
 from apps.approvals.models import ApprovalRequest
-from apps.charities.models import Charity, Haskama, Link
+from apps.charities.models import Charity, Link
 from apps.charities.services import publish_charity
 from apps.events.models import Event
 
@@ -56,47 +58,205 @@ LOCATIONS = [
     ("Jerusalem", "Jerusalem District", "Israel"),
     ("Bnei Brak", "Tel Aviv District", "Israel"),
     ("Beit Shemesh", "Jerusalem District", "Israel"),
+    ("Far Rockaway", "New York", "USA"),
+    ("Jackson", "New Jersey", "USA"),
+    ("New York", "New York", "USA"),
+    ("Silver Spring", "Maryland", "USA"),
+    ("Suffern", "New York", "USA"),
 ]
 
-NAME_PREFIXES = ["Keren", "Chasdei", "Yad", "Ezras", "Bais", "Tomchei", "Achiezer", "Lev"]
-NAME_WORDS = [
-    "Chesed",
-    "Shalom",
-    "Emunah",
-    "Tzedakah",
-    "Rachamim",
-    "Simcha",
-    "Torah",
-    "Chaim",
-    "Yisrael",
-    "Mordechai",
-    "Avraham",
-    "Yitzchak",
-    "Yaakov",
-    "Moshe",
-    "Aharon",
-    "David",
-    "Shlomo",
-    "Menachem",
-    "Naftali",
-    "Yehuda",
-    "Zev",
-    "Aryeh",
-    "Baruch",
-    "Efraim",
-    "Yosef",
-    "Binyamin",
-]
 
-# One name per prefix/word pair: 8 × 26 = 208 pairs for 200 charities, so the
-# seeded listing has no repeated name (D-049). CHARITY.name stays non-unique in
-# the schema (D-013); this is only about data that reads like real rows.
-NAMES = [f"{prefix} {word}" for prefix in NAME_PREFIXES for word in NAME_WORDS]
+class SeedCharity(NamedTuple):
+    name: str
+    tagline: str
+    about: str
+    donate: str
+    domains: tuple[str, ...]
+    location: str
+
+
+# Real organizations and their real sites, checked 2026-11-22. This is dev seed
+# data, not a vetted list to give donors: names, causes, links and listed
+# locations are taken from each organization's own site. Users and events are
+# generated; reviews and haskamas are deliberately not, since they would be
+# fake endorsements of real organizations.
+REAL_CHARITIES = (
+    # name, tagline, about URL, donate URL, domains, location
+    SeedCharity(
+        "Colel Chabad",
+        "Israel's oldest continuous charity, serving the needy since 1788.",
+        "https://colelchabad.org/",
+        "https://colelchabad.org/donate-2/",
+        ("Orphans and Widows", "Food Security", "Israel"),
+        "Brooklyn",
+    ),
+    SeedCharity(
+        "Rabbi Meir Baal Haness Charities",
+        "Kollel Ahavas Yisroel Vyerushalaim: aid for scholars, brides, widows and orphans.",
+        "https://rmbhcharities.com/about/",
+        "https://rmbhcharities.com/main-page-donation/",
+        ("Hachnasas Kallah", "Orphans and Widows", "Poverty Relief", "Torah Study", "Israel"),
+        "Brooklyn",
+    ),
+    SeedCharity(
+        "American Friends of Yad Eliezer",
+        "Food, clothing and relief for families across Israel.",
+        "https://www.af-ye.org/",
+        "https://www.af-ye.org/",
+        ("Food Security", "Poverty Relief", "Israel"),
+        "Jackson",
+    ),
+    SeedCharity(
+        "Tomchei Shabbos",
+        "Kosher pantry staples for thousands of families in New Jersey.",
+        "https://tomchei.org/",
+        "https://tomchei.org/donate",
+        ("Food Security", "Poverty Relief"),
+        "Lakewood",
+    ),
+    SeedCharity(
+        "Tomchei Shabbos of Toronto",
+        "Shabbos food boxes for families across the Toronto area.",
+        "https://rfro.org/",
+        "https://rfro.org/donate/",
+        ("Food Security",),
+        "Toronto",
+    ),
+    SeedCharity(
+        "Tomchei Shabbos of the Five Towns and Far Rockaway",
+        "Weekly food packages for families in the Five Towns and Rockaways.",
+        "http://tomchei5tfr.org/",
+        "http://tomchei5tfr.org/",
+        ("Food Security",),
+        "Far Rockaway",
+    ),
+    SeedCharity(
+        "Bikur Cholim of Los Angeles",
+        "Medical crisis funds, therapy and housing for patients and families.",
+        "https://www.bikurcholim.net/",
+        "https://www.bikurcholim.net/donate",
+        ("Bikur Cholim", "Medical", "Poverty Relief"),
+        "Los Angeles",
+    ),
+    SeedCharity(
+        "Bikur Cholim Chesed Organization",
+        "Patient advocacy, food pantries and medical equipment loans in Brooklyn.",
+        "https://bicco.org/",
+        "https://bicco.org/donate/",
+        ("Bikur Cholim", "Medical", "Elderly Care"),
+        "Brooklyn",
+    ),
+    SeedCharity(
+        "Ezras Torah",
+        "Relief for needy Torah families in Israel since 1915.",
+        "https://ezrastorah.org/",
+        "https://ezrastorah.org/choose_content.php?action=donation",
+        ("Poverty Relief", "Hachnasas Kallah", "Orphans and Widows", "Medical", "Israel"),
+        "Suffern",
+    ),
+    SeedCharity(
+        "Ezras Yisroel",
+        "Grants and loans for families facing illness, weddings and holidays.",
+        "https://www.ezrasyisroel.org/about.php",
+        "https://www.ezrasyisroel.org/donate",
+        ("Poverty Relief", "Hachnasas Kallah", "Orphans and Widows"),
+        "Brooklyn",
+    ),
+    SeedCharity(
+        "Torah Umesorah",
+        "Supporting Torah education in yeshivos and day schools nationwide.",
+        "https://www.torahumesorah.org/",
+        "https://www.torahumesorah.org/donate",
+        ("Education", "Torah Study"),
+        "Brooklyn",
+    ),
+    SeedCharity(
+        "Yad L'Achim",
+        "Rescue and rehabilitation for women and children in Israel.",
+        "https://yadlachim.org/",
+        "https://support.yadlachim.org/",
+        ("Israel", "Orphans and Widows"),
+        "Bnei Brak",
+    ),
+    SeedCharity(
+        "Orthodox Union",
+        "Strengthening Orthodox communities, schools and institutions.",
+        "https://www.ou.org/",
+        "https://www.ou.org/donate/",
+        ("Education", "Torah Study", "Special Needs", "Israel"),
+        "New York",
+    ),
+    SeedCharity(
+        "Agudath Israel of America",
+        "Advocacy and services for Orthodox Jews across the United States.",
+        "https://agudah.org/about",
+        "https://agudah.org/donate-now/",
+        ("Education", "Torah Study", "Special Needs", "Elderly Care", "Poverty Relief"),
+        "New York",
+    ),
+    SeedCharity(
+        "Agudath Israel of Illinois",
+        "Community programs and assistance for Jewish Chicago.",
+        "https://www.agudahil.org/",
+        "https://www.agudahil.org/donate",
+        ("Education", "Torah Study", "Food Security"),
+        "Chicago",
+    ),
+    SeedCharity(
+        "Torah Community Fund",
+        "Sustaining Torah life and families in communities across Israel.",
+        "https://www.torahcommunityfund.com/",
+        "https://www.torahcommunityfund.com/",
+        ("Torah Study", "Israel", "Poverty Relief"),
+        "Passaic",
+    ),
+    SeedCharity(
+        "Chabad-Lubavitch",
+        "A global network of social services, education and relief.",
+        "https://www.lubavitch.com/",
+        "https://www.lubavitch.com/donate/",
+        ("Torah Study", "Education", "Israel"),
+        "Brooklyn",
+    ),
+    SeedCharity(
+        "Tomchei Yosef Tzvi",
+        "Research-led aid for families in need in Eretz Yisroel.",
+        "http://tomcheiyt.org/",
+        "http://tomcheiyt.org/",
+        ("Poverty Relief", "Israel"),
+        "Chicago",
+    ),
+    SeedCharity(
+        "Yad Yehuda of Greater Washington",
+        "Hachnasas kallah and support for families near Washington.",
+        "https://yadyehuda.org/",
+        "https://yadyehuda.org/donate/",
+        ("Hachnasas Kallah", "Orphans and Widows"),
+        "Silver Spring",
+    ),
+    SeedCharity(
+        "American Friends of Magen David Adom",
+        "Support for Israel's emergency medical and ambulance service.",
+        "https://afmda.org/",
+        "https://afmda.org/donate/",
+        ("Medical", "Disaster Relief", "Israel"),
+        "New York",
+    ),
+    SeedCharity(
+        "Aish",
+        "Jewish learning and outreach for people at every level.",
+        "https://aish.com/",
+        "https://aish.com/",
+        ("Torah Study", "Education"),
+        "Jerusalem",
+    ),
+)
 
 # Dev images come from the SVGs already in the repo (D-043, superseding D-024).
 # Repo-relative paths, so the template serves them through {% static %}.
 IMAGE_PATHS = [f"charities/img/charity-{index:02d}.svg" for index in range(1, 13)]
-APPROVED, PENDING = 185, 15
+PENDING = 3
+APPROVED = len(REAL_CHARITIES) - PENDING
 # Requests submitted together share one batch (§5.2.5), and the admin queue
 # decides a whole batch at once (§7.1.6). Batching the seed the same way gives
 # that screen something real to work on in dev (D-055, superseding D-006's own
@@ -107,7 +267,7 @@ EVENTS = 8000
 
 
 class Command(BaseCommand):
-    help = "Seed an empty database with ~200 fake charities, users, reviews, haskamas and events."
+    help = "Seed an empty database with real charities plus generated users and events."
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -149,6 +309,8 @@ class Command(BaseCommand):
         admin = User.objects.create_superuser("admin", "admin@example.com", admin_password)
         domains = [f.DomainFactory(name=name) for name in DOMAINS]
         locations = [f.LocationFactory(name=n, region=r, country=c) for n, r, c in LOCATIONS]
+        domains_by_name = {domain.name: domain for domain in domains}
+        location_by_name = {location.name: location for location in locations}
 
         members = self.users("member", MEMBERS, Role.MEMBER)
         owners = self.users("owner", OWNERS, Role.CHARITY_OWNER)
@@ -159,15 +321,24 @@ class Command(BaseCommand):
         # One batch id per group of requests, so the queue can decide several at once.
         batch_ids = [uuid.uuid4() for _ in range(-(-(APPROVED + PENDING) // BATCH_SIZE))]
         charities = []
-        names = self.rng.sample(NAMES, APPROVED + PENDING)
-        for i, name in enumerate(names):
+        for i, seed_charity in enumerate(REAL_CHARITIES):
             approved = i < APPROVED
-            charity = f.CharityFactory(name=name, image=IMAGE_PATHS[i % len(IMAGE_PATHS)])
-            for domain in self.rng.sample(domains, self.rng.randint(1, 3)):
-                f.CharityDomainFactory(charity=charity, domain=domain)
-            f.CharityLocationFactory(charity=charity, location=self.rng.choice(locations))
-            for kind in Link.Kind:
-                f.LinkFactory(charity=charity, kind=kind, url=f"https://charity{i}.example.org/")
+            charity = f.CharityFactory(
+                name=seed_charity.name,
+                tagline=seed_charity.tagline,
+                image=IMAGE_PATHS[i % len(IMAGE_PATHS)],
+            )
+            for domain_name in seed_charity.domains:
+                f.CharityDomainFactory(charity=charity, domain=domains_by_name[domain_name])
+            f.CharityLocationFactory(
+                charity=charity, location=location_by_name[seed_charity.location]
+            )
+            for kind, url in (
+                (Link.Kind.WEBSITE_DONATE, seed_charity.donate),
+                (Link.Kind.WEBSITE_ABOUT, seed_charity.about),
+                (Link.Kind.WEBSITE_CONTACT, seed_charity.about),
+            ):
+                f.LinkFactory(charity=charity, kind=kind, url=url)
             f.NewCharityRequestFactory(
                 charity=charity,
                 approval_request__submitted_by=self.rng.choice(owners),
@@ -183,13 +354,8 @@ class Command(BaseCommand):
 
         for owner in owners:
             f.CharityOwnerFactory(user=owner, charity=self.rng.choice(approved))
-        for charity in approved:
-            for author in self.rng.sample(members, self.rng.randint(0, 6)):
-                f.ReviewFactory(charity=charity, author=author)
-        for rabbi in rabbis:
-            for charity in self.rng.sample(approved, 15):
-                verdict = self.rng.choices(list(Haskama.Verdict), weights=[9, 1])[0]
-                f.HaskamaFactory(rabbi_user=rabbi, charity=charity, verdict=verdict)
+        # No reviews or haskamas: fabricating either would be a fake endorsement
+        # of a real organization named above.
         self.events(approved, members)
 
     def users(self, prefix, count, role):
