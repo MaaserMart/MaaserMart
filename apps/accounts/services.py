@@ -44,7 +44,13 @@ def search_rabbis(term: str = "") -> tuple[RabbiIdentity, ...]:
     can be put on the group later without a second function. An empty term
     returns every rabbi, which is what the filter's checkbox list shows.
     """
-    profiles = RabbiProfile.objects.select_related("user").order_by("display_name", "user_id")
+    # Only approved rabbis: a pending or rejected applicant also has a profile
+    # (§6.2.2.5 saves it with the request), but must not appear as a rabbi.
+    profiles = (
+        RabbiProfile.objects.filter(user__role_assignments__role=RoleAssignment.Role.RABBI)
+        .select_related("user")
+        .order_by("display_name", "user_id")
+    )
     if term.strip():
         needle = term.strip()
         profiles = profiles.filter(
