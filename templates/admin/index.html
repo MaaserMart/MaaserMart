@@ -1,0 +1,8 @@
+{% extends "admin/index.html" %}
+{# Django admin's home, with the approval queue on top (§6.2.13: links added to the dashboard). #}
+{% block content %}
+<div id="content-main">
+  {% if user.is_superuser %}{% include "approvals/_queue_module.html" with pending_count=None %}{% endif %}
+  {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
+</div>
+{% endblock %}

@@ -1,32 +1,50 @@
-{% extends "base.html" %}
-{% block title %}Approval queue · MaaserMart{% endblock %}
+{% extends "admin/base_site.html" %}
+{% block bodyclass %}{{ block.super }} change-list{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'dashboards:admin' %}">Admin dashboard</a> › Approval queue
+</div>
+{% endblock %}
 {% block content %}
-<section class="queue">
-  <h1 class="auth__title">Approval queue</h1>
-  <p><a href="{% url 'dashboards:admin' %}">Back to the admin dashboard</a></p>
-  {% for message in messages %}
-    <p class="{% if message.level_tag == 'error' %}auth__error{% else %}auth__notice{% endif %}" role="status">{{ message }}</p>
-  {% endfor %}
+<div id="content-main">
   {% if requests %}
-    <ul class="charity-list">
-      {% for item in requests %}
-        <li class="charity-card queue__item">
-          <p class="queue__what"><strong>{{ item.kind_label }}</strong>{% if item.detail %}: {{ item.detail }}{% endif %}</p>
-          <p class="queue__who">From {% if item.username %}{{ item.username }} (<a href="mailto:{{ item.email }}">{{ item.email }}</a>){% else %}a deleted account{% endif %}, {{ item.submitted_at|date:"j M Y, H:i" }} UTC</p>
-          {% if item.decidable %}
-            <form class="queue__actions" method="post" action="{% url 'approvals:decide' item.id %}">
-              {% csrf_token %}
-              <button class="filters__apply" type="submit" name="decision" value="approve">Approve</button>
-              <button class="queue__reject" type="submit" name="decision" value="reject">Reject</button>
-            </form>
-          {% else %}
-            <p class="queue__later">Deciding this kind of request isn't built yet.</p>
-          {% endif %}
-        </li>
-      {% endfor %}
-    </ul>
+    <div class="module">
+      <table style="width: 100%">
+        <thead>
+          <tr>
+            <th scope="col">Request</th>
+            <th scope="col">Details</th>
+            <th scope="col">From</th>
+            <th scope="col">Submitted (UTC)</th>
+            <th scope="col">Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in requests %}
+            <tr>
+              <td>{{ item.kind_label }}</td>
+              <td>{{ item.detail|default:"–" }}</td>
+              <td>{% if item.username %}{{ item.username }}<br><a href="mailto:{{ item.email }}">{{ item.email }}</a>{% else %}a deleted account{% endif %}</td>
+              <td>{{ item.submitted_at|date:"j M Y, H:i" }}</td>
+              <td>
+                {% if item.decidable %}
+                  <form method="post" action="{% url 'approvals:decide' item.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="button default" name="decision" value="approve">Approve</button>
+                    <button type="submit" class="button" name="decision" value="reject">Reject</button>
+                  </form>
+                {% else %}
+                  <span class="quiet">Not built yet</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
-    <p class="empty">Nothing is waiting.</p>
+    <p>Nothing is waiting.</p>
   {% endif %}
-</section>
+</div>
 {% endblock %}

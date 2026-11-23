@@ -425,7 +425,8 @@ def test_the_dashboard_counts_what_waits(client):
     submitted(applicant())
     client.force_login(admin())
     page = client.get(reverse("dashboards:admin")).content.decode()
-    assert "Approval queue (2 waiting)" in page
+    assert "2 waiting" in page
+    assert "MaaserMart administration" in page  # Django admin's look.
     assert reverse("admin:index") in page
 
 
@@ -481,3 +482,16 @@ def test_deciding_needs_a_post_and_a_real_choice(client):
 def test_the_login_page_passes_next_on_to_signup(client):
     page = client.get(reverse("accounts:login"), {"next": "/charity/"})
     assert "?next=/charity/" in page.content.decode()
+
+
+def test_the_django_admin_home_links_the_queue_for_admins(client):
+    client.force_login(admin())
+    page = client.get(reverse("admin:index")).content.decode()
+    assert reverse("approvals:queue") in page
+
+
+def test_the_django_admin_home_hides_the_queue_from_staff_only_users(client):
+    """Near miss: staff may open Django admin, but the queue is for MaaserMart admins."""
+    client.force_login(UserFactory(is_staff=True, is_superuser=False))
+    page = client.get(reverse("admin:index")).content.decode()
+    assert reverse("approvals:queue") not in page

@@ -953,43 +953,4 @@ body {
   outline: 2px solid #1a4d8f;
   outline-offset: 1px;
 }
-/* The admin approval queue. */
-.queue {
-  margin: 0 auto;
-  max-width: 40rem;
-  padding: 3rem 1.5rem 4rem;
-}
-
-/* A queue card stacks its lines; the listing card's row layout doesn't fit it. */
-.charity-card.queue__item {
-  display: block;
-}
-
-.queue__what,
-.queue__who,
-.queue__later {
-  margin: 0 0 0.5rem;
-}
-
-.queue__who,
-.queue__later {
-  color: #555;
-  font-size: 0.875rem;
-}
-
-.queue__actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.queue__reject {
-  background: #fff;
-  border: 1px solid #b42318;
-  border-radius: 0.375rem;
-  color: #b42318;
-  cursor: pointer;
-  font: inherit;
-  padding: 0.5rem 1rem;
-}
-
 /* ===== End login pages ============================================ */

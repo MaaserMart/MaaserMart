@@ -1,6 +1,6 @@
 """The admin approval queue (§6.2.13, §7.1.6). Admins only; anyone else gets 404."""
 
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.http import Http404, HttpResponseBadRequest
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_POST
@@ -23,7 +23,13 @@ def _require_admin(request):
 @require_GET
 def queue_view(request):
     _require_admin(request)
-    return render(request, "approvals/queue.html", {"requests": services.get_requests()})
+    context = {
+        # Django admin's header, nav and styles, so the queue looks like the rest of it.
+        **admin.site.each_context(request),
+        "title": "Approval queue",
+        "requests": services.get_requests(),
+    }
+    return render(request, "approvals/queue.html", context)
 
 
 @require_POST
