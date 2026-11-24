@@ -1083,3 +1083,34 @@ body {
   position: fixed;
   z-index: 30;
 }
+
+/* Member dashboard: two columns on wide screens, stacked on small ones. */
+.member-dashboard {
+  margin: 0 auto;
+  max-width: 72rem;
+  padding: 2.5rem 1.5rem 4rem;
+}
+.member-dashboard__columns {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.member-dashboard__section-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+.member-dashboard__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.member-dashboard__list li {
+  border-top: 1px solid #ddd;
+  padding: 1rem 0;
+}
+.member-dashboard__list p { margin: 0.35rem 0; }
+.member-dashboard button { cursor: pointer; font: inherit; }
+@media (max-width: 48rem) {
+  .member-dashboard__columns { grid-template-columns: minmax(0, 1fr); }
+}

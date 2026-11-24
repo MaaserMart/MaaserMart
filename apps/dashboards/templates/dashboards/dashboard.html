@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Your dashboard &middot; MaaserMart{% endblock %}
+{% block content %}
+  <div class="member-dashboard">
+    <header>
+      <h1>Your dashboard</h1>
+      <p>Maaser owed: <strong>{{ summary.owed|floatformat:2 }}</strong> &middot; <a href="{% url 'tools:index' %}">Maaser tools</a></p>
+    </header>
+    {% if messages %}
+      {% for message in messages %}<p role="status">{{ message }}</p>{% endfor %}
+    {% endif %}
+    <div class="member-dashboard__columns">
+      <section aria-labelledby="history-heading">
+        <div class="member-dashboard__section-head">
+          <h2 id="history-heading">History</h2>
+          {% if history %}<form method="post" action="{% url 'dashboards:clear-history' %}">{% csrf_token %}<button type="submit">Clear all</button></form>{% endif %}
+        </div>
+        {% if history %}
+          <ul class="member-dashboard__list">
+            {% for item, name in history %}
+              <li>
+                <a href="{% url 'charities:detail' item.charity_id %}">{{ name }}</a>
+                <p>{% if item.action == 'link_click' %}Clicked a link{% else %}Viewed charity{% endif %} &middot; <time datetime="{{ item.created|date:'c' }}">{{ item.created|date:'j M Y, H:i' }} UTC</time></p>
+                <form method="post" action="{% url 'dashboards:hide' item.id %}">{% csrf_token %}<button type="submit" aria-label="Hide activity for {{ name }}">Hide</button></form>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}<p>Your charity activity will appear here.</p>{% endif %}
+      </section>
+      <section aria-labelledby="recommendations-heading">
+        <h2 id="recommendations-heading">Recommendations</h2>
+        {% if recommendations %}
+          <ul class="member-dashboard__list">
+            {% for charity in recommendations %}
+              <li>
+                <a href="{% url 'charities:detail' charity.id %}">{{ charity.name }}</a>
+                {% if charity.tagline %}<p>{{ charity.tagline }}</p>{% endif %}
+                <form method="post" action="{% url 'dashboards:reject' charity.id %}">{% csrf_token %}<button type="submit" aria-label="Remove recommendation for {{ charity.name }}">Remove</button></form>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}<p>No recommendations yet. Explore charities to build your recommendations.</p>{% endif %}
+      </section>
+    </div>
+  </div>
+{% endblock %}

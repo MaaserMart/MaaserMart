@@ -889,3 +889,13 @@ Rules for this file:
 - **2026-11-13: Default statuses for APPROVAL_REQUEST and TICKET?** The doc (§5.2.5, §5.2.19) gives no default; the models default `ApprovalRequest.status` to `pending` and `Ticket.status` to `not_responded`. Those defaults are the only choices nobody has confirmed.
 - **2026-11-13: Can users pick a rabbi in the listing filter yet?** §6.2.4 makes `haskama_rabbi` repeatable by rabbi and names `accounts.services.search_rabbis`, which does not exist. The filter is wired end to end but its option list is empty, so it matches nothing. Resolved as D-045 (sub-decision) on 2026-11-13; it becomes usable when `search_rabbis` lands. Resolved as D-058 on 2026-11-17: `search_rabbis` exists.
 - **2026-11-14: Should an approved edit record a `charity_updated` EVENT?** D-048 orders "most recently updated" by the latest `charity_updated` EVENT, because §6.1 does not let charities read EDIT_REQUEST. Nothing applies edits yet. When the edit/approval flow lands it must record that event through charities' service, or this order will ignore edits. Asked because it is a rule the later flow has to keep. Resolved as D-052 on 2026-11-15: every save records it, not only approved edits.
+
+## D-077: Member dashboard, history, recommendations and reviews
+
+- Date: 2026-11-24
+- Decided by: builder, applying the requested member features; threshold values pending product tuning
+- Status: Active
+- Design doc ref: §6.2.7–6.2.11, UC-05
+- Decision: `/dashboard/` displays the current member's view/click history and recommendations. History is soft-hidden per event or in bulk. Recommendation denominators include hidden view/click events, but only visible events contribute weights; published charities are ordered by the three design tiers and rejected charities are permanently excluded. Defaults are minimum 3 events, x=0.2, y=0.1 and z=0.2, configurable through environment variables; no limit is imposed while the design leaves it open. An existing review is replaced when the member submits it again. The existing-user login UI is wired to the authentication and rate-limit services already on main.
+- Why: The requested work needs the design's privacy and scoring rules, and a working way for existing users to reach the member pages. The design leaves tuning values open, so the defaults can be changed without a schema change.
+- Where in code: `apps/events/services.py`, `apps/recommendations/services.py`, `apps/dashboards/`, `apps/charities/`, `apps/accounts/`, `config/settings/`, `docs/member-dashboard-plan.md`.
