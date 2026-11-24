@@ -918,3 +918,17 @@ survive the JSON round-trip); `test_after_max_rounds_the_model_must_answer_witho
 One test worth calling out by name: `test_a_dotted_path_plugs_in_a_new_provider`
 is the entire "plug and play" promise in executable form — a vendor added with no
 edits to the chatbot, only a string.
+
+## 9. What the review changed
+
+One thing, in `apps/chatbot/loop.py`: an oversized tool result is no longer chopped out
+of its own JSON (section 7.5 quotes the fix). The old code kept the *size* down and
+broke the *format*, handing the model an unparseable fragment when the contract says a
+result. Now it receives a small valid object with an error, a "narrow this" hint and a
+preview of what it asked for.
+
+The test that pinned the old behaviour was rewritten rather than deleted, so the
+contract "the model always gets parseable JSON" is what the suite now holds.
+
+Everything else is as merged: the provider interface, the two adapters, the fake, the
+settings switch, D-075.

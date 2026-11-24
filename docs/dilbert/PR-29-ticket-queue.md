@@ -910,3 +910,18 @@ to assert the field was empty). `test_needs_exactly_one_submitter` is replaced b
 `test_needs_a_reply_address`, with three cases: empty, spaces and missing. And one
 test is new: `test_signed_in_user_without_an_email_is_told`, which proves the polite
 refusal instead of an unanswerable note. No test was deleted.
+
+## 9. What the review changed
+
+Writing this walkthrough is what found the ordering problem: the sentence "unanswered
+first" was true, and the reason it was true was the alphabet. Two things changed in
+branch `docs/dilbert-and-review-fixes`:
+
+- `apps/support/services.py` sorts by an explicit `STATUS_RANK` number instead of by
+  the status word, with an unranked status sorting last (section 7.3 quotes it).
+- `tests/unit/test_ticket_queue.py` gained `test_every_open_status_has_a_rank`, which
+  fails if a status is ever added without being ranked.
+
+What did *not* change: the pages, the views, the guard, the email path, D-073's rules.
+The queue looks and behaves exactly as documented above; it just cannot be reordered
+by an edit that looks unrelated.

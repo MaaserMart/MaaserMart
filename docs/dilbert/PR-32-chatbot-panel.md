@@ -1486,3 +1486,18 @@ fragment still carries `load delay:1s`); `test_failed`; `test_empty_question`;
 **The corner panel on real pages** — `test_members_get_the_corner_panel` (the panel's
 address is in the page, and both scripts are loaded);
 `test_guests_do_not` (neither the panel's class nor `chat.js` appears for a guest).
+
+## 9. What the review changed
+
+One guard, in `apps/chatbot/jobs.py` (section 7.2 quotes it): a job that has an answer
+can no longer be turned back into a failed job by a stale poll. The race it closes is
+real but small — the window is the microseconds between the poll reading a waiting job
+and writing "failed" — and the cost when it fired was a member being told to try again
+while a perfectly good answer sat in the cache.
+
+`test_lifecycle` was reordered (waiting → failed → answered → deleted) because failing a
+resolved job is now refused by design, and `test_an_answer_is_never_downgraded_to_a_failure`
+states the new rule directly.
+
+Everything else is as merged: the panel, the polling, the lookups, the prompt, the daily
+count, the retry script, D-076.
