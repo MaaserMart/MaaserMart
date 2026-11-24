@@ -78,7 +78,33 @@ DATABASES["default"].setdefault("OPTIONS", {})["connect_timeout"] = env.int(
 # request after a wake-up fails instead of reconnecting (D-070).
 DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
 
+# Caches shared by every Gunicorn worker, so login lockout and rate-limit counters
+# hold across workers and restarts. Needs `manage.py createcachetable` once per
+# database, which makes both tables (D-YOSEF-shared-cache).
+# A DatabaseCache over MAX_ENTRIES deletes its alphabetically lowest keys, live or
+# not. Login failures and locks get their own table, so a flood of other keys
+# (e.g. one rate-limit bucket per IP) can never delete a lock.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "django_cache",
+        "OPTIONS": {"MAX_ENTRIES": 100_000},
+    },
+    "login": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "login_cache",
+        "OPTIONS": {"MAX_ENTRIES": 1_000_000},
+    },
+}
+
+# Addresses whose X-Forwarded-For header is believed: Caddy on the same machine.
+# Gunicorn must listen on TCP (e.g. 127.0.0.1:8000), not a unix socket: over a
+# socket REMOTE_ADDR is empty, every visitor would share one rate-limit bucket,
+# and 20 logins a minute would be the limit for the whole site.
+TRUSTED_PROXY_IPS = env.list("DJANGO_TRUSTED_PROXY_IPS", default=["127.0.0.1", "::1"])
+
 AUTH_USER_MODEL = "accounts.User"
+AUTHENTICATION_BACKENDS = ["apps.accounts.backends.CaseInsensitiveModelBackend"]
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -97,14 +123,13 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Filter option lists are cached briefly so the sidebar does not read the whole
-# domain and location tables on every listing request (audit P1). LocMem is per
-# process, which is exactly the point: a multi-megabyte directory is read once
-# a minute per worker instead of once per page. The cache never stores users.
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "maasermart",
-    }
+# domain and location tables on every listing request (audit P1, D-061). LocMem is
+# per process, which is exactly the point: a multi-megabyte directory is read once
+# a minute per worker instead of once per page. The cache never stores users. It is
+# its own alias so the shared caches above stay shared (D-YOSEF-shared-cache).
+CACHES["options"] = {
+    "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    "LOCATION": "maasermart-options",
 }
 
 # --- RDS wake-up (D-070) -----------------------------------------------------

@@ -172,6 +172,9 @@ if [ "$DO_MIGRATE" = 1 ]; then
     tail -20 /tmp/maasermart-migrate.log >&2
     die "migrations failed. If the database is in an odd state, run: ./dev.sh --fresh"
   fi
+  # The login caches are tables, not migrations (D-YOSEF-shared-cache). Idempotent.
+  uv run python manage.py createcachetable >>/tmp/maasermart-migrate.log 2>&1 \
+    || die "createcachetable failed; see /tmp/maasermart-migrate.log"
   say "migrations applied"
 fi
 
