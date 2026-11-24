@@ -4,6 +4,7 @@ Other apps call only the functions defined here, never this app's models.
 """
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from django.db import IntegrityError, transaction
@@ -26,6 +27,78 @@ from django.utils import timezone
 from .models import Event
 
 logger = logging.getLogger(__name__)
+
+# Only the member's own browsing activity is shown in their history. Other
+# events, such as charity updates, are administrative records.
+HISTORY_ACTIONS = (Event.Action.VIEW, Event.Action.LINK_CLICK)
+
+
+@dataclass(frozen=True)
+class HistoryEvent:
+    """A member's activity without exposing an EVENT model across apps."""
+
+    id: int
+    charity_id: int
+    link_id: int | None
+    action: str
+    created: datetime
+
+
+def _member_history(user_id):
+    """Scope history operations to a real member, never anonymous events."""
+    if user_id is None:
+        raise ValueError("A user id is required")
+    return Event.objects.filter(user_id=user_id, action__in=HISTORY_ACTIONS, hidden_by_user=False)
+
+
+def get_history(user_id) -> tuple[HistoryEvent, ...]:
+    """Return the member's visible visits and clicks, most recent first."""
+    rows = _member_history(user_id).order_by("-created", "-pk")
+    return tuple(
+        HistoryEvent(
+            id=row.pk,
+            charity_id=row.charity_id,
+            link_id=row.link_id,
+            action=row.action,
+            created=row.created,
+        )
+        for row in rows
+    )
+
+
+def hide_history(user_id, event_id) -> bool:
+    """Hide one of this member's history entries, returning whether it existed."""
+    return bool(_member_history(user_id).filter(pk=event_id).update(hidden_by_user=True))
+
+
+def hide_all_history(user_id) -> int:
+    """Hide the member's visible history and return the number of rows changed."""
+    return _member_history(user_id).update(hidden_by_user=True)
+
+
+def recommendation_signals(user_id) -> tuple[int, dict[int, int], set[int]]:
+    """Return activity threshold, visible charity counts and rejected charity IDs.
+
+    Hidden browsing events still contribute to the activity threshold, but not
+    to the charity scores. Rejections remain effective regardless of history.
+    """
+    if user_id is None:
+        raise ValueError("A user id is required")
+    activity = Event.objects.filter(user_id=user_id, action__in=HISTORY_ACTIONS)
+    total = activity.count()
+    counts = dict(
+        activity.filter(hidden_by_user=False)
+        .order_by()
+        .values_list("charity_id")
+        .annotate(total=Count("pk"))
+    )
+    rejected = set(
+        Event.objects.filter(user_id=user_id, action=Event.Action.REJECT).values_list(
+            "charity_id", flat=True
+        )
+    )
+    return total, counts, rejected
+
 
 # §6.4.3 Trending: events in the past week count three, events in the past month
 # count two. The two windows do not overlap, or a row from this week would be
