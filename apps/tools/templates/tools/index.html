@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Maaser tools &middot; MaaserMart{% endblock %}
+
+{% block content %}
+  <section class="tools-page">
+    <h1>Maaser tools</h1>
+    {% include "tools/_nav.html" %}
+
+    <p class="tools-owed">
+      You owe <strong>{{ summary.owed|floatformat:"2g" }}</strong> in maaser.
+    </p>
+
+    <ul class="tools-links">
+      <li><a href="{% url 'tools:maaser' %}">Maaser calculator</a>: how that figure is worked out.</li>
+      <li><a href="{% url 'tools:income' %}">Income</a>: what you have earned ({{ summary.income|floatformat:"2g" }} in all).</li>
+      <li><a href="{% url 'tools:donations' %}">Donations</a>: what you have given ({{ summary.donations|floatformat:"2g" }} in all).</li>
+    </ul>
+  </section>
+{% endblock %}

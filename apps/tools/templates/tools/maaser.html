@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Maaser calculator &middot; MaaserMart{% endblock %}
+
+{% block content %}
+  <section class="tools-page">
+    <h1>Maaser calculator</h1>
+    {% include "tools/_nav.html" %}
+
+    <table class="tools-sum">
+      <tbody>
+        <tr><th scope="row">Income</th><td>{{ summary.income|floatformat:"2g" }}</td></tr>
+        <tr><th scope="row">Maaser due (a tenth)</th><td>{{ summary.due|floatformat:"2g" }}</td></tr>
+        <tr><th scope="row">Donations</th><td>&minus; {{ summary.donations|floatformat:"2g" }}</td></tr>
+        <tr class="tools-sum__total"><th scope="row">Still owed</th><td>{{ summary.owed|floatformat:"2g" }}</td></tr>
+      </tbody>
+    </table>
+
+    {% if summary.given_beyond %}
+      <p class="tools-note">
+        You have given {{ summary.given_beyond|floatformat:"2g" }} more than the maaser due.
+        Maaser cannot be given before the income it comes from, so this is not counted
+        against future income.
+      </p>
+    {% endif %}
+
+    <p class="tools-note">All amounts are taken to be in one currency.</p>
+  </section>
+{% endblock %}

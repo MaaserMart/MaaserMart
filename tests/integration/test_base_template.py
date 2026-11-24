@@ -37,7 +37,7 @@ def test_home_page_shows_nav_and_local_scripts(client):
 
     assert 'href="/charity/"' in html
     # A route with no pattern yet is not advertised at all (B1).
-    assert 'href="/tools/"' not in html
+    assert 'href="/dashboard/"' not in html
     assert 'href="/accounts/login/"' not in html
     assert "/static/vendor/htmx-2.0.4.min.js" in html
     assert "/static/vendor/alpinejs-3.14.8.min.js" in html

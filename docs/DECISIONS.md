@@ -827,6 +827,21 @@ Rules for this file:
   - "Open tickets" (§7.3.10) is read as not closed. A replied ticket can still need a second answer, so only Close removes it.
 - Where in code: `apps/support/services.py` (`get_tickets`, `resolve_ticket`, `TicketCard`), `apps/support/tasks.py` (`send_ticket_reply`), `apps/support/views.py` (`ticket_queue`, `resolve`), `apps/support/admin_urls.py`, `apps/support/templates/support/ticket_queue.html`, `templates/admin/index.html`, `apps/charities/services.py` (`get_charity_choices`), `config/urls.py`, `tests/unit/test_ticket_queue.py`
 
+## D-074: Maaser tools: signing in is the member check, entries are added and removed, and an overpayment is shown but never carried forward
+
+- Date: 2026-11-23
+- Decided by: Platform Lead (Shaul)
+- Status: Active
+- Design doc ref: §6.3.1 (Maaser Tools), §6.4 (Maaser Calculator), §6.3 (failure path "Negative maaser balance"), §6.1 (tools depends on nothing), §5.2.18 (TRANSACTION), SRS FR 20–22; paths from D-027
+- Decision: The tools pages are `/tools/` (what is owed, with links), `/tools/maaser/` (the calculator), `/tools/income/` and `/tools/donations/` (each a history list with an add form and a Remove button per row). Specifics:
+  - **Members only means signed in.** Every account gets the `member` role at signup (D-YOSEF-accounts-login), so `login_required` is the check. Tools does not call `accounts.services.find_role`, because §6.1 lets tools depend on nothing.
+  - **The calculator** is `round(income / 10, 2) − donations`, using all of the member's rows, clamped at zero (§6.3). When donations exceed what is due, the page says by how much, but the excess is never counted against future income.
+  - **Entries:** the amount must be above zero, to the cent, and fit Decimal(12, 2). The date defaults to today and may not be in the future: a future donation would lower what is owed today. An optional note is kept. Remove deletes only the member's own row; another member's id gets a 404.
+  - **Not built yet** (cheap to add later, D-025): editing an entry in place, linking a donation to a charity (`TRANSACTION.charity`, which would add a tools → charities dependency), per-period totals, and paging the history.
+  - `tools.services` exposes `add_transaction`, `list_transactions`, `delete_transaction`, `maaser_summary` and `maaser_owed`. Each takes the member's user id and returns dataclasses, never model rows, so the member dashboard can show the owed figure.
+- Why: §6.3.1 asks for service functions that add transactions and calculate maaser owed. §6.4 gives the formula, and §6.3 names the clamp. Removing an entry is the smallest fix for a typo. Tying a donation to a charity is the one choice that changes §6.1's dependencies, so it waits until someone asks for it.
+- Where in code: `apps/tools/services.py`, `apps/tools/views.py`, `apps/tools/urls.py`, `apps/tools/templates/tools/`, `config/urls.py`, `static/css/site.css`, `tests/factories/tools.py`, `tests/unit/test_maaser_tools.py`, `tests/integration/test_base_template.py` (its "unbuilt route" example is now `/dashboard/`)
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.

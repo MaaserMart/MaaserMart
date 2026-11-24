@@ -21,6 +21,7 @@ from .charities import (
     ReviewFactory,
 )
 from .events import EventFactory
+from .tools import TransactionFactory
 
 __all__ = [
     "ApprovalRequestFactory",
@@ -37,5 +38,6 @@ __all__ = [
     "RabbiProfileFactory",
     "ReviewFactory",
     "RoleAssignmentFactory",
+    "TransactionFactory",
     "UserFactory",
 ]

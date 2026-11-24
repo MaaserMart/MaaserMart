@@ -880,3 +880,83 @@ body {
   border-radius: 4px;
   padding: 0.5rem 0.75rem;
 }
+
+/* Maaser tools (D-074) */
+.tools-page {
+  max-width: 44rem;
+}
+
+.tools-nav {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.tools-nav a[aria-current="page"] {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.tools-owed {
+  font-size: 1.25rem;
+}
+
+.tools-note {
+  color: #555;
+}
+
+.tools-form {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.tools-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.tools-form__note {
+  flex: 1 1 12rem;
+}
+
+.tools-form .ticket-form__error {
+  flex-basis: 100%;
+}
+
+.tools-ledger,
+.tools-sum {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.tools-ledger th,
+.tools-ledger td,
+.tools-sum th,
+.tools-sum td {
+  border-bottom: 1px solid #ddd;
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+}
+
+.tools-ledger td:nth-child(2),
+.tools-sum td {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.tools-sum__total th,
+.tools-sum__total td {
+  font-weight: 600;
+}
+
+.visually-hidden {
+  clip: rect(0 0 0 0);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}

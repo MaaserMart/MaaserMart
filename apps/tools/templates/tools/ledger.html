@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}{{ ledger.title }} &middot; MaaserMart{% endblock %}
+
+{% block content %}
+  <section class="tools-page">
+    <h1>{{ ledger.title }}</h1>
+    {% include "tools/_nav.html" %}
+    <p>{{ ledger.intro }}</p>
+
+    {% for message in messages %}
+      <p class="ticket-form__notice" role="status">{{ message }}</p>
+    {% endfor %}
+
+    <form class="tools-form" method="post" action="{% url ledger.url_name %}">
+      {% csrf_token %}
+      {% if error %}<p class="ticket-form__error" role="alert">{{ error }}</p>{% endif %}
+      <label>Amount
+        <input type="text" name="amount" inputmode="decimal" required value="{{ form.amount }}">
+      </label>
+      <label>Date
+        <input type="date" name="date" max="{{ today }}" value="{{ form.date|default:today }}">
+      </label>
+      <label class="tools-form__note">Note (optional)
+        <input type="text" name="note" maxlength="{{ max_note_length }}" value="{{ form.note }}">
+      </label>
+      <button class="button" type="submit">Add {{ ledger.noun }}</button>
+    </form>
+
+    {% if entries %}
+      <table class="tools-ledger">
+        <thead>
+          <tr><th scope="col">Date</th><th scope="col">Amount</th><th scope="col">Note</th><th scope="col"><span class="visually-hidden">Remove</span></th></tr>
+        </thead>
+        <tbody>
+          {% for entry in entries %}
+            <tr>
+              <td>{{ entry.date|date:"Y-m-d" }}</td>
+              <td>{{ entry.amount|floatformat:"2g" }}</td>
+              <td>{{ entry.note }}</td>
+              <td>
+                <form method="post" action="{% url 'tools:delete' type entry.id %}">
+                  {% csrf_token %}
+                  <button class="button button--link" type="submit">Remove</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><th scope="row">Total</th><td>{{ total|floatformat:"2g" }}</td><td colspan="2"></td></tr>
+        </tfoot>
+      </table>
+    {% else %}
+      <p class="tools-note">No {{ ledger.noun }} recorded yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}
