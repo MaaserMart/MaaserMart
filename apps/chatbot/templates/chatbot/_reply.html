@@ -1,0 +1,3 @@
+{% load chat_text %}{% if status.state == "answered" %}<li class="chat__msg chat__msg--bot">{{ status.answer|chat_text }}</li>
+{% elif status.state == "failed" %}<li class="chat__msg chat__msg--bot chat__msg--error" role="alert">Sorry, I couldn't get an answer. Please try again.</li>
+{% else %}{% include "chatbot/_pending.html" %}{% endif %}

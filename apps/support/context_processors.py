@@ -39,6 +39,8 @@ NAV_DESTINATIONS: tuple[tuple[str, str], ...] = (
 LOGIN_URL_NAME = "accounts:login"
 SIGNUP_URL_NAME = "accounts:signup"
 LOGOUT_URL_NAME = "accounts:logout"
+# The chatbot is a corner panel on every page, not a nav link (§7, D-076).
+CHATBOT_URL_NAME = "chatbot:panel"
 
 
 def _url_of(name: str) -> str | None:
@@ -67,5 +69,6 @@ def nav(request) -> dict:
             "login_url": _url_of(LOGIN_URL_NAME),
             "signup_url": _url_of(SIGNUP_URL_NAME),
             "logout_url": _url_of(LOGOUT_URL_NAME),
+            "chatbot_url": _url_of(CHATBOT_URL_NAME),
         }
     }

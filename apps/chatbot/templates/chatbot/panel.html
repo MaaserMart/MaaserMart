@@ -1,0 +1,24 @@
+{% load chat_text %}{# The panel's body, loaded into base.html's corner panel on first open (D-076). #}
+<div class="chat" id="chat">
+  <ol class="chat__log" id="chat-log" aria-live="polite">
+    {% for turn in history %}
+      <li class="chat__msg chat__msg--me">{{ turn.question }}</li>
+      <li class="chat__msg chat__msg--bot">{{ turn.answer|chat_text }}</li>
+    {% empty %}
+      <li class="chat__msg chat__msg--bot">Ask me about charities on MaaserMart, your maaser figures, or the halachos of tzedakah.</li>
+    {% endfor %}
+  </ol>
+  <form class="chat__form" hx-post="{% url 'chatbot:ask' %}" hx-target="#chat-log" hx-swap="beforeend"
+        data-chat-form>
+    {% csrf_token %}
+    <label class="visually-hidden" for="chat-question">Your question</label>
+    <textarea id="chat-question" name="question" rows="2" maxlength="{{ max_length }}" required
+              placeholder="Ask a question"></textarea>
+    <button type="submit">Send</button>
+  </form>
+  <form class="chat__clear" hx-post="{% url 'chatbot:clear' %}" hx-target="#chat-log" hx-swap="innerHTML">
+    {% csrf_token %}
+    <button type="submit" class="chat__clear-btn">Clear conversation</button>
+  </form>
+  <p class="chat__note">Answers come from an AI and can be wrong. For a practical halachic question, ask your rav.</p>
+</div>

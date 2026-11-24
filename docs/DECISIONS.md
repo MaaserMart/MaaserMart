@@ -857,6 +857,26 @@ Rules for this file:
   - **Not built here:** the tools themselves, the system prompt, the Celery task, the panel and the usage cap. They come with the chatbot panel.
 - Why: The Platform Lead asked for a model-agnostic chatbot with OpenAI and DeepSeek implementations, where the model decides what to fetch from the database. Tool calling lets the model fetch only what a question needs, instead of every charity being packed into each prompt, and keeps the app boundaries of D-006, since each lookup is a service call.
 
+## D-076: The chatbot panel: a corner panel that polls, jobs kept in the cache, and read-only lookups into charities and tools
+
+- Date: 2026-11-23
+- Decided by: Platform Lead (Shaul)
+- Status: Active
+- Design doc ref: §6.3.2 (Chatbot), §6.1 (chatbot exposes `enqueue_question` and `poll_status`; owns no models; depends on nothing structural), §6.3 (chatbot failure paths), §7 (a corner icon opens a panel on each page), §3.4.2 (usage logging), D-035 (network retry), D-062 (CSP)
+- Decision: The chatbot is usable by every signed-in member. Specifics:
+  - **Panel.** `base.html` puts a native `<details>` in the corner for signed-in users; htmx loads `/chatbot/` into it the first time it opens. No Alpine and no inline script, because production's CSP (D-062) allows neither eval nor inline JS; the small behaviour left (empty the box after sending, Enter to send, scroll to the newest message) is in `static/js/chat.js`. Guests see no panel.
+  - **Endpoints** (§7's inventory has none, so they are fixed here): `/chatbot/` (the panel), `POST /chatbot/ask/`, `GET /chatbot/status/<task_id>/` (the polling endpoint) and `POST /chatbot/clear/`. All require login. The pending bubble re-polls every second until it is answered or failed.
+  - **Jobs live in the default cache** (`apps/chatbot/jobs.py`). The SQS transport has no result backend, and the default cache is database-backed and shared by the web processes and the worker, so the chatbot still owns no models and needs no migration. A job expires after an hour. The task id is a random UUID, and `poll_status` answers only the member who asked; anyone else gets a 404 (§6.3).
+  - **Failure paths, as §6.3 lists them.** A queue failure says "Could not submit, try again". A timeout, rate limit or vendor 5xx is retried twice (2 s, then 4 s) before the bubble says "couldn't get an answer". A bad key, a missing configuration or an empty reply fails at once. A job still pending after `CHATBOT_ANSWER_SECONDS` (120) is failed when polled, so a stopped worker never leaves the bubble polling forever.
+  - **Usage cap.** `CHATBOT_DAILY_LIMIT` (30) questions per member per UTC day, counted in the cache once a question is queued. Past it the panel says "You've reached the chatbot limit".
+  - **Conversation.** The session keeps the last 6 exchanges and sends them with each question, so follow-ups work. "Clear conversation" forgets them. Questions are cut to 1,000 characters.
+  - **Lookups** (`apps/chatbot/lookups.py`): `search_charities` (name, domain, location, sort; at most 5), `get_charity` (description cut to 1,200 characters, 3 recent reviews, haskamos), `list_domains`, and `my_maaser`, which is bound to the asking member's id on the server so the model cannot ask for anyone else's figures. This adds two dependencies §6.1 does not list: chatbot → charities (`search_charities`, `get_charity`, `domain_names` in charities' services) and chatbot → tools (`maaser_summary`). Both are read-only service calls. The charity lookups use `published_only=False`, like the listing, until D-042 flips it.
+  - **System prompt** (`apps/chatbot/prompt.py`): scope (charities on the site, the member's maaser, the laws of tzedakah), never invent charity data, link a charity by its `/charity/<id>/` page and a source on Sefaria, suggest asking one's rav on practical questions, brief and plain text.
+  - **Rendering.** Answers are escaped, and only `/charity/<id>/` paths and `https://www.sefaria.org/` URLs become links (`chat_text` filter). Any other URL the model writes stays text.
+  - **Logging.** Each answer logs who asked, the provider, rounds, tools called and tokens at INFO (§3.4.2), and never the question or answer text.
+  - **Network retry (D-035)** is `static/js/retry.js` on every page: when an htmx request gets no response at all, a "Connecting…" notice shows and the request is retried every second for up to 5 seconds, then "Couldn't reach MaaserMart". Server errors are not retried.
+- Why: §6.1 and §6.3 fix the shape (enqueue, then poll) and the failure messages but not where the job state lives, the endpoints or the limits. The cache keeps the chatbot model-free as §6.1 requires. Binding `my_maaser` to the session user keeps a model, or a prompt injected into it, from reading another member's figures.
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.

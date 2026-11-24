@@ -181,3 +181,7 @@ CHATBOT_MODEL = env("CHATBOT_MODEL", default="")
 CHATBOT_TIMEOUT_SECONDS = env.int("CHATBOT_TIMEOUT_SECONDS", default=30)
 OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
 DEEPSEEK_API_KEY = env("DEEPSEEK_API_KEY", default="")
+# Questions per member per UTC day (§6.3 "chatbot limit"), and how long a
+# question may wait before the panel says "couldn't get an answer" (D-076).
+CHATBOT_DAILY_LIMIT = env.int("CHATBOT_DAILY_LIMIT", default=30)
+CHATBOT_ANSWER_SECONDS = env.int("CHATBOT_ANSWER_SECONDS", default=120)

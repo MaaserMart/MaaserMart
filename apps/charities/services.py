@@ -15,8 +15,14 @@ from apps.events.services import record_event
 from .contracts import CharityCard, CharityPage, DomainOption, LocationOption, RabbiOption
 from .filters import CharityFilters, FilterForm, sidebar_groups
 from .models import Charity
-from .repositories import CharityRepository, FilterOptionsRepository
-from .sorting import CharitySort
+from .repositories import (
+    CharityRepository,
+    DjangoCharityRepository,
+    DjangoFilterOptionsRepository,
+    FilterOptionsRepository,
+)
+from .search import Search
+from .sorting import MECHANISMS, RATING, CharitySort
 from .state import MAX_PAGE_SIZE, PageState, page_count
 
 logger = logging.getLogger(__name__)
@@ -360,3 +366,65 @@ def filter_form(
 ) -> FilterForm:
     """Assemble the sidebar from the chosen filters and the option lists."""
     return FilterForm(filters=filters, groups=sidebar_groups(filters, options, requested or {}))
+
+
+# --- Lookups for the chatbot ---------------------------------------------------
+# The chatbot's model asks for charities through these read-only calls (D-076).
+# They read the same repository as the listing and the charity page, so the
+# chatbot sees exactly what a visitor can see, and they return the same
+# contracts, never model rows.
+
+CHAT_RESULT_LIMIT = 5
+
+
+def _matching_ids(options, wanted: str) -> tuple[int, ...] | None:
+    """Ids of the options whose label contains `wanted`; None when nothing is asked."""
+    wanted = (wanted or "").strip().lower()
+    if not wanted:
+        return None
+    return tuple(o.id for o in options if wanted in getattr(o, "label", o.name).lower())
+
+
+def search_charities(
+    term: str = "",
+    *,
+    domain: str = "",
+    location: str = "",
+    sort: str = RATING.value,
+    limit: int = CHAT_RESULT_LIMIT,
+) -> tuple[CharityCard, ...]:
+    """Up to `limit` charities matching a name, a domain and a location, best first.
+
+    `domain` and `location` are matched by name, case-insensitively, against the
+    filter options; one that matches no option yields no charities rather than
+    being ignored. `sort` is a §6.2.5 mechanism value; an unknown one means
+    highest rated.
+    """
+    options = DjangoFilterOptionsRepository()
+    domains = _matching_ids(options.domains(), domain)
+    locations = _matching_ids(options.locations(), location)
+    if domains == () or locations == ():
+        return ()
+    mechanism = next((m for m in MECHANISMS if m.value == sort), RATING)
+    # published_only follows the listing's view until D-042 flips it.
+    return DjangoCharityRepository(published_only=False).page(
+        offset=0,
+        limit=max(1, min(limit, CHAT_RESULT_LIMIT)),
+        filters=CharityFilters(domains=domains or (), locations=locations or ()),
+        sort=CharitySort(mechanism, mechanism.descending_by_default),
+        search=Search(term=(term or "").strip()),
+    )
+
+
+def get_charity(charity_id) -> CharityPage | None:
+    """One charity in full, as its page shows it, or None."""
+    try:
+        charity_id = int(charity_id)
+    except (TypeError, ValueError):
+        return None
+    return DjangoCharityRepository(published_only=False).detail(charity_id)
+
+
+def domain_names() -> tuple[str, ...]:
+    """Every domain's name, as the Domain filter offers them."""
+    return tuple(o.name for o in DjangoFilterOptionsRepository().domains())
