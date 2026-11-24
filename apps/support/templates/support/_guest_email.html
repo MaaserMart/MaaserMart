@@ -1,0 +1,24 @@
+{# A guest proves the address before the form will submit (§6.3 Tickets, D-072). #}
+<fieldset class="ticket-form__email">
+  <legend>Your email</legend>
+  {% if verified_email %}
+    <p class="ticket-form__verified">Replies go to <strong>{{ verified_email }}</strong> (verified).</p>
+  {% else %}
+    <label for="ticket-email">Email address</label>
+    <div class="ticket-form__row">
+      <input id="ticket-email" name="email" type="email" autocomplete="email"
+             value="{{ pending_email|default:'' }}">
+      <button class="button button--secondary" type="submit" name="action" value="send_code"
+              formnovalidate>{% if pending_email %}Send a new code{% else %}Verify{% endif %}</button>
+    </div>
+    {% if pending_email %}
+      <label for="ticket-code">6-digit code</label>
+      <div class="ticket-form__row">
+        <input id="ticket-code" name="code" inputmode="numeric" autocomplete="one-time-code"
+               maxlength="6" pattern="[0-9]{6}">
+        <button class="button button--secondary" type="submit" name="action" value="verify"
+                formnovalidate>Check code</button>
+      </div>
+    {% endif %}
+  {% endif %}
+</fieldset>

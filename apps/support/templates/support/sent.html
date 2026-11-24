@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Sent &middot; MaaserMart{% endblock %}
+
+{% block content %}
+  <section class="ticket-page">
+    <h1>{% if kind == "report" %}Report sent{% else %}Message sent{% endif %}</h1>
+    {% if kind == "report" %}
+      <p>Thank you. An admin will look into {{ charity.name }} and email you.</p>
+      <p><a href="{% url 'charities:detail' charity.id %}">Back to {{ charity.name }}</a></p>
+    {% else %}
+      <p>Thank you. An admin will email you an answer.</p>
+      <p><a href="{% url 'charities:listing' %}">Back to the charities</a></p>
+    {% endif %}
+  </section>
+{% endblock %}

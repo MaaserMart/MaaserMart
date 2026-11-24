@@ -8,5 +8,6 @@ urlpatterns = [
     # D-028: the listing is the front page; `/` redirects to it while home.html is unused.
     path("", RedirectView.as_view(url="/charity/", permanent=False), name="home"),
     path("charity/", include("apps.charities.urls")),
+    path("support/", include("apps.support.urls")),
     path("django-admin/", admin.site.urls),
 ]
