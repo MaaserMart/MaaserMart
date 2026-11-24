@@ -30,7 +30,10 @@ package = false
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-extend-exclude = ["*/migrations/*"]
+extend-exclude = ["*/migrations/*", "docs/dilbert"]
+# docs/dilbert/ is prose: its code boxes quote real files as they were at each merge,
+# including Django's generated migrations in single quotes. Reformatting the quotes
+# would stop them matching the files they describe.
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "DJ", "S608", "S610", "S611"]
