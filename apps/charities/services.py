@@ -8,13 +8,14 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 from django.conf import settings
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 
 from apps.events.services import record_event
 
 from .contracts import CharityCard, CharityPage, DomainOption, LocationOption, RabbiOption
 from .filters import CharityFilters, FilterForm, sidebar_groups
-from .models import Charity
+from .models import Charity, Review
 from .repositories import (
     CharityRepository,
     DjangoCharityRepository,
@@ -285,6 +286,28 @@ def get_charity_page(repository: CharityRepository, charity_id: int) -> CharityP
 def get_link_url(repository: CharityRepository, charity_id: int, link_id: int) -> str | None:
     """The safe target of one of a charity's links, or None."""
     return repository.link_url(charity_id, link_id)
+
+
+def get_user_review(user, charity_id: int) -> Review | None:
+    """Return the member's existing review, if any, for editing."""
+    if not user.is_authenticated:
+        raise PermissionDenied
+    return Review.objects.filter(author=user, charity_id=charity_id).first()
+
+
+def save_review(user, charity_id: int, rating: int, body: str = "") -> None:
+    """Create or replace the member's review; the database enforces uniqueness.
+
+    Every account is a member (D-074). Validate here as well as on the form,
+    since callers of this service do not necessarily use the web form.
+    """
+    if not user.is_authenticated:
+        raise PermissionDenied
+    if isinstance(rating, bool) or not isinstance(rating, int) or not 1 <= rating <= 5:
+        raise ValidationError("Choose a rating from 1 to 5.")
+    Review.objects.update_or_create(
+        author=user, charity_id=charity_id, defaults={"rating": rating, "body": body or ""}
+    )
 
 
 # --- Lookups for other apps ---------------------------------------------------

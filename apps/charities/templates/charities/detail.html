@@ -96,6 +96,22 @@
 
     <section class="charity-page__section" aria-labelledby="reviews-heading">
       <h2 class="charity-page__heading" id="reviews-heading">Reviews</h2>
+      {% if user.is_authenticated %}
+        <form method="post" action="{% url 'charities:review' charity.id %}" class="ticket-form">
+          {% csrf_token %}
+          <h3>{% if own_review %}Edit your review{% else %}Write a review{% endif %}</h3>
+          {% for field in review_form %}
+            <div>
+              {{ field.label_tag }}<br>
+              {{ field }}
+              {% for error in field.errors %}<p class="ticket-form__error" role="alert">{{ error }}</p>{% endfor %}
+            </div>
+          {% endfor %}
+          <button class="button" type="submit">{% if own_review %}Update review{% else %}Submit review{% endif %}</button>
+        </form>
+      {% else %}
+        <p><a href="{{ login_url }}?next={{ request.path|urlencode }}">Log in to write a review</a></p>
+      {% endif %}
       {% if charity.reviews %}
         <ul class="review-list">
           {% for review in charity.reviews %}
