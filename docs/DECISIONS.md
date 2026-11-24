@@ -809,6 +809,24 @@ Rules for this file:
 - Why: §6.3 says a guest's email "must be verified", and the wireframes put a Verify button beside the field, so the code has to work before the ticket exists. Reusing accounts' signup verification would make support depend on accounts and would tie the two flows together for no gain. A report is about one charity, so the form has to find one; the only owner of charity rows is charities, and asking its services is the D-006 way to do that.
 - Where in code: `apps/support/verification.py`, `apps/support/tasks.py`, `apps/support/services.py`, `apps/support/views.py`, `apps/support/urls.py`, `apps/support/templates/support/`, `apps/support/migrations/0002_ticket_email_response.py`, `apps/charities/services.py` (`CharityChoice`, `find_charities_by_name`, `get_charity_choice`), `apps/charities/templates/charities/detail.html`, `config/urls.py`, `tests/unit/test_support_tickets.py`, `tests/unit/test_prod_settings.py` (Celery now discovers a task)
 
+## D-073: The admin ticket queue, and a ticket always keeps the address its reply goes to
+
+- Date: 2026-11-23
+- Decided by: Platform Lead (Shaul)
+- Status: Active (amends D-072's `TICKET.email`)
+- Design doc ref: §7.3.10 (Admin ticket queue: `get_tickets`, `resolve_ticket`), §6.3 (Tickets failure paths), §5.3 (TICKET index on status and created)
+- Decision: `/admin/tickets/` lists every ticket that is not closed: unanswered first, then oldest first. The (status, created) index serves that order. Only admins (`is_admin`) may open it; a visitor is sent to log in and anyone else gets a 403. Each card has a reply box and two buttons:
+  - **Send reply** saves the answer (`response`, `responded`, `responded_by`, status `responded`) and emails it. The ticket stays in the queue until it is closed.
+  - **Close** sets status `closed` and `closed`. Text typed in the box is sent as a final reply first.
+  - The email is queued in `transaction.on_commit`, so an answer that rolls back is never sent. If it still fails after 3 retries, the ticket stays answered and the task logs an ERROR with the ticket id (§6.3).
+  - **`TICKET.email` is now always set.** For a guest it is the verified address, as before. For a signed-in user it is the account's address when they filed. D-072 had left it empty for them.
+  - The Django admin's front page links to the queue (`templates/admin/index.html`).
+- Why:
+  - With `TICKET.email` empty for signed-in users, the reply could only be addressed by reading USER through the `submitted_by` foreign key. D-034 makes cross-app foreign keys schema-only, and §6.1 lets support depend on nothing. Copying the address when the ticket is filed keeps support self-contained.
+  - It also means the answer goes where the person was when they asked. The cost is that a later change to the account's email is not followed.
+  - "Open tickets" (§7.3.10) is read as not closed. A replied ticket can still need a second answer, so only Close removes it.
+- Where in code: `apps/support/services.py` (`get_tickets`, `resolve_ticket`, `TicketCard`), `apps/support/tasks.py` (`send_ticket_reply`), `apps/support/views.py` (`ticket_queue`, `resolve`), `apps/support/admin_urls.py`, `apps/support/templates/support/ticket_queue.html`, `templates/admin/index.html`, `apps/charities/services.py` (`get_charity_choices`), `config/urls.py`, `tests/unit/test_ticket_queue.py`
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.

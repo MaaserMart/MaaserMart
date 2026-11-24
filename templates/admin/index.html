@@ -1,0 +1,12 @@
+{% extends "admin/index.html" %}
+{# §7.3 Admin Access: the Django admin's front page links to the custom queues (D-073). #}
+
+{% block content %}
+  <div class="module" id="maasermart-queues">
+    <table>
+      <caption>MaaserMart queues</caption>
+      <tr><th scope="row"><a href="{% url 'support_admin:tickets' %}">Ticket queue</a></th></tr>
+    </table>
+  </div>
+  {{ block.super }}
+{% endblock %}
