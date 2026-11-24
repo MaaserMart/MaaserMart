@@ -55,6 +55,10 @@ CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="sqs://")
 CELERY_BROKER_TRANSPORT_OPTIONS = {"region": env("AWS_REGION", default="us-east-2")}
 CELERY_TASK_ALWAYS_EAGER = False
 
+# A real model in production; without its key the chatbot answers "couldn't get
+# an answer" rather than echoing like the fake (D-075).
+CHATBOT_PROVIDER = env("CHATBOT_PROVIDER", default="openai")
+
 LOG_DIR = Path(env("DJANGO_LOG_DIR", default=str(BASE_DIR / "logs")))
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOGGING = {

@@ -842,6 +842,21 @@ Rules for this file:
 - Why: §6.3.1 asks for service functions that add transactions and calculate maaser owed. §6.4 gives the formula, and §6.3 names the clamp. Removing an entry is the smallest fix for a typo. Tying a donation to a charity is the one choice that changes §6.1's dependencies, so it waits until someone asks for it.
 - Where in code: `apps/tools/services.py`, `apps/tools/views.py`, `apps/tools/urls.py`, `apps/tools/templates/tools/`, `config/urls.py`, `static/css/site.css`, `tests/factories/tools.py`, `tests/unit/test_maaser_tools.py`, `tests/integration/test_base_template.py` (its "unbuilt route" example is now `/dashboard/`)
 
+## D-075: The chatbot reaches its model through a swappable provider, and looks things up through read-only tool calls
+
+- Date: 2026-11-23
+- Decided by: Platform Lead (Shaul)
+- Status: Active
+- Design doc ref: §6.3.2 (Chatbot), §6.1 (chatbot owns no models), §6.3 (chatbot failure paths)
+- Decision: The model behind the chatbot is a setting, not code. Specifics:
+  - **Providers.** `apps/chatbot/providers/` defines provider-neutral `Message`, `Tool`, `ToolCall` and `Reply`, and an abstract `ChatProvider.complete(messages, tools) -> Reply`. Built in: `openai` (default model `gpt-4o-mini`), `deepseek` (`deepseek-chat`) and `fake` (no network; echoes the question, or plays back a script in tests). Both real ones share one OpenAI-compatible class, since DeepSeek uses the same wire format.
+  - **Switching** is `CHATBOT_PROVIDER` (a built-in name, or the dotted path of any `ChatProvider` subclass, so a new vendor plugs in without editing the chatbot), `CHATBOT_MODEL` (empty means the provider's default), `CHATBOT_TIMEOUT_SECONDS` (30), and the key in `<NAME>_API_KEY` (`OPENAI_API_KEY`, `DEEPSEEK_API_KEY`). The default is `fake` everywhere except production, where it is `openai`; tests always use `fake`.
+  - **No SDK.** Requests go through the standard library, so no vendor package is added and each provider is one small class.
+  - **Errors.** Every failure is a `ProviderError` saying whether a retry may help (timeouts, 429, 5xx) or not (a bad key, a malformed reply). An unknown provider or missing key is a `ProviderConfigError`. The caller turns either into §6.3's "couldn't get an answer" state; the message is for the logs only.
+  - **Retrieval (RAG) is tool calling.** `apps/chatbot/loop.py` offers the model read-only tools, each a thin wrapper over another app's `services.py`, and runs what it asks for: never SQL, never model rows. Unknown tools, unknown or missing arguments and failing lookups go back to the model as an error result, not a crash. Each result is cut at 6,000 characters. After 4 rounds the model is asked once more with no tools, so it must answer. The loop totals rounds, tools called and tokens for the usage log (§3.4.2).
+  - **Not built here:** the tools themselves, the system prompt, the Celery task, the panel and the usage cap. They come with the chatbot panel.
+- Why: The Platform Lead asked for a model-agnostic chatbot with OpenAI and DeepSeek implementations, where the model decides what to fetch from the database. Tool calling lets the model fetch only what a question needs, instead of every charity being packed into each prompt, and keeps the app boundaries of D-006, since each lookup is a service call.
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.

@@ -15,3 +15,8 @@ CELERY_BROKER_URL = "memory://"
 # test_prod_settings.py, which imports production in a subprocess.
 RDS_INSTANCE_ID = ""
 MIDDLEWARE = [mw for mw in MIDDLEWARE if not mw.endswith("DatabaseWakeMiddleware")]
+# No test reaches a real model, whatever .env says (D-075).
+CHATBOT_PROVIDER = "fake"
+CHATBOT_MODEL = ""
+OPENAI_API_KEY = ""
+DEEPSEEK_API_KEY = ""

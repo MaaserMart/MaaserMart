@@ -171,3 +171,13 @@ CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="memory://")
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
 
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@maasermart.com")
+
+# The chatbot's model (D-075). A built-in name ("openai", "deepseek", "fake") or
+# the dotted path of a ChatProvider subclass. "fake" needs no key and no network;
+# production defaults to "openai" in prod.py. An empty model means the
+# provider's own default. Each provider reads its key from <NAME>_API_KEY.
+CHATBOT_PROVIDER = env("CHATBOT_PROVIDER", default="fake")
+CHATBOT_MODEL = env("CHATBOT_MODEL", default="")
+CHATBOT_TIMEOUT_SECONDS = env.int("CHATBOT_TIMEOUT_SECONDS", default=30)
+OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
+DEEPSEEK_API_KEY = env("DEEPSEEK_API_KEY", default="")
