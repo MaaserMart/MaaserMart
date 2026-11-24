@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlsplit
 
-from django.core.cache import cache
+from django.core.cache import caches
 from django.db.models import (
     Avg,
     Count,
@@ -535,6 +535,7 @@ class DjangoFilterOptionsRepository:
     OPTIONS_TTL = 60
 
     def _cached_options(self, key: str, load) -> tuple:
+        cache = caches["options"]
         options = cache.get(key)
         if options is None:
             options = tuple(load())
