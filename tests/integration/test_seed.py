@@ -4,7 +4,7 @@ import pytest
 from django.core.management import CommandError, call_command
 
 from apps.approvals.models import ApprovalRequest, NewCharityRequest
-from apps.charities.models import Charity
+from apps.charities.models import Charity, Haskama, Review
 from apps.events.models import Event
 from tests.factories import CharityFactory
 
@@ -15,9 +15,12 @@ def test_seed_fills_an_empty_database(settings):
     settings.DEBUG = True
     call_command("seed")
 
-    assert Charity.objects.count() == 200
-    # D-049: pairs are sampled without replacement, so no two names repeat.
-    assert Charity.objects.values("name").distinct().count() == 200
+    assert Charity.objects.count() == 21
+    # The seed list holds real organizations, each appearing once.
+    assert Charity.objects.values("name").distinct().count() == 21
+    # No fabricated endorsements of real organizations.
+    assert not Review.objects.exists()
+    assert not Haskama.objects.exists()
     assert Event.objects.exists()
     approved_ids = set(
         NewCharityRequest.objects.filter(
@@ -25,7 +28,7 @@ def test_seed_fills_an_empty_database(settings):
         ).values_list("charity_id", flat=True)
     )
     visible_ids = set(Charity.objects.filter(is_visible=True).values_list("id", flat=True))
-    assert len(approved_ids) == 185
+    assert len(approved_ids) == 18
     assert visible_ids == approved_ids
     published = Event.objects.filter(action=Event.Action.CHARITY_UPDATED)
     assert set(published.values_list("charity_id", flat=True)) == approved_ids
