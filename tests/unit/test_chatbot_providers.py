@@ -303,12 +303,15 @@ def test_a_broken_lookup_is_logged_and_hidden(caplog):
     assert "find_charity failed" in caplog.text
 
 
-def test_long_results_are_cut():
+def test_long_results_are_cut_to_something_the_model_can_still_read():
     fake = FakeProvider(script=[_call({"name": "x"}), Reply(text="ok")])
     loop.converse(fake, [Message("user", "q")], [_lookup_function(lambda name: "y" * 99999)])
     content = fake.calls[1][0][-1].content
-    assert len(content) < loop.MAX_RESULT_CHARS + 50
-    assert content.endswith("ask for something narrower)")
+    assert len(content) <= loop.MAX_RESULT_CHARS
+    # Still JSON, not a half-written object: the model gets a hint, not garbage.
+    parsed = json.loads(content)
+    assert parsed["hint"] == "Ask for something narrower."
+    assert parsed["preview"].startswith('"yyy')
 
 
 def test_results_with_dates_and_decimals_serialise():

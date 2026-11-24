@@ -10,7 +10,14 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.support.models import Ticket
-from apps.support.services import CLOSE, RESPOND, TicketError, get_tickets, resolve_ticket
+from apps.support.services import (
+    CLOSE,
+    RESPOND,
+    STATUS_RANK,
+    TicketError,
+    get_tickets,
+    resolve_ticket,
+)
 from tests.factories import CharityFactory, UserFactory
 from tests.factories.accounts import DEFAULT_PASSWORD
 
@@ -60,6 +67,11 @@ class TestGetTickets:
         user = UserFactory()
         _ticket(submitted_by=user)
         assert get_tickets()[0].from_member is True
+
+    def test_every_open_status_has_a_rank(self):
+        """A new status must be ranked by hand, not reorder the queue by accident."""
+        open_statuses = set(Ticket.Status.values) - {Ticket.Status.CLOSED}
+        assert set(STATUS_RANK) == open_statuses
 
 
 class TestResolveTicket:

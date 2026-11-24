@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from django.db import transaction
+from django.db.models import Case, IntegerField, Value, When
 from django.utils import timezone
 
 from apps.charities.services import get_charity_choices
@@ -95,12 +96,34 @@ class TicketCard:
     created: datetime
 
 
+# The order the queue works in: unanswered first. Spelled out rather than left to
+# the alphabet, where "not_responded" happened to sort before "responded"; a new
+# status must be ranked here, and `test_every_open_status_has_a_rank` says so.
+STATUS_RANK = {
+    Ticket.Status.NOT_RESPONDED: 0,
+    Ticket.Status.RESPONDED: 1,
+}
+UNRANKED = 99
+
+
+def _status_rank():
+    """A sortable number per status, 99 for one nobody ranked."""
+    return Case(
+        *[When(status=status, then=Value(rank)) for status, rank in STATUS_RANK.items()],
+        default=Value(UNRANKED),
+        output_field=IntegerField(),
+    )
+
+
 def get_tickets() -> list[TicketCard]:
     """Every ticket not yet closed, unanswered first, oldest first within each."""
     rows = list(
-        # "not_responded" sorts before "responded", so unanswered tickets lead; the
-        # (status, created) index serves this order (§5.3).
-        Ticket.objects.exclude(status=Ticket.Status.CLOSED).order_by("status", "created", "id")
+        # Ordered by rank rather than by the status word, so the order survives a
+        # new status (§5.3's (status, created) index no longer serves it; the queue
+        # is small, and being wrong quietly is worse than a sort).
+        Ticket.objects.exclude(status=Ticket.Status.CLOSED)
+        .annotate(status_rank=_status_rank())
+        .order_by("status_rank", "created", "id")
     )
     charities = get_charity_choices(row.charity_id for row in rows)
     cards = []

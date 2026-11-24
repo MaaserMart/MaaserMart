@@ -56,6 +56,10 @@ def _settle(job_id: str, state: str, answer: str = "") -> None:
     job = get(job_id)
     if job is None:
         return
+    if job.state == ANSWERED and state != ANSWERED:
+        # An answer that arrived beats a poll that gave up: a stale poll which
+        # failed the job microseconds earlier must not erase the answer.
+        return
     job.state, job.answer = state, answer
     _cache().set(_key(job_id), asdict(job), JOB_SECONDS)
 

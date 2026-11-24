@@ -98,12 +98,20 @@ class TestJobs:
         job_id = jobs.create(7, "Hi?")
         job = jobs.get(job_id)
         assert (job.user_id, job.question, job.state) == (7, "Hi?", jobs.PENDING)
-        jobs.answer(job_id, "Hello")
-        assert (jobs.get(job_id).state, jobs.get(job_id).answer) == (jobs.ANSWERED, "Hello")
         jobs.fail(job_id)
         assert jobs.get(job_id).state == jobs.FAILED
+        jobs.answer(job_id, "Hello")
+        assert (jobs.get(job_id).state, jobs.get(job_id).answer) == (jobs.ANSWERED, "Hello")
         jobs.delete(job_id)
         assert jobs.get(job_id) is None
+
+    def test_an_answer_is_never_downgraded_to_a_failure(self):
+        """A stale poll failing the job must not erase an answer that arrived."""
+        job_id = jobs.create(7, "Hi?")
+        jobs.answer(job_id, "Hello")
+        jobs.fail(job_id)
+        job = jobs.get(job_id)
+        assert (job.state, job.answer) == (jobs.ANSWERED, "Hello")
 
     def test_unknown_and_empty_ids(self):
         assert jobs.get("nope") is None
