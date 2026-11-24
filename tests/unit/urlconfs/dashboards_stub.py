@@ -10,7 +10,7 @@ def page(request):
 
 dashboards = (
     [
-        path("dashboard/member/", page, name="member"),
+        path("dashboard/member/", page, name="dashboard"),
         path("dashboard/rabbi/", page, name="rabbi"),
         path("dashboard/owner/", page, name="charity_owner"),
         path("dashboard/support/", page, name="technical_supporter"),

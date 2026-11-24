@@ -113,7 +113,7 @@ def attempt_login(request, username, password):
 # dashboards app, which has no pages yet (as of 2026-11-15); until a name exists,
 # its users land on the home page instead.
 DASHBOARD_URL_NAMES = {
-    "member": "dashboards:member",
+    "member": "dashboards:dashboard",
     "rabbi": "dashboards:rabbi",
     "charity_owner": "dashboards:charity_owner",
     "technical_supporter": "dashboards:technical_supporter",
@@ -127,6 +127,11 @@ def _url_or_home(name):
         return reverse(name)
     except NoReverseMatch:
         return reverse("home")
+
+
+def dashboard_url(role):
+    """A role's dashboard, or home until that dashboard has been built."""
+    return _url_or_home(DASHBOARD_URL_NAMES[role])
 
 
 def safe_next_url(request):
@@ -152,5 +157,5 @@ def redirect_after_login(request, user):
     if len(roles) > 1:
         return _url_or_home(CHOOSER_URL_NAME)
     if len(roles) == 1:
-        return _url_or_home(DASHBOARD_URL_NAMES[roles[0]])
+        return dashboard_url(roles[0])
     return reverse("home")

@@ -74,13 +74,13 @@ def test_a_full_address_on_this_site_is_followed():
     ],
 )
 def test_a_next_that_leaves_the_site_is_ignored(next_url):
-    assert go(user_with(Role.MEMBER), next_url) == reverse("home")
+    assert go(user_with(Role.MEMBER), next_url) == reverse("dashboards:dashboard")
 
 
 def test_an_http_next_is_ignored_on_an_https_request():
     """Following it would drop the user from HTTPS to plain HTTP."""
     user = user_with(Role.MEMBER)
-    assert go(user, "http://testserver/charity/12/", secure=True) == reverse("home")
+    assert go(user, "http://testserver/charity/12/", secure=True) == reverse("dashboards:dashboard")
 
 
 # --- by role, with the dashboards in place -----------------------------------
@@ -106,7 +106,7 @@ def test_admin_only_goes_to_the_admin_dashboard():
 
 
 @pytest.mark.urls(STUB)
-def test_several_roles_go_to_the_chooser():
+def test_several_roles_go_to_the_real_chooser():
     assert go(user_with(Role.MEMBER, Role.RABBI)) == "/accounts/choose-dashboard/"
 
 
@@ -125,12 +125,12 @@ def test_a_user_with_no_roles_goes_home():
     assert go(user_with()) == "/"
 
 
-# --- by role, before the dashboards exist (the real URLconf today) -----------
+# --- the real URLconf -------------------------------------------------------
 
 
-def test_without_dashboard_pages_one_role_goes_home():
-    assert go(user_with(Role.MEMBER)) == reverse("home")
+def test_member_goes_to_the_member_dashboard():
+    assert go(user_with(Role.MEMBER)) == reverse("dashboards:dashboard")
 
 
-def test_without_a_chooser_page_several_roles_go_home():
-    assert go(user_with(Role.MEMBER, Role.RABBI)) == reverse("home")
+def test_several_roles_go_to_the_chooser():
+    assert go(user_with(Role.MEMBER, Role.RABBI)) == reverse("accounts:choose_dashboard")
