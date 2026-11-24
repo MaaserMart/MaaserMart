@@ -451,3 +451,44 @@ def get_charity(charity_id) -> CharityPage | None:
 def domain_names() -> tuple[str, ...]:
     """Every domain's name, as the Domain filter offers them."""
     return tuple(o.name for o in DjangoFilterOptionsRepository().domains())
+
+
+@dataclass(frozen=True)
+class RecommendationCharity:
+    """The public fields and classification needed by recommendations."""
+
+    id: int
+    name: str
+    tagline: str | None
+    is_visible: bool
+    domain_ids: frozenset[int]
+    location_ids: frozenset[int]
+
+
+def recommendation_charities(history_ids) -> tuple[RecommendationCharity, ...]:
+    """Published candidates plus historical charities needed to calculate signals.
+
+    An unpublished charity may still contribute to a member's past preferences,
+    but is never itself a recommendation.
+    """
+    from django.db.models import Q
+
+    rows = Charity.objects.filter(Q(is_visible=True) | Q(pk__in=history_ids)).prefetch_related(
+        "domains", "locations"
+    )
+    return tuple(
+        RecommendationCharity(
+            id=row.pk,
+            name=row.name,
+            tagline=row.tagline,
+            is_visible=row.is_visible,
+            domain_ids=frozenset(domain.pk for domain in row.domains.all()),
+            location_ids=frozenset(location.pk for location in row.locations.all()),
+        )
+        for row in rows
+    )
+
+
+def charity_names(charity_ids) -> dict[int, str]:
+    """Resolve charity IDs for history without exposing another app's models."""
+    return dict(Charity.objects.filter(pk__in=charity_ids).values_list("pk", "name"))
