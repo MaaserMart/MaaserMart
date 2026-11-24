@@ -322,6 +322,15 @@ def get_charity_choice(charity_id) -> CharityChoice | None:
     return None if row is None else CharityChoice(id=row.id, name=row.name)
 
 
+def get_charity_choices(charity_ids) -> dict[int, CharityChoice]:
+    """Id and name for each existing charity among `charity_ids`, keyed by id."""
+    ids = {int(i) for i in charity_ids if i is not None}
+    if not ids:
+        return {}
+    rows = Charity.objects.filter(pk__in=ids).only("id", "name")
+    return {row.id: CharityChoice(id=row.id, name=row.name) for row in rows}
+
+
 # --- Filter sidebar ----------------------------------------------------------
 # The sidebar is data: a `FilterForm` holds the groups with their options, so the
 # template can render checkboxes and number inputs without knowing which group

@@ -9,5 +9,6 @@ urlpatterns = [
     path("", RedirectView.as_view(url="/charity/", permanent=False), name="home"),
     path("charity/", include("apps.charities.urls")),
     path("support/", include("apps.support.urls")),
+    path("admin/tickets/", include("apps.support.admin_urls")),
     path("django-admin/", admin.site.urls),
 ]

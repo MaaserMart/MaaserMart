@@ -27,8 +27,8 @@ class Ticket(models.Model):
     charity = models.ForeignKey(
         "charities.Charity", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
-    # A guest's verified address, where the reply goes (§6.3 Tickets). Empty for a
-    # signed-in user, whose reply goes to the account's address (D-072).
+    # Where the reply goes (§6.3 Tickets): a guest's verified address, or a signed-in
+    # user's account address as it was when they filed (D-072, D-073).
     email = models.EmailField(null=True, blank=True)
     body = models.TextField()
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.NOT_RESPONDED)

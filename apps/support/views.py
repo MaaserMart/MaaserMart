@@ -8,15 +8,26 @@ the visitor their message.
 
 from __future__ import annotations
 
-from django.core.exceptions import ValidationError
+from django.contrib import messages
+from django.contrib.auth.views import redirect_to_login
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import validate_email
 from django.http import HttpRequest, HttpResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
+from django.views.decorators.http import require_POST
 
 from apps.charities.services import find_charities_by_name, get_charity_choice
 
 from . import verification
-from .services import MAX_BODY_LENGTH, TicketError, submit_help, submit_report
+from .services import (
+    CLOSE,
+    MAX_BODY_LENGTH,
+    TicketError,
+    get_tickets,
+    resolve_ticket,
+    submit_help,
+    submit_report,
+)
 
 
 def _guest_step(request: HttpRequest, action: str) -> tuple[str | None, str | None]:
@@ -36,7 +47,10 @@ def _guest_step(request: HttpRequest, action: str) -> tuple[str | None, str | No
 def _submitter(request: HttpRequest) -> dict:
     """Who files the ticket: the account, or the guest's verified address."""
     if request.user.is_authenticated:
-        return {"user_id": request.user.id}
+        # The reply goes to the account's address as it is now (D-073).
+        if not request.user.email:
+            raise TicketError("Your account has no email address for the reply.")
+        return {"user_id": request.user.id, "email": request.user.email}
     email = verification.verified_email(request.session)
     if not email:
         raise TicketError("Verify your email address first.")
@@ -109,4 +123,55 @@ def report_page(request: HttpRequest) -> HttpResponse:
             query=query,
             matches=matches,
         ),
+    )
+
+
+# --- Admin ticket queue (§7.3.10, D-073) ---------------------------------------
+
+
+def _admin_only(request: HttpRequest) -> HttpResponse | None:
+    """Send a visitor to log in, refuse a non-admin, let an admin through."""
+    if not request.user.is_authenticated:
+        return redirect_to_login(request.get_full_path())
+    if not getattr(request.user, "is_admin", False):
+        raise PermissionDenied
+    return None
+
+
+def ticket_queue(request: HttpRequest) -> HttpResponse:
+    """Every open ticket, with a reply box and a close button on each."""
+    if (refusal := _admin_only(request)) is not None:
+        return refusal
+    return _render_queue(request)
+
+
+@require_POST
+def resolve(request: HttpRequest, ticket_id: int) -> HttpResponse:
+    """Reply to or close one ticket, then return to the queue."""
+    if (refusal := _admin_only(request)) is not None:
+        return refusal
+    action = request.POST.get("action", "")
+    text = request.POST.get("text", "")
+    try:
+        resolve_ticket(ticket_id, request.user.id, text, action)
+    except TicketError as exc:
+        return _render_queue(request, failed=(ticket_id, str(exc), text), status=400)
+    done = "closed" if action == CLOSE else "answered"
+    messages.success(request, f"Ticket {ticket_id} {done}.")
+    return redirect("support_admin:tickets")
+
+
+def _render_queue(request: HttpRequest, failed=None, status=200) -> HttpResponse:
+    failed_id, error, draft = failed or (None, None, "")
+    return render(
+        request,
+        "support/ticket_queue.html",
+        {
+            "tickets": get_tickets(),
+            "failed_id": failed_id,
+            "error": error,
+            "draft": draft,
+            "max_body_length": MAX_BODY_LENGTH,
+        },
+        status=status,
     )

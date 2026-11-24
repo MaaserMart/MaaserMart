@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Ticket queue &middot; MaaserMart{% endblock %}
+
+{% block content %}
+  <section class="ticket-queue">
+    <h1>Ticket queue</h1>
+
+    {% for message in messages %}
+      <p class="ticket-form__notice" role="status">{{ message }}</p>
+    {% endfor %}
+
+    {% for ticket in tickets %}
+      <article class="ticket-card ticket-card--{{ ticket.status }}" id="ticket-{{ ticket.id }}">
+        <header class="ticket-card__head">
+          <span class="chip">{{ ticket.kind_label }}</span>
+          <span class="ticket-card__status">{{ ticket.status_label }}</span>
+          <span class="ticket-card__from">
+            {% if ticket.from_member %}{{ ticket.email }}{% else %}guest &middot; {{ ticket.email }}{% endif %}
+          </span>
+          <time datetime="{{ ticket.created|date:'c' }}">{{ ticket.created|date:"j M Y, H:i" }} UTC</time>
+        </header>
+
+        {% if ticket.kind == "report" %}
+          <p class="ticket-card__charity">
+            About:
+            {% if ticket.charity_name %}
+              <a href="{% url 'charities:detail' ticket.charity_id %}">{{ ticket.charity_name }}</a>
+            {% else %}
+              a charity that has since been removed
+            {% endif %}
+          </p>
+        {% endif %}
+
+        <p class="ticket-card__body">{{ ticket.body|linebreaksbr }}</p>
+
+        {% if ticket.response %}
+          <div class="ticket-card__response">
+            <p><strong>Answered {{ ticket.responded|date:"j M Y, H:i" }} UTC</strong></p>
+            <p>{{ ticket.response|linebreaksbr }}</p>
+          </div>
+        {% endif %}
+
+        <form class="ticket-form" method="post" action="{% url 'support_admin:resolve' ticket.id %}">
+          {% csrf_token %}
+          {% if failed_id == ticket.id %}<p class="ticket-form__error" role="alert">{{ error }}</p>{% endif %}
+          <label for="reply-{{ ticket.id }}">Reply by email</label>
+          <textarea id="reply-{{ ticket.id }}" name="text" rows="4"
+                    maxlength="{{ max_body_length }}">{% if failed_id == ticket.id %}{{ draft }}{% endif %}</textarea>
+          <div class="ticket-form__row">
+            <button class="button" type="submit" name="action" value="respond">Send reply</button>
+            <button class="button button--secondary" type="submit" name="action" value="close">Close</button>
+          </div>
+        </form>
+      </article>
+    {% empty %}
+      <p>No open tickets.</p>
+    {% endfor %}
+  </section>
+{% endblock %}

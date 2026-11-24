@@ -48,11 +48,13 @@ def _verify(client, email="guest@example.com", url=HELP):
 class TestSubmit:
     def test_help_from_a_user(self):
         user = UserFactory()
-        ticket = Ticket.objects.get(pk=submit_help("  How do I donate?  ", user_id=user.id))
+        ticket = Ticket.objects.get(
+            pk=submit_help("  How do I donate?  ", user_id=user.id, email=user.email)
+        )
         assert ticket.kind == Ticket.Kind.HELP
         assert ticket.body == "How do I donate?"
         assert ticket.submitted_by_id == user.id
-        assert ticket.email is None
+        assert ticket.email == user.email.lower()
         assert ticket.status == Ticket.Status.NOT_RESPONDED
 
     def test_help_from_a_guest_lowercases_the_address(self):
@@ -72,10 +74,10 @@ class TestSubmit:
             submit_help(body, email="a@b.co")
         assert not Ticket.objects.exists()
 
-    @pytest.mark.parametrize("who", [{}, {"user_id": 1, "email": "a@b.co"}])
-    def test_needs_exactly_one_submitter(self, who):
+    @pytest.mark.parametrize("email", ["", "  ", None])
+    def test_needs_a_reply_address(self, email):
         with pytest.raises(TicketError):
-            submit_help("Hi", **who)
+            submit_help("Hi", email=email)
 
     def test_report_needs_a_charity(self):
         with pytest.raises(TicketError):
@@ -208,7 +210,15 @@ class TestHelpPage:
         client.login(username=user.username, password=DEFAULT_PASSWORD)
         assert 'name="email"' not in client.get(HELP).content.decode()
         client.post(HELP, {"action": "submit", "body": "Hello"})
-        assert Ticket.objects.get().submitted_by_id == user.id
+        ticket = Ticket.objects.get()
+        assert (ticket.submitted_by_id, ticket.email) == (user.id, user.email.lower())
+
+    def test_signed_in_user_without_an_email_is_told(self, client):
+        user = UserFactory(email="")
+        client.login(username=user.username, password=DEFAULT_PASSWORD)
+        response = client.post(HELP, {"action": "submit", "body": "Hello"})
+        assert "no email address" in response.content.decode()
+        assert not Ticket.objects.exists()
 
     def test_signed_in_user_cannot_post_a_code_step(self, client):
         user = UserFactory()
