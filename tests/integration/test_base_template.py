@@ -36,22 +36,23 @@ def test_home_page_shows_nav_and_local_scripts(client):
     html = client.get("/charity/").content.decode()
 
     assert 'href="/charity/"' in html
-    # A route with no pattern yet is not advertised at all (B1).
-    assert 'href="/dashboard/"' not in html
-    assert 'href="/accounts/login/"' not in html
+    # The dashboard and login are available; signup remains unbuilt.
+    assert 'href="/dashboard/"' in html
+    assert 'href="/accounts/login/"' in html
+    assert 'href="/accounts/signup/"' not in html
     assert "/static/vendor/htmx-2.0.4.min.js" in html
     assert "/static/vendor/alpinejs-3.14.8.min.js" in html
     assert "unpkg.com" not in html
 
 
 def test_logged_in_nav_shows_no_login_or_signup(client):
-    """D-033: logged in, the auth links are gone (the logout POST is unshipped)."""
+    """D-033: signed-in members see a logout form instead of auth links."""
     client.force_login(UserFactory())
     html = client.get("/charity/").content.decode()
 
     assert 'href="/accounts/login/"' not in html
     assert 'href="/accounts/signup/"' not in html
-    assert 'action="/accounts/logout/"' not in html  # no pattern yet, so no form
+    assert 'action="/accounts/logout/"' in html
 
 
 def test_nav_is_pinned_to_the_top():

@@ -8,13 +8,14 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 from django.conf import settings
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 
 from apps.events.services import record_event
 
 from .contracts import CharityCard, CharityPage, DomainOption, LocationOption, RabbiOption
 from .filters import CharityFilters, FilterForm, sidebar_groups
-from .models import Charity
+from .models import Charity, Link, Review
 from .repositories import (
     CharityRepository,
     DjangoCharityRepository,
@@ -287,6 +288,28 @@ def get_link_url(repository: CharityRepository, charity_id: int, link_id: int) -
     return repository.link_url(charity_id, link_id)
 
 
+def get_user_review(user, charity_id: int) -> Review | None:
+    """Return the member's existing review, if any, for editing."""
+    if not user.is_authenticated:
+        raise PermissionDenied
+    return Review.objects.filter(author=user, charity_id=charity_id).first()
+
+
+def save_review(user, charity_id: int, rating: int, body: str = "") -> None:
+    """Create or replace the member's review; the database enforces uniqueness.
+
+    Every account is a member (D-074). Validate here as well as on the form,
+    since callers of this service do not necessarily use the web form.
+    """
+    if not user.is_authenticated:
+        raise PermissionDenied
+    if isinstance(rating, bool) or not isinstance(rating, int) or not 1 <= rating <= 5:
+        raise ValidationError("Choose a rating from 1 to 5.")
+    Review.objects.update_or_create(
+        author=user, charity_id=charity_id, defaults={"rating": rating, "body": body or ""}
+    )
+
+
 # --- Lookups for other apps ---------------------------------------------------
 # Small reads other apps need without a whole listing page: support's report form
 # picks a charity by name (D-072). They return `CharityChoice`, never a model row.
@@ -428,3 +451,73 @@ def get_charity(charity_id) -> CharityPage | None:
 def domain_names() -> tuple[str, ...]:
     """Every domain's name, as the Domain filter offers them."""
     return tuple(o.name for o in DjangoFilterOptionsRepository().domains())
+
+
+@dataclass(frozen=True)
+class RecommendationCharity:
+    """The public fields and classification needed by recommendations."""
+
+    id: int
+    name: str
+    tagline: str | None
+    is_visible: bool
+    domain_ids: frozenset[int]
+    location_ids: frozenset[int]
+
+
+def recommendation_charities(history_ids) -> tuple[RecommendationCharity, ...]:
+    """Published candidates plus historical charities needed to calculate signals.
+
+    An unpublished charity may still contribute to a member's past preferences,
+    but is never itself a recommendation.
+    """
+    from django.db.models import Q
+
+    rows = Charity.objects.filter(Q(is_visible=True) | Q(pk__in=history_ids)).prefetch_related(
+        "domains", "locations"
+    )
+    return tuple(
+        RecommendationCharity(
+            id=row.pk,
+            name=row.name,
+            tagline=row.tagline,
+            is_visible=row.is_visible,
+            domain_ids=frozenset(domain.pk for domain in row.domains.all()),
+            location_ids=frozenset(location.pk for location in row.locations.all()),
+        )
+        for row in rows
+    )
+
+
+def charity_names(charity_ids) -> dict[int, str]:
+    """Resolve charity IDs for history without exposing another app's models."""
+    return dict(Charity.objects.filter(pk__in=charity_ids).values_list("pk", "name"))
+
+
+@dataclass(frozen=True)
+class HistoryLink:
+    """Current details of an outbound link for a member's activity history."""
+
+    label: str
+    url: str
+
+
+def history_links(link_ids) -> dict[tuple[int, int], HistoryLink]:
+    """Resolve links in bulk; unsafe or deleted links are treated as unavailable.
+
+    The key includes the charity id, so an inconsistent event cannot present
+    a link belonging to another charity. EVENT stores an id, not a URL snapshot;
+    returned details are the link's current values.
+    """
+    links = {}
+    for link in Link.objects.filter(pk__in=link_ids).only("id", "charity_id", "kind", "url"):
+        try:
+            parsed = urlsplit(link.url)
+            safe = parsed.scheme.lower() in ("http", "https") and bool(parsed.netloc)
+        except ValueError:
+            safe = False
+        if safe:
+            links[link.charity_id, link.id] = HistoryLink(
+                label=link.get_kind_display(), url=link.url
+            )
+    return links

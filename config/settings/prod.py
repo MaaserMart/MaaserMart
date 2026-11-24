@@ -78,6 +78,25 @@ LOGGING = {
             "backupCount": 10,
             "formatter": "standard",
         },
+        # Recommendation inputs contain personal browsing signals. Keep them
+        # out of the general application log and restrict both the log and its
+        # rotation/lock files to the service account.
+        "recommendation_audit": {
+            "class": "concurrent_log_handler.ConcurrentRotatingFileHandler",
+            "filename": str(LOG_DIR / "recommendations-audit.log"),
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 10,
+            "formatter": "standard",
+            "chmod": 0o600,
+            "umask": 0o077,
+        },
+    },
+    "loggers": {
+        "maasermart.recommendations.audit": {
+            "handlers": ["recommendation_audit"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
     "root": {"handlers": ["file"], "level": env("DJANGO_LOG_LEVEL", default="INFO")},
 }

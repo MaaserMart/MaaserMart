@@ -185,3 +185,25 @@ DEEPSEEK_API_KEY = env("DEEPSEEK_API_KEY", default="")
 # question may wait before the panel says "couldn't get an answer" (D-076).
 CHATBOT_DAILY_LIMIT = env.int("CHATBOT_DAILY_LIMIT", default=30)
 CHATBOT_ANSWER_SECONDS = env.int("CHATBOT_ANSWER_SECONDS", default=120)
+
+# Recommendation thresholds are provisional (§6.2.11 leaves tuning open).
+# They are fractions of all qualifying history, including entries a member hid.
+RECOMMENDATIONS_MIN_HISTORY = env.int("RECOMMENDATIONS_MIN_HISTORY", default=3)
+RECOMMENDATIONS_THRESHOLD = env.float("RECOMMENDATIONS_THRESHOLD", default=0.2)
+RECOMMENDATIONS_SINGLE_OFFSET = env.float("RECOMMENDATIONS_SINGLE_OFFSET", default=0.1)
+RECOMMENDATIONS_PAIR_OFFSET = env.float("RECOMMENDATIONS_PAIR_OFFSET", default=0.2)
+
+# Recommendation audit data is private. Production supplies a restricted file
+# handler; development/test discard it unless explicitly configured.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"recommendation_null": {"class": "logging.NullHandler"}},
+    "loggers": {
+        "maasermart.recommendations.audit": {
+            "handlers": ["recommendation_null"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}

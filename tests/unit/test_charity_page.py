@@ -1,6 +1,7 @@
 """The charity page (§6.2.7, D-057) and the events it writes (audit M4)."""
 
 import pytest
+from django.db import OperationalError
 from django.urls import reverse
 from django.utils.html import escape
 
@@ -121,7 +122,10 @@ def test_a_stray_redirect_request_records_no_event(client, populated_charity):
     assert Event.objects.count() == 0
 
 
-def test_a_refused_visit_write_still_shows_the_charity(client, populated_charity, monkeypatch):
+@pytest.mark.parametrize("error", [ValueError, OperationalError])
+def test_a_refused_visit_write_still_shows_the_charity(
+    client, populated_charity, monkeypatch, error
+):
     """§6.2.7: "Failed writes do not fail the page."
 
     `record_event` refuses a reference that does not exist (audit B6), which a
@@ -130,7 +134,7 @@ def test_a_refused_visit_write_still_shows_the_charity(client, populated_charity
     """
 
     def refuse(*args, **kwargs):
-        raise ValueError("Event refers to a row that does not exist")
+        raise error("Event write failed")
 
     monkeypatch.setattr("apps.charities.views.record_event", refuse)
 
@@ -140,11 +144,14 @@ def test_a_refused_visit_write_still_shows_the_charity(client, populated_charity
     assert escape("Keren L'Dugma") in response.content.decode()
 
 
-def test_a_refused_click_write_still_sends_the_visitor_on(client, populated_charity, monkeypatch):
+@pytest.mark.parametrize("error", [ValueError, OperationalError])
+def test_a_refused_click_write_still_sends_the_visitor_on(
+    client, populated_charity, monkeypatch, error
+):
     """The same promise on the click route: the charity's own site is the point."""
 
     def refuse(*args, **kwargs):
-        raise ValueError("Event refers to a row that does not exist")
+        raise error("Event write failed")
 
     monkeypatch.setattr("apps.charities.views.record_event", refuse)
     link = populated_charity.links.get(kind=Link.Kind.WEBSITE_DONATE)
