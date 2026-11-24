@@ -106,21 +106,30 @@ class DatabaseWakeMiddleware:
         if state is DatabaseState.WAKING:
             return waking_response(request)
 
-        try:
-            return self.get_response(request)
-        except OperationalError:
-            # The cached check said the instance was up and the query disagreed.
-            # Ask again without the cache: that answer is the one this branch
-            # was waiting for. A healthy instance means this is a real database
-            # fault (bad credentials, no disk, too many connections) and it
-            # stays a real error instead of becoming a friendly retry loop.
-            state = self.instance.refresh()
-            if state is DatabaseState.STOPPED:
-                self.instance.wake()
-            if state is DatabaseState.AVAILABLE:
-                raise
-            connections["default"].close()
-            return waking_response(request)
+        return self.get_response(request)
+
+    def process_exception(self, request, exception):
+        """A view's query found the database gone although the cached check passed.
+
+        This is a hook, not a try/except around `get_response`: Django turns an
+        exception into a 500 response at every middleware layer, so an outer
+        `except` never sees it. Django calls this hook with the view's exception
+        before that happens.
+
+        Ask again without the cache: that answer is the one this branch was
+        waiting for. A healthy instance means this is a real database fault (bad
+        credentials, no disk, too many connections), so it stays a real error
+        instead of becoming a friendly retry loop.
+        """
+        if not isinstance(exception, OperationalError):
+            return None
+        state = self.instance.refresh()
+        if state is DatabaseState.AVAILABLE:
+            return None
+        if state is DatabaseState.STOPPED:
+            self.instance.wake()
+        connections["default"].close()
+        return waking_response(request)
 
     @staticmethod
     def _is_static(request) -> bool:

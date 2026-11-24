@@ -9,10 +9,12 @@ thing that starts it — without turning a real database fault into a friendly
 import pytest
 from django.db import OperationalError
 from django.http import HttpResponse
-from django.test import RequestFactory
+from django.test import Client, RequestFactory
+from django.urls import path
 
 from apps.support.middleware import DatabaseWakeMiddleware
 from apps.support.rds import RdsInstance
+from config.urls import urlpatterns as project_urls
 from tests.support.rds import FakeRds
 
 
@@ -76,24 +78,59 @@ def test_a_waking_database_is_not_started_twice(build, status):
     assert fake.starts == 0
 
 
-def test_a_query_that_finds_the_database_gone_starts_it(build):
+def gone(request):
+    raise OperationalError("server closed the connection unexpectedly")
+
+
+urlpatterns = [path("gone/", gone), *project_urls]
+
+
+@pytest.fixture
+def stack(settings, monkeypatch):
+    """Django's real request handling with the gate installed.
+
+    The cases where a query fails must go through it: Django turns a view's
+    exception into a 500 at every middleware layer, so calling the middleware
+    directly would pass a test that production fails.
+    """
+    settings.RDS_INSTANCE_ID = "maasermart-db"
+    settings.MIDDLEWARE = [
+        settings.MIDDLEWARE[0],
+        "apps.support.middleware.DatabaseWakeMiddleware",
+        *settings.MIDDLEWARE[1:],
+    ]
+    settings.ROOT_URLCONF = __name__
+
+    def stack(fake):
+        monkeypatch.setattr(
+            "apps.support.middleware.RdsInstance",
+            lambda identifier, **kwargs: RdsInstance(identifier, **{**kwargs, "client": fake}),
+        )
+        return Client(raise_request_exception=False)
+
+    return stack
+
+
+@pytest.mark.django_db
+def test_a_query_that_finds_the_database_gone_starts_it(stack):
     """The cached check passed, the query failed, the fresh answer is 'stopped'."""
     fake = FakeRds()
     fake.statuses = ["available", "stopped"]
 
-    response = build(failing, fake)(RequestFactory().get("/charity/"))
+    response = stack(fake).get("/gone/")
 
     assert response.status_code == 503
     assert fake.starts == 1
 
 
-def test_a_real_database_error_is_not_hidden_behind_the_waiting_page(build):
+@pytest.mark.django_db
+def test_a_real_database_error_is_not_hidden_behind_the_waiting_page(stack):
     """Bad credentials, no disk, too many connections: starting fixes none of them."""
     fake = FakeRds("available")
 
-    with pytest.raises(OperationalError):
-        build(failing, fake)(RequestFactory().get("/charity/"))
+    response = stack(fake).get("/gone/")
 
+    assert response.status_code == 500
     assert fake.starts == 0
 
 
