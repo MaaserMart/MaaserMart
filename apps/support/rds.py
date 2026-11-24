@@ -25,7 +25,11 @@ from collections.abc import Callable
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
-from django.core.cache import cache
+from django.core.cache import caches
+from django.utils.connection import ConnectionProxy
+
+# Per-process, never the database cache: see CACHES["rds"] (D-070).
+cache = ConnectionProxy(caches, "rds")
 
 logger = logging.getLogger(__name__)
 

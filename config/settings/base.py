@@ -132,6 +132,14 @@ CACHES["options"] = {
     "LOCATION": "maasermart-options",
 }
 
+# The RDS wake gate's last answer about the instance (D-070). Per process, never
+# the database: the gate runs before anything may touch a database that may be
+# stopped, so a cache kept in that database would fail exactly when it is needed.
+CACHES["rds"] = {
+    "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    "LOCATION": "maasermart-rds",
+}
+
 # --- RDS wake-up (D-070) -----------------------------------------------------
 # The deployed database lives on RDS and is stopped when nobody is using it, so
 # a request can arrive with nothing to connect to. When the instance identifier
