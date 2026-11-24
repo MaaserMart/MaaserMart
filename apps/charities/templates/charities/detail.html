@@ -100,13 +100,24 @@
         <form method="post" action="{% url 'charities:review' charity.id %}" class="ticket-form">
           {% csrf_token %}
           <h3>{% if own_review %}Edit your review{% else %}Write a review{% endif %}</h3>
-          {% for field in review_form %}
-            <div>
-              {{ field.label_tag }}<br>
-              {{ field }}
-              {% for error in field.errors %}<p class="ticket-form__error" role="alert">{{ error }}</p>{% endfor %}
+          <fieldset class="review-rating"{% if review_form.rating.errors %} aria-describedby="review-rating-errors"{% endif %}>
+            <legend>Rating (required)</legend>
+            <div class="review-rating__choices">
+              {% for choice in review_form.rating %}
+                <label class="review-rating__choice" for="{{ choice.id_for_label }}">
+                  {{ choice.tag }} <span aria-hidden="true">★</span> {{ choice.choice_label }}
+                </label>
+              {% endfor %}
             </div>
-          {% endfor %}
+            {% if review_form.rating.errors %}
+              <div id="review-rating-errors">{% for error in review_form.rating.errors %}<p class="ticket-form__error" role="alert">{{ error }}</p>{% endfor %}</div>
+            {% endif %}
+          </fieldset>
+          <div>
+            {{ review_form.body.label_tag }}<br>
+            {{ review_form.body }}
+            {% for error in review_form.body.errors %}<p class="ticket-form__error" role="alert">{{ error }}</p>{% endfor %}
+          </div>
           <button class="button" type="submit">{% if own_review %}Update review{% else %}Submit review{% endif %}</button>
         </form>
       {% else %}

@@ -1114,3 +1114,20 @@ body {
 @media (max-width: 48rem) {
   .member-dashboard__columns { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Native radio buttons keep review ratings usable by keyboard and screen reader. */
+.review-rating__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.review-rating__choice {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 0.25rem;
+}
+.review-rating__choice span {
+  color: #8a5b00;
+  font-size: 1.3rem;
+}

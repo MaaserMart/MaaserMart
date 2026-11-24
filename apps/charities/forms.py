@@ -8,7 +8,8 @@ class ReviewForm(forms.Form):
 
     rating = forms.TypedChoiceField(
         label="Rating",
-        choices=[("", "Choose a rating")] + [(i, f"{i} out of 5") for i in range(1, 6)],
+        choices=[(i, f"{i} out of 5") for i in range(1, 6)],
+        widget=forms.RadioSelect,
         coerce=int,
         empty_value=None,
     )

@@ -80,3 +80,45 @@ def test_unknown_charity_and_invalid_service_input(client):
         with pytest.raises(ValidationError):
             save_review(member, charity.id, rating)
     assert not Review.objects.exists()
+
+
+def test_rating_uses_required_radio_choices_and_preserves_saved_selection(client):
+    from html.parser import HTMLParser
+
+    class RadioInputs(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.inputs = []
+
+        def handle_starttag(self, tag, attrs):
+            attributes = dict(attrs)
+            if tag == "input" and attributes.get("name") == "rating":
+                self.inputs.append(attributes)
+
+    charity = CharityFactory()
+    member = UserFactory()
+    Review.objects.create(charity=charity, author=member, rating=4)
+    client.force_login(member)
+    response = client.get(reverse("charities:detail", args=[charity.id]))
+    html = response.content.decode()
+    parser = RadioInputs()
+    parser.feed(html)
+
+    assert [item["value"] for item in parser.inputs] == ["1", "2", "3", "4", "5"]
+    assert all(item["type"] == "radio" and "required" in item for item in parser.inputs)
+    assert [item["value"] for item in parser.inputs if "checked" in item] == ["4"]
+    assert all(f'for="{item["id"]}"' in html for item in parser.inputs)
+    assert "Rating (required)" in html
+    assert html.count('aria-hidden="true">★</span>') == 5
+
+
+def test_missing_rating_error_is_associated_with_radio_group(client):
+    charity = CharityFactory()
+    client.force_login(UserFactory())
+    response = client.post(reverse("charities:review", args=[charity.id]), {"body": "Text"})
+    html = response.content.decode()
+    assert response.status_code == 400
+    assert 'aria-describedby="review-rating-errors"' in html
+    assert 'id="review-rating-errors"' in html
+    assert 'role="alert"' in html
+    assert "Text" in html
