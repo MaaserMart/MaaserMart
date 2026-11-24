@@ -281,6 +281,47 @@ def get_link_url(repository: CharityRepository, charity_id: int, link_id: int) -
     return repository.link_url(charity_id, link_id)
 
 
+# --- Lookups for other apps ---------------------------------------------------
+# Small reads other apps need without a whole listing page: support's report form
+# picks a charity by name (D-072). They return `CharityChoice`, never a model row.
+
+
+@dataclass(frozen=True)
+class CharityChoice:
+    """A charity as a pick list shows it: its id and its name."""
+
+    id: int
+    name: str
+
+
+CHARITY_LOOKUP_LIMIT = 10
+
+
+def find_charities_by_name(
+    term: str, limit: int = CHARITY_LOOKUP_LIMIT
+) -> tuple[CharityChoice, ...]:
+    """Charities whose name contains `term`, case-insensitively, A to Z.
+
+    An empty or blank term matches nothing, so a pick list never dumps the table.
+    """
+    term = (term or "").strip()
+    if not term:
+        return ()
+    limit = max(1, min(limit, CHARITY_LOOKUP_LIMIT))
+    rows = Charity.objects.filter(name__icontains=term).only("id", "name").order_by("name", "id")
+    return tuple(CharityChoice(id=row.id, name=row.name) for row in rows[:limit])
+
+
+def get_charity_choice(charity_id) -> CharityChoice | None:
+    """One charity's id and name, or None when no row has that id."""
+    try:
+        charity_id = int(charity_id)
+    except (TypeError, ValueError):
+        return None
+    row = Charity.objects.filter(pk=charity_id).only("id", "name").first()
+    return None if row is None else CharityChoice(id=row.id, name=row.name)
+
+
 # --- Filter sidebar ----------------------------------------------------------
 # The sidebar is data: a `FilterForm` holds the groups with their options, so the
 # template can render checkboxes and number inputs without knowing which group

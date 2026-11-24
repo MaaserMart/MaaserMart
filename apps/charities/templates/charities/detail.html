@@ -124,5 +124,10 @@
       </p>
       <p><a href="{% url 'charities:listing' %}">Back to all charities</a></p>
     </footer>
+
+    {# FR 19: the report arrives with this charity already chosen (D-072). #}
+    <p class="charity-page__report">
+      <a href="{% url 'support:report' %}?charity={{ charity.id }}">Report this charity</a>
+    </p>
   </article>
 {% endblock %}

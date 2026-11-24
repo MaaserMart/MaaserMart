@@ -756,3 +756,94 @@ body {
   max-width: 40rem;
   padding: 4rem 1.5rem;
 }
+
+/* Help and report (D-072): one form, posted back to itself step by step. */
+.ticket-page {
+  margin: 0 auto;
+  max-width: 40rem;
+  padding: 1.5rem;
+}
+
+.ticket-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ticket-form fieldset {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+}
+
+.ticket-form__row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ticket-form__row input {
+  flex: 1;
+}
+
+.ticket-form textarea {
+  font: inherit;
+  resize: vertical;
+}
+
+.ticket-form__matches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ticket-form__notice {
+  background: #eef4fb;
+  border-left: 4px solid var(--brand-blue);
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+}
+
+.ticket-form__error {
+  background: #fdeeee;
+  border-left: 4px solid #b3261e;
+  color: #8c1d18;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+}
+
+.button {
+  align-self: flex-start;
+  background: var(--brand-blue);
+  border: 1px solid var(--brand-blue);
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.4rem 1rem;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.button--secondary {
+  background: #fff;
+  color: var(--brand-blue);
+}
+
+.button--link {
+  background: none;
+  border: 0;
+  color: var(--brand-blue);
+  padding: 0 0 0 0.5rem;
+  text-decoration: underline;
+}
+
+.charity-page__report {
+  font-size: 0.9rem;
+  margin-top: 2rem;
+}

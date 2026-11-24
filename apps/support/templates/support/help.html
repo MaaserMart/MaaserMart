@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Help &middot; MaaserMart{% endblock %}
+
+{% block content %}
+  <section class="ticket-page">
+    <h1>Help</h1>
+    <p>Ask a question about MaaserMart and an admin will email you an answer.</p>
+
+    <form class="ticket-form" method="post" action="{% url 'support:help' %}">
+      {% csrf_token %}
+      {% include "support/_messages.html" %}
+      {% if guest %}{% include "support/_guest_email.html" %}{% endif %}
+
+      <label for="ticket-body">How can we help?</label>
+      <textarea id="ticket-body" name="body" rows="8" maxlength="{{ max_body_length }}">{{ body }}</textarea>
+
+      <button class="button" type="submit" name="action" value="submit"
+              {% if guest and not verified_email %}disabled{% endif %}>Send</button>
+    </form>
+  </section>
+{% endblock %}

@@ -794,6 +794,21 @@ Rules for this file:
 - Why: The original seed produced plausible-looking but invented charities and endorsement links. Once the directory shows real organizations, the same generated endorsements attach a donor's name or a rabbi's approval to a real party who never gave it. Keeping the rest of the generated activity preserves the listing, filter, trending and admin-queue demos without asserting anything untrue about a named charity.
 - Where in code: `apps/dashboards/management/commands/seed.py` (`REAL_CHARITIES`, `SeedCharity`, `seed()`), `tests/integration/test_seed.py`
 
+## D-072: Help and report tickets: a guest verifies their email in support, and the report form looks charities up through charities' services
+
+- Date: 2026-11-23
+- Decided by: Platform Lead (Shaul)
+- Status: Active
+- Design doc ref: §6.3 (Tickets), §6.1 (support depends on nothing), SRS FR 18 and FR 19
+- Decision: `/support/help/` and `/support/report/` are each one form posted back to itself; the pressed button names the step. Specifics:
+  - **A signed-in user** just writes and sends; the ticket's `submitted_by` is the account and the reply goes to the account's address.
+  - **A guest** types an address and presses Verify; a 6-digit code is emailed through Celery and SES. The pending code lives in the session as an HMAC (keyed by `SECRET_KEY`), lasts 15 minutes and allows 5 tries. Once it matches, the session holds the address as verified and the Send button is enabled. Codes per address are capped at 5 an hour across all sessions, so the form cannot flood someone's inbox.
+  - The check is support's own (`apps/support/verification.py`), not accounts' signup code: §6.1 lets support depend on nothing, and no account is created here.
+  - `TICKET` gains `email` (the guest's verified address; empty for a signed-in user), `response` and `responded` (the admin's emailed answer and when it was sent; used by the ticket queue). Exactly one of `submitted_by` or `email` is set, enforced in `services.py`.
+  - **The report form picks a charity** by name through `charities.services.find_charities_by_name` and `get_charity_choice`, which return `CharityChoice(id, name)`, never a model row. This adds **support → charities** to §6.1's dependencies. The charity page's "Report this charity" link arrives with the charity chosen (`?charity=<id>`).
+- Why: §6.3 says a guest's email "must be verified", and the wireframes put a Verify button beside the field, so the code has to work before the ticket exists. Reusing accounts' signup verification would make support depend on accounts and would tie the two flows together for no gain. A report is about one charity, so the form has to find one; the only owner of charity rows is charities, and asking its services is the D-006 way to do that.
+- Where in code: `apps/support/verification.py`, `apps/support/tasks.py`, `apps/support/services.py`, `apps/support/views.py`, `apps/support/urls.py`, `apps/support/templates/support/`, `apps/support/migrations/0002_ticket_email_response.py`, `apps/charities/services.py` (`CharityChoice`, `find_charities_by_name`, `get_charity_choice`), `apps/charities/templates/charities/detail.html`, `config/urls.py`, `tests/unit/test_support_tickets.py`, `tests/unit/test_prod_settings.py` (Celery now discovers a task)
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.

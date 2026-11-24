@@ -27,6 +27,9 @@ class Ticket(models.Model):
     charity = models.ForeignKey(
         "charities.Charity", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
+    # A guest's verified address, where the reply goes (§6.3 Tickets). Empty for a
+    # signed-in user, whose reply goes to the account's address (D-072).
+    email = models.EmailField(null=True, blank=True)
     body = models.TextField()
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.NOT_RESPONDED)
     responded_by = models.ForeignKey(
@@ -36,6 +39,9 @@ class Ticket(models.Model):
         blank=True,
         related_name="+",
     )
+    # The admin's answer, as emailed to the submitter (§6.3 Tickets, D-072).
+    response = models.TextField(null=True, blank=True)
+    responded = models.DateTimeField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     closed = models.DateTimeField(null=True, blank=True)
 

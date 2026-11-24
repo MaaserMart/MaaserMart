@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Report a charity &middot; MaaserMart{% endblock %}
+
+{% block content %}
+  <section class="ticket-page">
+    <h1>Report a charity</h1>
+    <p>Tell the admins what is wrong with a charity's listing. They will look into it and email you.</p>
+
+    <form class="ticket-form" method="post" action="{% url 'support:report' %}">
+      {% csrf_token %}
+      {% include "support/_messages.html" %}
+
+      <fieldset class="ticket-form__charity">
+        <legend>Charity</legend>
+        {% if charity %}
+          <input type="hidden" name="charity" value="{{ charity.id }}">
+          <p class="ticket-form__chosen">
+            Reporting <a href="{% url 'charities:detail' charity.id %}">{{ charity.name }}</a>
+            <button class="button button--link" type="submit" name="action" value="search"
+                    formnovalidate>Choose another</button>
+          </p>
+        {% else %}
+          <label for="ticket-q">Charity name</label>
+          <div class="ticket-form__row">
+            <input id="ticket-q" name="q" type="search" value="{{ query }}">
+            <button class="button button--secondary" type="submit" name="action" value="search"
+                    formnovalidate>Find</button>
+          </div>
+          {% if query %}
+            {% if matches %}
+              <ul class="ticket-form__matches">
+                {% for match in matches %}
+                  <li>
+                    <label><input type="radio" name="charity" value="{{ match.id }}"> {{ match.name }}</label>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p>No charity matches &ldquo;{{ query }}&rdquo;.</p>
+            {% endif %}
+          {% endif %}
+        {% endif %}
+      </fieldset>
+
+      {% if guest %}{% include "support/_guest_email.html" %}{% endif %}
+
+      <label for="ticket-body">What is wrong?</label>
+      <textarea id="ticket-body" name="body" rows="8" maxlength="{{ max_body_length }}">{{ body }}</textarea>
+
+      <button class="button" type="submit" name="action" value="submit"
+              {% if guest and not verified_email %}disabled{% endif %}>Send report</button>
+    </form>
+  </section>
+{% endblock %}
