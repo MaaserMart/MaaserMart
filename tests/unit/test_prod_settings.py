@@ -18,7 +18,7 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 GOOD_ENV = {
     "DJANGO_SECRET_KEY": "s" * 40,
     "DJANGO_ALLOWED_HOSTS": "maasermart.com",
-    "EMAIL_HOST": "email-smtp.us-east-1.amazonaws.com",
+    "EMAIL_HOST": "email-smtp.us-east-2.amazonaws.com",
     "EMAIL_HOST_USER": "smtp-user",
     "EMAIL_HOST_PASSWORD": "smtp-pass",
 }

@@ -52,7 +52,7 @@ EMAIL_USE_TLS = True
 
 # Celery over SQS; credentials come from the instance role or AWS_* env vars.
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="sqs://")
-CELERY_BROKER_TRANSPORT_OPTIONS = {"region": env("AWS_REGION", default="us-east-1")}
+CELERY_BROKER_TRANSPORT_OPTIONS = {"region": env("AWS_REGION", default="us-east-2")}
 CELERY_TASK_ALWAYS_EAGER = False
 
 LOG_DIR = Path(env("DJANGO_LOG_DIR", default=str(BASE_DIR / "logs")))

@@ -21,12 +21,12 @@ from tests.support.rds import FakeRds, client_error
 def fake(settings, monkeypatch):
     """The command's client replaced with a fake, and the setting it needs set."""
     settings.RDS_INSTANCE_ID = "maasermart-db"
-    settings.AWS_REGION = "us-east-1"
+    settings.AWS_REGION = "us-east-2"
     fake = FakeRds("stopped")
     monkeypatch.setattr(
         wake_db,
         "RdsInstance",
-        lambda *args, **kwargs: RdsInstance("maasermart-db", region="us-east-1", client=fake),
+        lambda *args, **kwargs: RdsInstance("maasermart-db", region="us-east-2", client=fake),
     )
     return fake
 

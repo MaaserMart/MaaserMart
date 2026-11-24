@@ -147,7 +147,7 @@ CACHES["rds"] = {
 # it is not. Unset means the app never calls AWS, which is what local Postgres
 # and the test suite want.
 RDS_INSTANCE_ID = env("RDS_INSTANCE_ID", default="")
-AWS_REGION = env("AWS_REGION", default="us-east-1")
+AWS_REGION = env("AWS_REGION", default="us-east-2")
 # Cached status: a minute while the database is up (it stays up), seconds while
 # it is not, so a page polling during a start sees the change.
 DATABASE_WAKE_AVAILABLE_TTL = env.int("DATABASE_WAKE_AVAILABLE_TTL", default=60)

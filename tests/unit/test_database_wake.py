@@ -22,11 +22,11 @@ from tests.support.rds import FakeRds
 def build(settings):
     """A middleware wired to a fake client, so no test reaches AWS."""
     settings.RDS_INSTANCE_ID = "maasermart-db"
-    settings.AWS_REGION = "us-east-1"
+    settings.AWS_REGION = "us-east-2"
 
     def build(get_response, fake):
         middleware = DatabaseWakeMiddleware(get_response)
-        middleware.instance = RdsInstance("maasermart-db", region="us-east-1", client=fake)
+        middleware.instance = RdsInstance("maasermart-db", region="us-east-2", client=fake)
         return middleware
 
     return build

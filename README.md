@@ -66,7 +66,7 @@ start the database (D-070). Three env vars in `.env`:
 ```bash
 DATABASE_URL=postgres://USER:PASSWORD@INSTANCE.xxxxx.REGION.rds.amazonaws.com:5432/DBNAME?sslmode=require
 RDS_INSTANCE_ID=maasermart-db
-AWS_REGION=us-east-1
+AWS_REGION=us-east-2
 ```
 
 - `sslmode=require` is not optional: RDS refuses unencrypted connections.
