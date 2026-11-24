@@ -82,7 +82,16 @@ def _run_call(call: ToolCall, functions: dict[str, ToolFunction]) -> str:
         return json.dumps({"error": "That lookup failed."})
     text = json.dumps(result, cls=DjangoJSONEncoder, ensure_ascii=False)
     if len(text) > MAX_RESULT_CHARS:
-        text = text[:MAX_RESULT_CHARS] + " …(cut; ask for something narrower)"
+        # Cut the *data*, not the JSON: a half-written object is not parseable, so
+        # the model would get garbage instead of a result and a usable hint.
+        text = json.dumps(
+            {
+                "error": "That result is too long to pass on.",
+                "hint": "Ask for something narrower.",
+                "preview": text[: MAX_RESULT_CHARS - 200],
+            },
+            ensure_ascii=False,
+        )
     return text
 
 
