@@ -10,6 +10,7 @@ urlpatterns = [
     path("charity/", include("apps.charities.urls")),
     path("support/", include("apps.support.urls")),
     path("tools/", include("apps.tools.urls")),
+    path("chatbot/", include("apps.chatbot.urls")),
     path("admin/tickets/", include("apps.support.admin_urls")),
     path("django-admin/", admin.site.urls),
 ]

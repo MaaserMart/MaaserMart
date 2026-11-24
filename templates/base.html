@@ -10,6 +10,7 @@
   {# Htmx is unused today; `defer` keeps it from blocking first paint (P2). #}
   <script defer src="{% static 'vendor/htmx-2.0.4.min.js' %}"></script>
   <script defer src="{% static 'vendor/alpinejs-3.14.8.min.js' %}"></script>
+  <script defer src="{% static 'js/retry.js' %}"></script>
 </head>
 <body>
   {# A11y: the first thing on the page is a way past the eight-item nav (A3). #}
@@ -45,5 +46,17 @@
   <main id="main" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
+
+  {# The chatbot (§7, D-076): a corner panel for signed-in members. A native #}
+  {# <details> opens it, so no inline script is needed under the CSP (D-062); #}
+  {# htmx fetches the panel the first time it opens. #}
+  {% if user.is_authenticated and nav.chatbot_url %}
+    <details class="chatbot" hx-get="{{ nav.chatbot_url }}" hx-trigger="toggle once"
+             hx-target="find .chatbot__body">
+      <summary class="chatbot__toggle">Ask the assistant</summary>
+      <div class="chatbot__body"><p class="chat__note">Loading…</p></div>
+    </details>
+    <script defer src="{% static 'js/chat.js' %}"></script>
+  {% endif %}
 </body>
 </html>
