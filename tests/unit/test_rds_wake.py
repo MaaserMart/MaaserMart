@@ -13,7 +13,7 @@ from tests.support.rds import FakeCache, FakeRds, client_error
 
 
 def instance(fake: FakeRds, **kwargs) -> RdsInstance:
-    return RdsInstance("maasermart-db", region="us-east-1", client=fake, **kwargs)
+    return RdsInstance("maasermart-db", region="us-east-2", client=fake, **kwargs)
 
 
 def test_an_available_instance_is_available():
