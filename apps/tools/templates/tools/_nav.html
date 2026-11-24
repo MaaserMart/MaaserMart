@@ -1,0 +1,5 @@
+<nav class="tools-nav" aria-label="Maaser tools">
+  <a href="{% url 'tools:maaser' %}"{% if request.resolver_match.url_name == "maaser" %} aria-current="page"{% endif %}>Calculator</a>
+  <a href="{% url 'tools:income' %}"{% if request.resolver_match.url_name == "income" %} aria-current="page"{% endif %}>Income</a>
+  <a href="{% url 'tools:donations' %}"{% if request.resolver_match.url_name == "donations" %} aria-current="page"{% endif %}>Donations</a>
+</nav>
