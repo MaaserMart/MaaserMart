@@ -868,6 +868,16 @@ Rules for this file:
 - Why: Lets the team put the app on a public URL in minutes without changing the stack, while AWS hosting stays the plan of record.
 - Where in code: `Dockerfile`, `.dockerignore`, `railway.json`, `deploy/Caddyfile`, `deploy/start.sh`, `deploy/predeploy.sh`, `config/settings/prod.py` (`CELERY_TASK_ALWAYS_EAGER`)
 
+## D-YOSEF-csp-widgets: The password eye and code boxes are plain script, not Alpine
+
+- Date: 2026-11-23
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §4.13 (CSP, audit SEC1)
+- Decision: The password show/hide eye and the six signup code boxes run from `static/js/auth.js`, a same-origin file, instead of Alpine attributes and an inline `<script>`. Alpine stays loaded for later pages.
+- Why: Production sends `default-src 'self'`, which blocks `eval` and inline scripts. Alpine's regular build evaluates its attribute expressions with `eval`, so on the live site both widgets fell back to plain fields. Local settings send no CSP, so it never showed there. Any future Alpine use needs Alpine's CSP build (`@alpinejs/csp`) or plain script.
+- Where in code: `static/js/auth.js`, `templates/accounts/_password_input.html`, `templates/accounts/signup_verify.html`, `templates/base.html`, `static/css/site.css`
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.

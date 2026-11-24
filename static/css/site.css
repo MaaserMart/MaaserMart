@@ -941,7 +941,9 @@ body {
   width: 2rem;
 }
 
-.password__toggle[hidden] {
+.password__toggle[hidden],
+.password__toggle svg[hidden],
+.auth__field[hidden] {
   display: none;
 }
 
