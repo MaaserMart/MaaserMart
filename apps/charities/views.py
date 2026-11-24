@@ -6,6 +6,7 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth.views import redirect_to_login
+from django.db import DatabaseError
 from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render, resolve_url
 from django.urls import reverse
@@ -84,11 +85,12 @@ def _count_visit(charity_id: int, action: str, **context) -> None:
     do not fail the page". `record_event` raises a `ValueError` when a reference
     does not exist (audit B6), and a visitor whose account was deleted mid-session
     is enough to trigger that — the charity is still there to show, and losing the
-    count is cheaper than a 500.
+    count is cheaper than a 500. Database write failures are likewise logged
+    without preventing the page or redirect from being served.
     """
     try:
         record_event(charity_id, action, **context)
-    except ValueError:
+    except (ValueError, DatabaseError):
         logger.warning(
             "visit not counted: charity_id=%s action=%s context=%s",
             charity_id,
