@@ -17,10 +17,10 @@
         </div>
         {% if history %}
           <ul class="member-dashboard__list">
-            {% for item, name in history %}
+            {% for item, name, link in history %}
               <li>
                 <a href="{% url 'charities:detail' item.charity_id %}">{{ name }}</a>
-                <p>{% if item.action == 'link_click' %}Clicked a link{% else %}Viewed charity{% endif %} &middot; <time datetime="{{ item.created|date:'c' }}">{{ item.created|date:'j M Y, H:i' }} UTC</time></p>
+                <p>{% if item.action == 'link_click' %}{% if link %}Clicked <a href="{% url 'charities:link' item.charity_id item.link_id %}">{{ link.label }}</a>: {{ link.url }}{% else %}Clicked a link (no longer available){% endif %}{% else %}Viewed charity{% endif %} &middot; <time datetime="{{ item.created|date:'c' }}">{{ item.created|date:'j M Y, H:i' }} UTC</time></p>
                 <form method="post" action="{% url 'dashboards:hide' item.id %}">{% csrf_token %}<button type="submit" aria-label="Hide activity for {{ name }}">Hide</button></form>
               </li>
             {% endfor %}
@@ -39,7 +39,7 @@
               </li>
             {% endfor %}
           </ul>
-        {% else %}<p>No recommendations yet. Explore charities to build your recommendations.</p>{% endif %}
+        {% else %}<p>No recommendations available yet.</p>{% endif %}
       </section>
     </div>
   </div>

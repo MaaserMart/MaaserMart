@@ -7,7 +7,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
-from apps.charities.services import charity_names
+from apps.charities.services import charity_names, history_links
 from apps.events.services import get_history, hide_all_history, hide_history, record_event
 from apps.recommendations.services import recommend_for
 from apps.tools.services import maaser_summary
@@ -19,11 +19,19 @@ from apps.tools.services import maaser_summary
 def dashboard(request: HttpRequest) -> HttpResponse:
     history = get_history(request.user.id)
     names = charity_names(item.charity_id for item in history)
+    links = history_links(item.link_id for item in history if item.link_id is not None)
     return render(
         request,
         "dashboards/dashboard.html",
         {
-            "history": [(item, names.get(item.charity_id, "Charity")) for item in history],
+            "history": [
+                (
+                    item,
+                    names.get(item.charity_id, "Charity"),
+                    links.get((item.charity_id, item.link_id)),
+                )
+                for item in history
+            ],
             "recommendations": recommend_for(request.user.id),
             "summary": maaser_summary(request.user.id),
         },

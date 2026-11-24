@@ -15,7 +15,7 @@ from apps.events.services import record_event
 
 from .contracts import CharityCard, CharityPage, DomainOption, LocationOption, RabbiOption
 from .filters import CharityFilters, FilterForm, sidebar_groups
-from .models import Charity, Review
+from .models import Charity, Link, Review
 from .repositories import (
     CharityRepository,
     DjangoCharityRepository,
@@ -492,3 +492,32 @@ def recommendation_charities(history_ids) -> tuple[RecommendationCharity, ...]:
 def charity_names(charity_ids) -> dict[int, str]:
     """Resolve charity IDs for history without exposing another app's models."""
     return dict(Charity.objects.filter(pk__in=charity_ids).values_list("pk", "name"))
+
+
+@dataclass(frozen=True)
+class HistoryLink:
+    """Current details of an outbound link for a member's activity history."""
+
+    label: str
+    url: str
+
+
+def history_links(link_ids) -> dict[tuple[int, int], HistoryLink]:
+    """Resolve links in bulk; unsafe or deleted links are treated as unavailable.
+
+    The key includes the charity id, so an inconsistent event cannot present
+    a link belonging to another charity. EVENT stores an id, not a URL snapshot;
+    returned details are the link's current values.
+    """
+    links = {}
+    for link in Link.objects.filter(pk__in=link_ids).only("id", "charity_id", "kind", "url"):
+        try:
+            parsed = urlsplit(link.url)
+            safe = parsed.scheme.lower() in ("http", "https") and bool(parsed.netloc)
+        except ValueError:
+            safe = False
+        if safe:
+            links[link.charity_id, link.id] = HistoryLink(
+                label=link.get_kind_display(), url=link.url
+            )
+    return links
