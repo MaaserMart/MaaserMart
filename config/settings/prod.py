@@ -53,7 +53,9 @@ EMAIL_USE_TLS = True
 # Celery over SQS; credentials come from the instance role or AWS_* env vars.
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="sqs://")
 CELERY_BROKER_TRANSPORT_OPTIONS = {"region": env("AWS_REGION", default="us-east-1")}
-CELERY_TASK_ALWAYS_EAGER = False
+# A host with no worker (one Railway container) sets this true, so tasks such
+# as the signup email run inside the request (D-YOSEF-railway).
+CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
 
 LOG_DIR = Path(env("DJANGO_LOG_DIR", default=str(BASE_DIR / "logs")))
 LOG_DIR.mkdir(parents=True, exist_ok=True)

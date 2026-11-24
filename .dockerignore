@@ -1,0 +1,17 @@
+.git
+.venv
+.env
+.env.*
+!.env.example
+.claude
+.team
+.pgdata
+logs
+staticfiles
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.coverage
+docs/design
+run-demo.sh

@@ -1,0 +1,32 @@
+# Caddy inside the Railway container. Railway's edge terminates HTTPS and
+# forwards plain HTTP to $PORT; Caddy serves /static/ and proxies the rest to
+# Gunicorn on 127.0.0.1:8000 (D-YOSEF-railway).
+{
+	admin off
+	auto_https off
+	servers {
+		# Believe X-Forwarded-For / X-Forwarded-Proto only from Railway's edge,
+		# which reaches the container from a private or shared (100.64/10) address.
+		trusted_proxies static private_ranges 100.64.0.0/10
+		client_ip_headers X-Forwarded-For X-Real-IP
+	}
+}
+
+:{$PORT:8080} {
+	encode gzip
+
+	handle_path /static/* {
+		root * /app/staticfiles
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8000 {
+			# Django reads the visitor from the last X-Forwarded-For entry when
+			# the request comes from 127.0.0.1 (TRUSTED_PROXY_IPS). Send exactly
+			# the visitor's address so login rate limits are per visitor.
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+}

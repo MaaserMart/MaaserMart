@@ -853,6 +853,21 @@ Rules for this file:
 - Why: One box serves both entry points, and naming the charity instead of the haskama makes id swapping impossible by construction rather than by a check.
 - Where in code: `apps/dashboards/views.py` (`rabbi_dashboard_view`, `rabbi_haskama_view`), `apps/dashboards/forms.py`, `apps/dashboards/urls.py`, `apps/charities/services.py` (`get_haskama`, `save_haskama`, `list_own_haskamas`, `search_charities`, `get_charity_name`), `apps/charities/views.py` (`_haskama_action`), `apps/accounts/services.py` (`is_rabbi`), `templates/dashboards/`, `tests/integration/test_rabbi_haskama.py`
 
+## D-YOSEF-railway: The repo can also deploy to Railway as one container
+
+- Date: 2026-11-23
+- Decided by: CEO (Yosef)
+- Status: Active. Optional host: the class demo only requires the app to use the live AWS services (RDS, SES), and §4.3/§10.2 keep AWS as the planned host.
+- Design doc ref: §4.3, §4.10, §4.11, §4.13
+- Decision:
+  - One Docker container keeps the design's shape: Caddy listens on Railway's `$PORT`, serves `/static/` from `STATIC_ROOT`, and proxies everything else to Gunicorn on `127.0.0.1:8000`. Railway's edge terminates HTTPS.
+  - Caddy believes `X-Forwarded-For`/`X-Forwarded-Proto` only from private or shared (100.64/10) addresses, the edge, and sends Gunicorn exactly the visitor's IP, so the per-IP login limit keys on the visitor (`TRUSTED_PROXY_IPS` stays `127.0.0.1`).
+  - `collectstatic` runs at image build with throwaway values; real secrets come only from Railway's variables at run time.
+  - Before each deploy Railway runs `deploy/predeploy.sh`: wake RDS if `RDS_INSTANCE_ID` is set, `migrate`, `createcachetable`. It migrates the shared RDS database, so only `main` may be deployed.
+  - `CELERY_TASK_ALWAYS_EAGER` in production now reads the env (default false). On Railway it is true, so the signup email is sent inside the request with no worker or SQS queue. `RUN_CELERY_WORKER=true` starts a worker in the container instead.
+- Why: Lets the team put the app on a public URL in minutes without changing the stack, while AWS hosting stays the plan of record.
+- Where in code: `Dockerfile`, `.dockerignore`, `railway.json`, `deploy/Caddyfile`, `deploy/start.sh`, `deploy/predeploy.sh`, `config/settings/prod.py` (`CELERY_TASK_ALWAYS_EAGER`)
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.
