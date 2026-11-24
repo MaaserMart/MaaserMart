@@ -2,10 +2,14 @@
 
 Dev tooling only (see CLAUDE.md): it builds every app's rows through the shared
 factories in tests/factories. It refuses to run unless DEBUG is on and every app
-table is empty (D-030).
+table is empty (D-030). The tests package is imported lazily (S2): seeding
+is the only runtime code that needs it, so a production install can leave the
+package out and never pay for it.
 """
 
 import random
+import secrets
+import uuid
 from datetime import timedelta
 
 import factory.random
@@ -20,8 +24,6 @@ from apps.approvals.models import ApprovalRequest
 from apps.charities.models import Charity, Haskama, Link
 from apps.charities.services import publish_charity
 from apps.events.models import Event
-from tests import factories as f
-from tests.factories.accounts import DEFAULT_PASSWORD
 
 Role = RoleAssignment.Role
 Status = ApprovalRequest.Status
@@ -57,10 +59,49 @@ LOCATIONS = [
 ]
 
 NAME_PREFIXES = ["Keren", "Chasdei", "Yad", "Ezras", "Bais", "Tomchei", "Achiezer", "Lev"]
-NAME_WORDS = ["Chesed", "Shalom", "Emunah", "Tzedakah", "Rachamim", "Simcha", "Torah", "Chaim"]
+NAME_WORDS = [
+    "Chesed",
+    "Shalom",
+    "Emunah",
+    "Tzedakah",
+    "Rachamim",
+    "Simcha",
+    "Torah",
+    "Chaim",
+    "Yisrael",
+    "Mordechai",
+    "Avraham",
+    "Yitzchak",
+    "Yaakov",
+    "Moshe",
+    "Aharon",
+    "David",
+    "Shlomo",
+    "Menachem",
+    "Naftali",
+    "Yehuda",
+    "Zev",
+    "Aryeh",
+    "Baruch",
+    "Efraim",
+    "Yosef",
+    "Binyamin",
+]
 
-PLACEHOLDER_IMAGE = "https://placehold.co/600x400.png"  # D-024
+# One name per prefix/word pair: 8 × 26 = 208 pairs for 200 charities, so the
+# seeded listing has no repeated name (D-049). CHARITY.name stays non-unique in
+# the schema (D-013); this is only about data that reads like real rows.
+NAMES = [f"{prefix} {word}" for prefix in NAME_PREFIXES for word in NAME_WORDS]
+
+# Dev images come from the SVGs already in the repo (D-043, superseding D-024).
+# Repo-relative paths, so the template serves them through {% static %}.
+IMAGE_PATHS = [f"charities/img/charity-{index:02d}.svg" for index in range(1, 13)]
 APPROVED, PENDING = 185, 15
+# Requests submitted together share one batch (§5.2.5), and the admin queue
+# decides a whole batch at once (§7.1.6). Batching the seed the same way gives
+# that screen something real to work on in dev (D-055, superseding D-006's own
+# single-request batches).
+BATCH_SIZE = 10
 MEMBERS, OWNERS, RABBIS = 100, 30, 10
 EVENTS = 8000
 
@@ -83,21 +124,29 @@ class Command(BaseCommand):
                 + ", ".join(sorted(filled))
                 + ". Drop and recreate the database, run migrate, then seed."
             )
+        # SEC4: the admin account must not come with the public password 'admin'. That
+        # is safe only on a throwaway local box, and the DB check above already refuses
+        # anything that might be real. Use a random password, or an explicit one.
+        admin_password = settings.ADMIN_SEED_PASSWORD or secrets.token_urlsafe(18)
         self.rng = random.Random(613)
         factory.random.reseed_random(613)
         self.now = timezone.now()
         with transaction.atomic():
-            self.seed()
+            self.seed(admin_password)
+        from tests.factories.accounts import DEFAULT_PASSWORD
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"Seeded {Charity.objects.count()} charities, {User.objects.count()} users, "
-                f"{Event.objects.count()} events. Log in as admin / admin; every other "
+                f"{Event.objects.count()} events. Log in as admin / {admin_password}; every other "
                 f"user (member1, owner1, rabbi1) has password '{DEFAULT_PASSWORD}'."
             )
         )
 
-    def seed(self):
-        admin = User.objects.create_superuser("admin", "admin@example.com", "admin")
+    def seed(self, admin_password):
+        from tests import factories as f
+
+        admin = User.objects.create_superuser("admin", "admin@example.com", admin_password)
         domains = [f.DomainFactory(name=name) for name in DOMAINS]
         locations = [f.LocationFactory(name=n, region=r, country=c) for n, r, c in LOCATIONS]
 
@@ -107,11 +156,13 @@ class Command(BaseCommand):
         for rabbi in rabbis:
             f.RabbiProfileFactory(user=rabbi)
 
+        # One batch id per group of requests, so the queue can decide several at once.
+        batch_ids = [uuid.uuid4() for _ in range(-(-(APPROVED + PENDING) // BATCH_SIZE))]
         charities = []
-        for i in range(APPROVED + PENDING):
-            name = f"{self.rng.choice(NAME_PREFIXES)} {self.rng.choice(NAME_WORDS)}"
+        names = self.rng.sample(NAMES, APPROVED + PENDING)
+        for i, name in enumerate(names):
             approved = i < APPROVED
-            charity = f.CharityFactory(name=name, image=PLACEHOLDER_IMAGE if i % 3 == 0 else None)
+            charity = f.CharityFactory(name=name, image=IMAGE_PATHS[i % len(IMAGE_PATHS)])
             for domain in self.rng.sample(domains, self.rng.randint(1, 3)):
                 f.CharityDomainFactory(charity=charity, domain=domain)
             f.CharityLocationFactory(charity=charity, location=self.rng.choice(locations))
@@ -122,6 +173,7 @@ class Command(BaseCommand):
                 approval_request__submitted_by=self.rng.choice(owners),
                 approval_request__status=Status.APPROVED if approved else Status.PENDING,
                 approval_request__decided_by=admin if approved else None,
+                approval_request__batch_id=batch_ids[i // BATCH_SIZE],
             )
             if approved:
                 # Through the service, as approvals will do, so it records its event (D-038).
@@ -141,6 +193,8 @@ class Command(BaseCommand):
         self.events(approved, members)
 
     def users(self, prefix, count, role):
+        from tests import factories as f
+
         made = []
         for i in range(1, count + 1):
             user = f.UserFactory(username=f"{prefix}{i}")

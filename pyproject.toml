@@ -9,7 +9,6 @@ dependencies = [
     "django-environ>=0.12",
     "psycopg[binary]>=3.2",
     "celery[sqs]>=5.5",
-    "django-auditlog>=3.1",
     "concurrent-log-handler>=0.9",
     "gunicorn>=23",
 ]
@@ -21,6 +20,7 @@ dev = [
     "factory-boy>=3.3",
     "faker>=30",
     "ruff>=0.8",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.uv]
@@ -39,5 +39,16 @@ select = ["E", "F", "I", "B", "UP", "DJ", "S608", "S610", "S611"]
 ignore = ["DJ001", "DJ008"]
 
 [tool.pytest.ini_options]
-addopts = "--ds=config.settings.test"
+# Coverage is measured on every run so the number is not a CI-only mystery
+# (audit T1); the gate is `[tool.coverage.report] fail_under` below.
+addopts = "--ds=config.settings.test --cov=apps --cov=config --cov-report=term-missing:skip-covered"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["apps", "config"]
+omit = ["*/migrations/*"]
+
+[tool.coverage.report]
+# Below this, a change is leaving behaviour unexercised somewhere (audit T1).
+fail_under = 85
+skip_covered = true

@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% load charity_images static %}
+
+{% block title %}Charities &middot; MaaserMart{% endblock %}
+
+{% block content %}
+  <div class="listing">
+    {# §6.2.6 Search: a bar across the top of the listing, above both columns. #}
+    {% include "charities/search.html" %}
+
+    {# §6.2.4 Filter: the sidebar narrows the listing, Amazon-style. #}
+    <aside class="listing__sidebar">
+      {% include "charities/filters.html" %}
+    </aside>
+
+    <div class="listing__results">
+      <div class="listing__header">
+        <h1>Charities</h1>
+
+        <div class="listing__controls">
+          {% include "charities/sort.html" %}
+
+          <form class="page-size" method="get">
+            {% if page.number > 1 %}
+              <input type="hidden" name="page" value="1">
+            {% endif %}
+            {# Keep the filters and the order when the reader changes the page size. #}
+            {% include "charities/state.html" %}
+            <label class="page-size__label" for="page-size">Page size</label>
+            <input
+              class="page-size__input"
+              id="page-size"
+              name="page_size"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              max="100"
+              value="{{ page.page_size }}"
+            >
+            <button class="page-size__submit" type="submit">Go</button>
+          </form>
+        </div>
+      </div>
+
+      {% if page.items %}
+        {% if page.total %}
+          <p class="listing__total">{{ page.total }} charit{{ page.total|pluralize:"y,ies" }}</p>
+        {% endif %}
+        <ul class="charity-list">
+          {% for charity in page.items %}
+            <li>
+              <a class="charity-card" href="{% url 'charities:detail' charity.id %}">
+                {# One filter decides the src, so an absolute URL and a repo path cannot be confused (B8). #}
+                {% with image=charity.image|image_src %}
+                  {% if image %}
+                    <img class="charity-card__image" src="{{ image }}" alt="" width="96" height="96">
+                  {% else %}
+                    <span class="charity-card__image charity-card__image--empty" aria-hidden="true"></span>
+                  {% endif %}
+                {% endwith %}
+
+                <span class="charity-card__body">
+                  <span class="charity-card__name">{{ charity.name }}</span>
+
+                  {% if charity.tagline %}
+                    <span class="charity-card__tagline">{{ charity.tagline }}</span>
+                  {% endif %}
+
+                  {# §5.3: the average rating on the list page, derived from the reviews. #}
+                  {% if charity.reviews.count %}
+                    <span class="charity-card__rating">
+                      <span class="rating__value">{{ charity.reviews.average|floatformat:1 }} out of 5</span>
+                      <span class="rating__count">
+                        ({{ charity.reviews.count }} review{{ charity.reviews.count|pluralize }})
+                      </span>
+                    </span>
+                  {% else %}
+                    <span class="charity-card__rating charity-card__rating--empty">No reviews yet</span>
+                  {% endif %}
+
+                  <span class="charity-card__meta">
+                    {% for domain in charity.domains %}
+                      <span class="chip">{{ domain.name }}</span>
+                    {% endfor %}
+
+                    {% if charity.domains and charity.locations %}
+                      <span class="chip-divider" role="separator" aria-orientation="vertical"></span>
+                    {% endif %}
+
+                    {# A location's name is not unique, so the chip states its full identity (D-045). #}
+                    {% for location in charity.locations %}
+                      <span class="chip chip--location">{{ location.label }}</span>
+                    {% endfor %}
+                  </span>
+
+                  {# D-051: the numbers and dates the activity orders sort by, so an order can be checked. #}
+                  <span class="charity-card__activity">
+                    <span>{{ charity.activity.events }} event{{ charity.activity.events|pluralize }}</span>
+                    <span>{{ charity.activity.approving_haskamas }} haskama{{ charity.activity.approving_haskamas|pluralize }}</span>
+                    <span>Last changed {{ charity.activity.last_changed|date:"j M Y" }}</span>
+                  </span>
+                </span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+
+        {% if page.page_count > 1 %}
+          <nav class="pagination" aria-label="Pagination">
+            {% if page.has_previous %}
+              <a class="pagination__step" href="?{{ page.previous_query }}" rel="prev">&larr; Prev</a>
+            {% else %}
+              {# A disabled step is not a control: the dimmed span says enough (A2). #}
+              <span class="pagination__step pagination__step--disabled">&larr; Prev</span>
+            {% endif %}
+
+            {% if page.can_jump_to_first %}
+              <a class="pagination__step" href="?{{ page.first_query }}" aria-label="First page">&laquo; 1</a>
+            {% endif %}
+            <ul class="pagination__pages">
+              {% for number, query in page.numbers %}
+                <li class="pagination__item">
+                  {% if number == page.number %}
+                    <span class="pagination__page pagination__page--current" aria-current="page">{{ number }}</span>
+                  {% else %}
+                    <a class="pagination__page" href="?{{ query }}">{{ number }}</a>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+
+            {% if page.can_jump_to_last %}
+              <a class="pagination__step" href="?{{ page.last_query }}" aria-label="Last page">{{ page.page_count }} &raquo;</a>
+            {% endif %}
+            {% if page.has_next %}
+              <a class="pagination__step" href="?{{ page.next_query }}" rel="next">Next &rarr;</a>
+            {% else %}
+              {# A disabled step is not a control: the dimmed span says enough (A2). #}
+              <span class="pagination__step pagination__step--disabled">Next &rarr;</span>
+            {% endif %}
+
+            <form class="jump" method="get">
+              <input type="hidden" name="page_size" value="{{ page.page_size }}">
+              {% include "charities/state.html" %}
+              <label class="jump__label" for="jump-page">Go to</label>
+              <input
+                class="jump__input"
+                id="jump-page"
+                name="page"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                max="{{ page.page_count }}"
+                placeholder="{{ page.number }}"
+              >
+              <button class="jump__submit" type="submit">Go</button>
+            </form>
+          </nav>
+        {% endif %}
+      {% elif search_form.is_active and form.is_active %}
+        <p class="empty">No charities match that search and those filters.</p>
+      {% elif search_form.is_active %}
+        <p class="empty">No charities match that search.</p>
+      {% elif form.is_active %}
+        <p class="empty">No charities match those filters.</p>
+      {% else %}
+        <p class="empty">No charities found.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

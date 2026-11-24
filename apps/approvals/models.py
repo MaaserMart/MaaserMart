@@ -42,6 +42,9 @@ class ApprovalRequest(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=["status", "submitted_at"], name="approval_status_submitted"),
+            # §7.1.6's queue groups by batch and decides a whole batch at once, so
+            # this lookup needs its own index (D-055).
+            models.Index(fields=["batch_id", "status"], name="approval_batch_status"),
         ]
 
     def __str__(self):

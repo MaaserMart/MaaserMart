@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Something went wrong &middot; MaaserMart{% endblock %}
+
+{% block content %}
+  {# D-035: nothing here may depend on context that can fail; this is only text. #}
+  <div class="error-page">
+    <h1>Something went wrong</h1>
+    <p>MaaserMart hit an unexpected error. Try again in a minute.</p>
+    <p><a href="{% url 'charities:listing' %}">Back to the charity listing</a></p>
+  </div>
+{% endblock %}

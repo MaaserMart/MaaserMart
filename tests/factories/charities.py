@@ -71,7 +71,8 @@ class ReviewFactory(DjangoModelFactory):
 
     charity = factory.SubFactory(CharityFactory)
     author = factory.SubFactory("tests.factories.accounts.UserFactory")
-    rating = factory.Faker("random_int", min=1, max=5)
+    # S8: factories keep obvious, fixed defaults; a review is a positive review.
+    rating = 5
     body = factory.Faker("paragraph", nb_sentences=3)
 
 
@@ -82,5 +83,6 @@ class HaskamaFactory(DjangoModelFactory):
     rabbi_user = factory.SubFactory("tests.factories.accounts.UserFactory")
     charity = factory.SubFactory(CharityFactory)
     verdict = Haskama.Verdict.APPROVE
-    importance = factory.Faker("random_int", min=1, max=10)
+    # S8: a haskama exists to endorse a charity, so its weight is the default.
+    importance = 5
     body = factory.Faker("sentence")

@@ -1,0 +1,45 @@
+{% comment %}
+The listing's search bar (§6.2.6, D-054). A plain GET form, like the sort and
+filter controls, so the term lives in the URL and the browser's Back button
+works (UC-03). The page size, the filters and the order ride along as hidden
+inputs, and no `page` is sent, so a new search starts at page 1 (§6.2.6).
+The advanced options sit behind a <details> toggle, which needs no JavaScript.
+{% endcomment %}
+<form class="search" method="get" action="{% url 'charities:listing' %}" role="search">
+  <input type="hidden" name="page_size" value="{{ page.page_size }}">
+  {% include "charities/state.html" with skip="search" %}
+
+  <div class="search__bar">
+    <label class="search__label" for="{{ search_form.parameter }}">{{ search_form.label }}</label>
+    <input
+      class="search__input"
+      id="{{ search_form.parameter }}"
+      name="{{ search_form.parameter }}"
+      type="search"
+      value="{{ search_form.term }}"
+      placeholder="{{ search_form.placeholder }}"
+      autocomplete="off"
+    >
+    <button class="search__submit" type="submit">{{ search_form.submit_label }}</button>
+  </div>
+
+  {% comment %}Opened when an option is on, so the reader can see why the
+  results are narrowed differently than the term alone would explain.{% endcomment %}
+  <details class="search__advanced"{% if search_form.is_advanced %} open{% endif %}>
+    <summary class="search__toggle">{{ search_form.advanced_label }}</summary>
+    <div class="search__options">
+      {% for option in search_form.options %}
+        <label class="search__option">
+          <input
+            type="checkbox"
+            name="{{ option.parameter }}"
+            value="1"
+            {% if option.checked %}checked{% endif %}
+          >
+          <span class="search__option-label">{{ option.label }}</span>
+        </label>
+        <span class="search__note">{{ option.note }}</span>
+      {% endfor %}
+    </div>
+  </details>
+</form>
