@@ -380,6 +380,19 @@ Rules for this file:
 - Why: A charity_updated event moves the derived "last updated" date (§5.2.21), so it must mean a real change. The admin form must not bypass the services, or changes would skip the event that D-039 relies on.
 - Where in code: `apps/charities/services.py` (`_set_visible`), `apps/charities/admin.py` (`CharityAdmin`), `apps/dashboards/management/commands/seed.py`, `tests/unit/test_charity_services.py`, `tests/integration/test_charity_admin.py`
 
+## D-YOSEF-dashboard-router: The nav's Dashboard sends each user to their own dashboard
+- Date: 2026-11-25
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.2.1.6, §7.1.4, §7.2
+- Decision:
+  - `/dashboard/` (`dashboards:dashboard`) redirects a logged-in user to their own page: a rabbi to `/dashboard/rabbi/`, a charity owner to `/dashboard/owner/`, an admin to `/dashboard/admin/`, an applicant to `/accounts/pending/`, someone with several roles to the chooser. A member goes home until the member dashboard (with the Maaser tools) exists. A visitor is sent to log in and comes back. Because that URL now exists, the nav shows "Dashboard" (the nav hides links to pages that don't exist).
+  - It uses the same rule as login (`accounts.login.dashboard_for`, reached through `accounts.services.dashboard_for`), read from the database on every request, so a role granted or removed counts on the next click.
+  - Every dashboard checks its own role on the server on every request, and anyone else gets 404, whatever they type into the address bar.
+  - `/dashboard/owner/` is the charity owner's own dashboard: the charities they own (linked to each charity's page) and a note that editing and stats are coming. Owners get their own dashboard because one owner may manage several charities.
+- Why: Yosef: a rabbi who clicks away from his dashboard had no way back; "just add a dashboard that sends, depending on the user, to their own dashboard", and typing another role's address must not let you in.
+- Where in code: `apps/accounts/login.py` (`dashboard_for`), `apps/accounts/services.py` (`dashboard_for`, `is_charity_owner`, `owned_charity_ids`), `apps/dashboards/views.py` (`dashboard_view`, `owner_dashboard_view`), `apps/dashboards/urls.py`, `templates/dashboards/owner.html`, `tests/integration/test_dashboard_router.py`
+
 ## D-YOSEF-owner-signup: A charity owner signs up, claims a charity already listed, and waits for an admin
 - Date: 2026-11-25
 - Decided by: CEO (Yosef)
