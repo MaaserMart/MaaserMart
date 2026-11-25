@@ -220,6 +220,32 @@ def add_charity_owner(user_id, charity_id):
         grant_role(user_id, CHARITY_OWNER)
 
 
+def dashboard_for(user):
+    """Where "Dashboard" takes a logged-in user (D-YOSEF-dashboard-router)."""
+    from .login import dashboard_for as _dashboard_for  # login imports this module.
+
+    return _dashboard_for(user)
+
+
+def is_charity_owner(user_id) -> bool:
+    """Whether this user holds the charity owner role, i.e. an admin approved a claim.
+
+    None (a visitor) is never an owner and costs no query.
+    """
+    if user_id is None:
+        return False
+    return RoleAssignment.objects.filter(user_id=user_id, role=CHARITY_OWNER).exists()
+
+
+def owned_charity_ids(user_id) -> list[int]:
+    """The charities this user owns (§5.2.4), oldest ownership first."""
+    return list(
+        CharityOwner.objects.filter(user_id=user_id)
+        .order_by("created", "id")
+        .values_list("charity_id", flat=True)
+    )
+
+
 def save_rabbi_profile(user_id, display_name, title):
     """Save the name and title a rabbi applied with (§5.2.3), replacing any earlier ones.
 
