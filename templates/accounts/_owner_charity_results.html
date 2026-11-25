@@ -2,7 +2,7 @@
   <ul class="charity-list">
     {% for charity in results %}
       <li>
-        <form class="charity-card auth__choice" method="post" action="{% url 'accounts:owner_application' %}">
+        <form class="charity-card auth__choice owner-claim" method="post" action="{% url 'accounts:owner_application' %}">
           {% csrf_token %}
           <input type="hidden" name="charity_id" value="{{ charity.id }}">
           <span>{{ charity.name }}</span>
