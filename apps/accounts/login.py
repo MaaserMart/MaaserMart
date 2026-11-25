@@ -157,6 +157,16 @@ def redirect_after_login(request, user):
     next_url = safe_next_url(request)
     if next_url:
         return next_url
+    return dashboard_for(user)
+
+
+def dashboard_for(user):
+    """A logged-in user's own page: their dashboard, the chooser, or their application.
+
+    Read from the database on every call, so a role granted or removed counts at once.
+    """
+    if is_applicant(user):
+        return reverse(APPLICATION_STATUS_URL_NAME)
     roles = find_role(user)
     if not roles:
         return reverse("home")  # Staff with no role: Django admin is linked from there.

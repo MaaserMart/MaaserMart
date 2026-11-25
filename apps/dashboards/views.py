@@ -1,6 +1,7 @@
-"""Role dashboards (§6.2.1): the admin's and the rabbi's so far."""
+"""Role dashboards (§6.2.1): the admin's, the rabbi's and the charity owner's so far."""
 
 from django.contrib import admin
+from django.contrib.auth.decorators import login_required
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -15,6 +16,30 @@ from .forms import HaskamaForm
 # `?from=charity` sends the rabbi back to the charity page after saving. A
 # fixed word, never a URL, so it cannot be turned into an open redirect.
 FROM_CHARITY = "charity"
+
+
+@require_GET
+@login_required
+def dashboard_view(request):
+    """The nav's "Dashboard": the user's own dashboard, the chooser, or their application.
+
+    Each dashboard checks the role again on every request, so typing another
+    role's address gets a 404, whatever the nav showed.
+    """
+    return redirect(accounts.dashboard_for(request.user))
+
+
+@require_GET
+def owner_dashboard_view(request):
+    """The charities this owner manages (§7.1.4). Approved charity owners only; else 404."""
+    if not (request.user.is_authenticated and accounts.is_charity_owner(request.user.id)):
+        raise Http404
+    owned = []
+    for charity_id in accounts.owned_charity_ids(request.user.id):
+        name = charities.get_charity_name(charity_id)
+        if name is not None:
+            owned.append({"id": charity_id, "name": name})
+    return render(request, "dashboards/owner.html", {"charities": owned})
 
 
 @require_GET
