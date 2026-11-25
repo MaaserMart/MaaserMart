@@ -70,7 +70,7 @@ class SignupResult(enum.Enum):
     INVALID = "invalid"  # The form says which fields.
     TOO_MANY_EMAILS = "too_many_emails"
     OK = "ok"
-    APPLICANT = "applicant"  # A rabbi's account, with no role until an admin approves.
+    APPLICANT = "applicant"  # A rabbi's or owner's account, with no role until an admin approves.
     NO_SIGNUP = "no_signup"
     EXPIRED = "expired"
     WRONG_CODE = "wrong_code"
@@ -151,7 +151,7 @@ def _save_and_send(request, pending):
 def start_signup(request, form, next_url="", applying_for=None):
     """Check a filled-in SignupForm and, if it passes, email a code.
 
-    `applying_for` is "rabbi" on the rabbi signup page. Returns a SignupResult.
+    `applying_for` is "rabbi" or "owner" on those signup pages. Returns a SignupResult.
     On INVALID the errors are on `form`.
     """
     # 1. Cheapest: fields and password rules, no database and no limit spent,

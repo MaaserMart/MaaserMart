@@ -380,6 +380,24 @@ Rules for this file:
 - Why: A charity_updated event moves the derived "last updated" date (§5.2.21), so it must mean a real change. The admin form must not bypass the services, or changes would skip the event that D-039 relies on.
 - Where in code: `apps/charities/services.py` (`_set_visible`), `apps/charities/admin.py` (`CharityAdmin`), `apps/dashboards/management/commands/seed.py`, `tests/unit/test_charity_services.py`, `tests/integration/test_charity_admin.py`
 
+## D-YOSEF-owner-signup: A charity owner signs up, claims a charity already listed, and waits for an admin
+- Date: 2026-11-25
+- Decided by: CEO (Yosef)
+- Status: Active
+- Design doc ref: §6.2.2, §8.4 (alternate 6a), §5.2.4, §5.2.7, §6.2.13
+- Decision:
+  - `/accounts/owner-signup/` is the member signup form with the same checks and emailed code (D-YOSEF-member-signup); the member signup page links to it. The right code creates the account with no role, logs it in and opens `/accounts/owner-application/`.
+  - That page explains the next steps and searches charities by name as the applicant types (htmx, the same search as the listing); without JavaScript it submits as a normal form. Each result has a "This is my charity" button that posts the charity id. The claimant is always the logged-in user; only applicants (no role, not staff) can reach it, so a member, owner or admin is sent away. Once a claim is sent the page sends the user to `/accounts/pending/`.
+  - "Add a charity" is on the page. Until `/charity/add/` exists (Shaul's charities app) it is a disabled button with "Adding a new charity is coming soon"; it becomes a link by itself once a URL named `charities:add` exists.
+  - An applicant who logs in before applying gets a page asking which they are applying as (rabbi or charity owner), because which signup page they used isn't stored until the application is.
+  - The pages use no inline script, handler or Alpine, so they work under production's CSP (D-YOSEF-csp-widgets).
+  - A claim saves a pending APPROVAL_REQUEST(kind=owner_claim) and its OWNER_CLAIM_REQUEST naming the charity. The user owns nothing until an admin approves; approving creates the CHARITY_OWNER row and grants the charity_owner role, in the same transaction as the decision. Rejecting creates neither. Either way the applicant is emailed, as for a rabbi (D-YOSEF-rabbi-signup).
+  - One application per account, of any kind and whatever its outcome: an account that applied as a rabbi can't also claim a charity, and the reverse. A claim for a charity id that doesn't exist is refused.
+  - Two people may claim the same charity, and a charity that already has an owner may be claimed: who really runs it is the admin's call, made by email. The queue shows which charity each claim is for.
+  - The applicant sees the role as "charity owner" on the status page and in emails.
+- Why: Yosef: owners sign up like rabbis and members, then go to a page that lets them pick their charity from the ones already in the database, or add one. Claiming an existing charity is the part built now; adding a new charity needs `/charity/add/`, which isn't built. Keeping the decision with the admin matches the rabbi flow and §8.4's "pending until approved".
+- Where in code: `apps/approvals/services.py` (`submit_owner_claim`, `decide_request`, `get_requests`, `role_words`), `apps/accounts/services.py` (`add_charity_owner`), `apps/accounts/views.py` (`owner_signup_view`, `owner_application_view`, `pending_view`), `apps/accounts/urls.py`, `templates/accounts/owner_signup.html`, `templates/accounts/owner_application.html`, `templates/accounts/_owner_charity_results.html`, `templates/accounts/choose_application.html`, `tests/integration/test_owner_signup.py`
+
 ## D-YOSEF-rabbi-signup: A rabbi signs up as his own account, applies, and sees only his application until an admin approves
 - Date: 2026-11-22
 - Decided by: CEO (Yosef), on Shaul's proposal

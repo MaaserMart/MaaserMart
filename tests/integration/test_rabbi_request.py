@@ -344,10 +344,13 @@ def test_the_application_takes_no_user_id_from_the_post(client):
 # --- logging in while the application waits -------------------------------
 
 
-def test_logging_in_before_applying_opens_the_application(client):
+def test_logging_in_before_applying_offers_both_applications(client):
+    """Which one he signed up for isn't stored until he applies (D-YOSEF-owner-signup)."""
     sign_up_as_rabbi(client)
     response = log_in(client)
-    assert client.get(response.url).url == APPLY
+    page = client.get(response.url).content.decode()
+    assert APPLY in page
+    assert "/accounts/owner-application/" in page
 
 
 def test_logging_in_while_pending_shows_the_pending_page(client):

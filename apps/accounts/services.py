@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 
-from .models import RabbiProfile, RoleAssignment, User
+from .models import CharityOwner, RabbiProfile, RoleAssignment, User
 from .tasks import send_notice, send_signup_code
 
 
@@ -110,6 +110,7 @@ logger = logging.getLogger(__name__)
 
 ADMIN = "admin"
 RABBI = RoleAssignment.Role.RABBI.value
+CHARITY_OWNER = RoleAssignment.Role.CHARITY_OWNER.value
 
 # The order roles appear in, e.g. on the dashboard chooser.
 _ROLE_ORDER = [
@@ -155,9 +156,10 @@ class SignupOutcome(enum.Enum):
 
 
 def is_applicant(user):
-    """A rabbi applicant: an account with no role that isn't staff (D-YOSEF-rabbi-signup).
+    """An applicant: an account with no role that isn't staff (D-YOSEF-rabbi-signup).
 
-    Staff without a role use Django admin, not the rabbi application.
+    A rabbi or charity owner applicant (D-YOSEF-owner-signup). Staff without a
+    role use Django admin, not an application.
     """
     return user.is_authenticated and not user.is_staff and not find_role(user)
 
@@ -173,7 +175,7 @@ def submit_member_signup(username, email, password_hash):
 
 
 def submit_applicant_signup(username, email, password_hash):
-    """Create a USER with no role yet: a rabbi applicant (D-YOSEF-rabbi-signup).
+    """Create a USER with no role yet: a rabbi or owner applicant (D-YOSEF-rabbi-signup).
 
     The account logs in, but sees only its application and its status until an
     admin approves it and grants the role. Returns (SignupOutcome, user or None),
@@ -206,6 +208,16 @@ def enqueue_signup_code(email, code):
 def grant_role(user_id, role):
     """Give a user a role (§6.2.13.5). Granting a role they already hold changes nothing."""
     RoleAssignment.objects.get_or_create(user_id=user_id, role=role)
+
+
+def add_charity_owner(user_id, charity_id):
+    """Make a user an owner of a charity (§5.2.4) and give them the charity owner role.
+
+    Called when an admin approves an owner claim. Adding an owner twice changes nothing.
+    """
+    with transaction.atomic():
+        CharityOwner.objects.get_or_create(user_id=user_id, charity_id=charity_id)
+        grant_role(user_id, CHARITY_OWNER)
 
 
 def save_rabbi_profile(user_id, display_name, title):
