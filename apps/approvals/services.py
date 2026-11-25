@@ -14,19 +14,27 @@ from django.db import connection, transaction
 from django.utils import timezone
 
 from apps.accounts import services as accounts
+from apps.charities import services as charities
 
-from .models import ApprovalRequest
+from .models import ApprovalRequest, OwnerClaimRequest
 
 Kind = ApprovalRequest.Kind
 Status = ApprovalRequest.Status
 
 # The kinds an admin can approve or reject from the queue so far.
-DECIDABLE_KINDS = {Kind.RABBI}
+DECIDABLE_KINDS = {Kind.RABBI, Kind.OWNER_CLAIM}
+
+# The role each kind of application asks for, in the words the applicant sees.
+ROLE_WORDS = {Kind.RABBI: "rabbi", Kind.OWNER_CLAIM: "charity owner"}
+
+
+def role_words(kind):
+    return ROLE_WORDS.get(kind) or Kind(kind).label.lower()
 
 
 def decision_email(kind, approved):
     """The subject and body of the email that tells the applicant the decision."""
-    role = Kind(kind).label.lower()
+    role = role_words(kind)
     if approved:
         return (
             f"Your MaaserMart {role} account is approved",
@@ -46,6 +54,7 @@ class SubmitOutcome(enum.Enum):
     SUBMITTED = "submitted"
     ALREADY_APPLIED = "already_applied"  # One application per account, whatever its outcome.
     ALREADY_GRANTED = "already_granted"
+    NO_SUCH_CHARITY = "no_such_charity"
 
 
 class DecideOutcome(enum.Enum):
@@ -86,11 +95,37 @@ def submit_rabbi_request(user, display_name, title):
         _lock_requests_of(user.pk)
         if accounts.RABBI in accounts.find_role(user):
             return SubmitOutcome.ALREADY_GRANTED
-        if ApprovalRequest.objects.filter(submitted_by=user, kind=Kind.RABBI).exists():
+        if _has_applied(user):
             return SubmitOutcome.ALREADY_APPLIED
         accounts.save_rabbi_profile(user.pk, display_name, title)
         ApprovalRequest.objects.create(submitted_by=user, kind=Kind.RABBI, batch_id=uuid.uuid4())
     return SubmitOutcome.SUBMITTED
+
+
+def submit_owner_claim(user, charity_id):
+    """Ask to own a charity already in the database (§6.2.2.5).
+
+    Saves a pending request and which charity it is for. The user owns nothing
+    until an admin approves (D-YOSEF-owner-signup).
+    """
+    with transaction.atomic():
+        _lock_requests_of(user.pk)
+        if accounts.CHARITY_OWNER in accounts.find_role(user):
+            return SubmitOutcome.ALREADY_GRANTED
+        if _has_applied(user):
+            return SubmitOutcome.ALREADY_APPLIED
+        if charities.get_charity_name(charity_id) is None:
+            return SubmitOutcome.NO_SUCH_CHARITY
+        request = ApprovalRequest.objects.create(
+            submitted_by=user, kind=Kind.OWNER_CLAIM, batch_id=uuid.uuid4()
+        )
+        OwnerClaimRequest.objects.create(approval_request=request, charity_id=charity_id)
+    return SubmitOutcome.SUBMITTED
+
+
+def _has_applied(user):
+    """One application per account, of any kind and whatever its outcome."""
+    return ApprovalRequest.objects.filter(submitted_by=user).exists()
 
 
 def latest_application(user):
@@ -107,7 +142,7 @@ def latest_application(user):
     if row is None:
         return None
     kind, status = row
-    return Kind(kind).label.lower(), status
+    return role_words(kind), status
 
 
 def pending_count():
@@ -117,7 +152,9 @@ def pending_count():
 def get_requests():
     """Every pending request for the admin queue, oldest first (§6.2.13.5)."""
     requests = list(
-        ApprovalRequest.objects.filter(status=Status.PENDING).order_by("submitted_at", "id")
+        ApprovalRequest.objects.filter(status=Status.PENDING)
+        .select_related("owner_claim")
+        .order_by("submitted_at", "id")
     )
     user_ids = [r.submitted_by_id for r in requests if r.submitted_by_id]
     names = accounts.usernames(user_ids)
@@ -130,6 +167,10 @@ def get_requests():
         detail = ""
         if r.kind == Kind.RABBI and r.submitted_by_id in rabbis:
             detail = rabbis[r.submitted_by_id].label
+        elif r.kind == Kind.OWNER_CLAIM and hasattr(r, "owner_claim"):
+            # One query per claim; the queue is short (a bulk lookup can come later).
+            charity_id = r.owner_claim.charity_id
+            detail = f"Claims {charities.get_charity_name(charity_id)} (#{charity_id})"
         items.append(
             QueueItem(
                 id=r.pk,
@@ -169,6 +210,9 @@ def decide_request(request_id, approve, admin_user):
         if user_id is not None:
             if approve and request.kind == Kind.RABBI:
                 accounts.grant_role(user_id, accounts.RABBI)
+            if approve and request.kind == Kind.OWNER_CLAIM:
+                claim = OwnerClaimRequest.objects.get(approval_request=request)
+                accounts.add_charity_owner(user_id, claim.charity_id)
             subject, message = decision_email(request.kind, approve)
             # Only once the decision is saved, so a rolled-back decision sends nothing.
             transaction.on_commit(
