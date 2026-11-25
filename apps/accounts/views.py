@@ -4,9 +4,11 @@ from django.conf import settings
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
+from django.urls import NoReverseMatch, reverse
 from django.views.decorators.http import require_http_methods, require_POST
 
 from apps.approvals import services as approvals
+from apps.charities import services as charities
 
 from . import signup
 from .forms import RabbiApplicationForm
@@ -78,6 +80,13 @@ def _next(request):
 SIGNUP_PAGES = {
     "member": (signup.SignupForm, "accounts/signup.html"),
     "rabbi": (signup.SignupForm, "accounts/rabbi_signup.html"),
+    "owner": (signup.SignupForm, "accounts/owner_signup.html"),
+}
+
+# Where each kind of applicant goes after the code, to fill in the application.
+APPLICATION_PAGES = {
+    "rabbi": "accounts:rabbi_application",
+    "owner": "accounts:owner_application",
 }
 
 
@@ -113,6 +122,11 @@ def rabbi_signup_view(request):
 
 
 @require_http_methods(["GET", "POST"])
+def owner_signup_view(request):
+    return _signup_page(request, "owner")
+
+
+@require_http_methods(["GET", "POST"])
 def signup_verify_view(request):
     pending = signup.pending_signup(request)
     if pending is None:
@@ -132,7 +146,7 @@ def signup_verify_view(request):
             if result is signup.SignupResult.OK:
                 return redirect(redirect_after_login(request, user))
             if result is signup.SignupResult.APPLICANT:
-                return redirect("accounts:rabbi_application")
+                return redirect(APPLICATION_PAGES[pending["applying_for"]])
             if result is signup.SignupResult.RATE_LIMITED:
                 status = 429
             if result in (signup.SignupResult.OUT_OF_TRIES, signup.SignupResult.TAKEN):
@@ -155,9 +169,9 @@ def signup_verify_view(request):
 
 
 def _applicant_or_redirect(request):
-    """None for a rabbi applicant; else where to send them.
+    """None for an applicant (rabbi or owner); else where to send them.
 
-    A member, an approved rabbi or a staff user has nothing to apply for here.
+    A member, an approved rabbi or owner, or a staff user has nothing to apply for here.
     """
     if not is_applicant(request.user):
         return redirect(redirect_after_login(request, request.user))
@@ -182,15 +196,66 @@ def rabbi_application_view(request):
     return render(request, "accounts/rabbi_application.html", {"form": form})
 
 
+def _add_charity_url():
+    """Where "Add a charity" goes, or None while that page isn't built (D-YOSEF-owner-signup)."""
+    try:
+        return reverse("charities:add")
+    except NoReverseMatch:
+        return None
+
+
+CLAIM_ERRORS = {
+    approvals.SubmitOutcome.NO_SUCH_CHARITY: "That charity isn't in MaaserMart. Search again.",
+}
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def owner_application_view(request):
+    """Find your charity and claim it (§6.2.2.1). The claimant is the one logged in.
+
+    The search box asks this same view for results as the applicant types (htmx
+    sends `HX-Request`, and only the results come back). Without JavaScript it
+    submits as a normal form and the whole page shows them.
+    """
+    elsewhere = _applicant_or_redirect(request)
+    if elsewhere:
+        return elsewhere
+    if approvals.latest_application(request.user) is not None:
+        return redirect("accounts:pending")  # Already sent: one application per account.
+    error = None
+    status = 200
+    if request.method == "POST":
+        try:
+            charity_id = int(request.POST.get("charity_id", ""))
+        except ValueError:
+            charity_id = None
+        if charity_id is not None:
+            outcome = approvals.submit_owner_claim(request.user, charity_id)
+            if outcome is not approvals.SubmitOutcome.NO_SUCH_CHARITY:
+                return redirect("accounts:pending")
+        error = CLAIM_ERRORS[approvals.SubmitOutcome.NO_SUCH_CHARITY]
+        status = 400
+    term = request.GET.get("q", "")
+    results = charities.search_charities(term)
+    context = {"results": results, "term": term}
+    if request.headers.get("HX-Request"):
+        return render(request, "accounts/_owner_charity_results.html", context)
+    context.update(error=error, add_charity_url=_add_charity_url())
+    return render(request, "accounts/owner_application.html", context, status=status)
+
+
 @login_required
 def pending_view(request):
-    """A rabbi applicant's only page: the state of the application."""
+    """An applicant's only page: the state of the application."""
     elsewhere = _applicant_or_redirect(request)
     if elsewhere:
         return elsewhere
     application = approvals.latest_application(request.user)
     if application is None:
-        return redirect("accounts:rabbi_application")
+        # Nothing sent yet, e.g. logged out before applying. Which one isn't
+        # stored until the application is, so the applicant picks.
+        return render(request, "accounts/choose_application.html")
     role, status = application
     context = {"role": role, "status": status}
     if status == approvals.Status.REJECTED:

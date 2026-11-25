@@ -1,9 +1,12 @@
 """Charity owner signup: claiming a charity and the admin deciding it (D-YOSEF-owner-signup)."""
 
+import re
+
 import pytest
+from django.contrib.auth import SESSION_KEY
 from django.core import mail
 
-from apps.accounts.models import CharityOwner, RoleAssignment
+from apps.accounts.models import CharityOwner, RoleAssignment, User
 from apps.approvals import services as approvals
 from apps.approvals.models import ApprovalRequest, OwnerClaimRequest
 from tests.factories import UserFactory
@@ -133,3 +136,193 @@ def test_the_queue_shows_which_charity_is_claimed():
     assert item.kind == "owner_claim"
     assert item.detail == f"Claims Tomchei Shabbos (#{charity.pk})"
     assert item.decidable
+
+
+# --- the pages ------------------------------------------------------------
+
+SIGNUP = "/accounts/owner-signup/"
+VERIFY = "/accounts/signup/verify/"
+CLAIM = "/accounts/owner-application/"
+STATUS = "/accounts/pending/"
+ACCOUNT = {
+    "username": "dlevi",
+    "email": "dlevi@example.com",
+    "password": "a-long-pass-42",
+    "agree": "on",
+}
+
+
+def sign_up_as_owner(client):
+    """Fill in the owner signup page and type the emailed code. Returns the code page's reply."""
+    client.post(SIGNUP, ACCOUNT)
+    code = re.search(r"\d{6}", mail.outbox[-1].body).group()
+    return client.post(VERIFY, {"code": code})
+
+
+def member():
+    return RoleAssignmentFactory(role=RoleAssignment.Role.MEMBER).user
+
+
+def test_the_member_signup_page_links_the_owner_signup(client):
+    assert SIGNUP in client.get("/accounts/signup/").content.decode()
+
+
+def test_the_code_creates_a_roleless_account_and_opens_the_claim_page(client):
+    response = sign_up_as_owner(client)
+    assert response.status_code == 302
+    assert response.url == CLAIM
+    user = User.objects.get(username="dlevi")
+    assert not RoleAssignment.objects.filter(user=user).exists()
+    assert int(client.session[SESSION_KEY]) == user.pk
+
+
+def test_a_rabbi_signup_still_opens_the_rabbi_application(client):
+    client.post("/accounts/rabbi-signup/", ACCOUNT)
+    code = re.search(r"\d{6}", mail.outbox[-1].body).group()
+    assert client.post(VERIFY, {"code": code}).url == "/accounts/rabbi-application/"
+
+
+def test_the_claim_page_finds_charities_by_name(client):
+    CharityFactory(name="Tomchei Shabbos")
+    CharityFactory(name="Hatzalah")
+    client.force_login(applicant())
+    page = client.get(CLAIM, {"q": "tomchei"}).content.decode()
+    assert "Tomchei Shabbos" in page
+    assert "Hatzalah" not in page
+
+
+def test_the_search_answers_htmx_with_only_the_results(client):
+    CharityFactory(name="Tomchei Shabbos")
+    client.force_login(applicant())
+    page = client.get(CLAIM, {"q": "tomchei"}, HTTP_HX_REQUEST="true").content.decode()
+    assert "Tomchei Shabbos" in page
+    assert "<html" not in page
+
+
+def test_choosing_a_charity_claims_it_for_the_logged_in_user(client):
+    user, charity = applicant(), CharityFactory()
+    client.force_login(user)
+    response = client.post(CLAIM, {"charity_id": charity.pk})
+    assert response.url == STATUS
+    claim = OwnerClaimRequest.objects.get()
+    assert (claim.approval_request.submitted_by, claim.charity_id) == (user, charity.pk)
+    assert "under review" in client.get(STATUS).content.decode()
+    assert "charity owner" in client.get(STATUS).content.decode()
+
+
+def test_a_user_id_in_the_form_is_ignored(client):
+    """The claimant is the session's user; a posted user id can't claim for someone else."""
+    user, victim, charity = applicant(), applicant(), CharityFactory()
+    client.force_login(user)
+    client.post(CLAIM, {"charity_id": charity.pk, "user_id": victim.pk, "submitted_by": victim.pk})
+    assert not ApprovalRequest.objects.filter(submitted_by=victim).exists()
+    assert ApprovalRequest.objects.get().submitted_by == user
+
+
+@pytest.mark.parametrize("charity_id", ["", "abc", "999999"])
+def test_a_bad_charity_id_claims_nothing(client, charity_id):
+    client.force_login(applicant())
+    response = client.post(CLAIM, {"charity_id": charity_id})
+    assert response.status_code == 400
+    assert "That charity isn&#x27;t in MaaserMart" in response.content.decode()
+    assert not ApprovalRequest.objects.exists()
+
+
+def test_after_claiming_the_claim_page_shows_the_status(client):
+    user = applicant()
+    claimed(user, CharityFactory())
+    client.force_login(user)
+    assert client.get(CLAIM).url == STATUS
+    client.post(CLAIM, {"charity_id": CharityFactory().pk})
+    assert ApprovalRequest.objects.filter(submitted_by=user).count() == 1
+
+
+@pytest.mark.parametrize(
+    "who",
+    [member, lambda: RoleAssignmentFactory(role=OWNER).user, admin],
+    ids=["member", "owner", "admin"],
+)
+def test_only_applicants_can_claim(client, who):
+    """A member, an owner or an admin has no claim page; the check is the role, not login."""
+    client.force_login(who())
+    response = client.post(CLAIM, {"charity_id": CharityFactory().pk})
+    assert response.status_code == 302
+    assert not ApprovalRequest.objects.exists()
+
+
+def test_a_guest_is_sent_to_log_in(client):
+    response = client.get(CLAIM)
+    assert response.status_code == 302
+    assert response.url.startswith("/accounts/login/")
+
+
+def test_add_a_charity_is_shown_but_disabled_until_that_page_exists(client):
+    client.force_login(applicant())
+    page = client.get(CLAIM).content.decode()
+    assert "Add a charity" in page
+    assert "disabled" in page
+
+
+def test_logging_in_after_claiming_shows_the_status(client):
+    sign_up_as_owner(client)
+    client.post(CLAIM, {"charity_id": CharityFactory().pk})
+    client.logout()
+    response = client.post(
+        "/accounts/login/", {"username": "dlevi", "password": ACCOUNT["password"]}
+    )
+    assert response.url == STATUS
+    assert "under review" in client.get(STATUS).content.decode()
+
+
+def test_logging_in_before_claiming_offers_the_claim_page(client):
+    sign_up_as_owner(client)
+    client.logout()
+    client.post("/accounts/login/", {"username": "dlevi", "password": ACCOUNT["password"]})
+    assert CLAIM in client.get(STATUS).content.decode()
+
+
+def test_an_approved_owner_leaves_the_status_page(client):
+    user = applicant()
+    request = claimed(user, CharityFactory())
+    approvals.decide_request(request.pk, True, admin())
+    client.force_login(user)
+    assert client.get(STATUS).status_code == 302
+    assert client.get(CLAIM).status_code == 302
+
+
+def test_the_admin_queue_can_approve_a_claim(client):
+    user, charity = applicant(), CharityFactory(name="Tomchei Shabbos")
+    request = claimed(user, charity)
+    client.force_login(admin())
+    assert "Claims Tomchei Shabbos" in client.get("/admin/approvals/").content.decode()
+    client.post(f"/admin/approvals/{request.pk}/decide/", {"decision": "approve"})
+    assert is_owner(user)
+    assert CharityOwner.objects.filter(user=user, charity=charity).exists()
+
+
+# --- production's CSP -----------------------------------------------------
+
+INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)[^>]*>", re.IGNORECASE)
+INLINE_HANDLER = re.compile(r"\son[a-z]+\s*=", re.IGNORECASE)
+ALPINE = re.compile(r"\s(x-[a-z]+|@[a-z]+|:[a-z]+)=", re.IGNORECASE)
+
+
+@pytest.mark.parametrize("path", [SIGNUP, CLAIM, STATUS])
+def test_the_owner_pages_need_nothing_production_csp_blocks(client, settings, path):
+    """Production sends `default-src 'self'`, so no inline script, handler or Alpine."""
+    from apps.support.middleware import SITE_POLICY
+
+    settings.MIDDLEWARE = [
+        *settings.MIDDLEWARE,
+        "apps.support.middleware.ContentSecurityPolicyMiddleware",
+    ]
+    settings.CONTENT_SECURITY_POLICY = SITE_POLICY
+    CharityFactory(name="Tomchei Shabbos")
+    if path != SIGNUP:
+        client.force_login(applicant())
+    response = client.get(path, {"q": "tomchei"})
+    assert response.headers["Content-Security-Policy"] == SITE_POLICY
+    page = response.content.decode()
+    assert not INLINE_SCRIPT.search(page)
+    assert not INLINE_HANDLER.search(page)
+    assert not ALPINE.search(page)

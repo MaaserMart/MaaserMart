@@ -1,0 +1,16 @@
+{% if results %}
+  <ul class="charity-list">
+    {% for charity in results %}
+      <li>
+        <form class="charity-card auth__choice" method="post" action="{% url 'accounts:owner_application' %}">
+          {% csrf_token %}
+          <input type="hidden" name="charity_id" value="{{ charity.id }}">
+          <span>{{ charity.name }}</span>
+          <button class="filters__apply" type="submit">This is my charity</button>
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
+{% elif term %}
+  <p class="empty">No charity matches "{{ term }}".</p>
+{% endif %}

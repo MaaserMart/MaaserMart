@@ -156,9 +156,10 @@ class SignupOutcome(enum.Enum):
 
 
 def is_applicant(user):
-    """A rabbi applicant: an account with no role that isn't staff (D-YOSEF-rabbi-signup).
+    """An applicant: an account with no role that isn't staff (D-YOSEF-rabbi-signup).
 
-    Staff without a role use Django admin, not the rabbi application.
+    A rabbi or charity owner applicant (D-YOSEF-owner-signup). Staff without a
+    role use Django admin, not an application.
     """
     return user.is_authenticated and not user.is_staff and not find_role(user)
 
@@ -174,7 +175,7 @@ def submit_member_signup(username, email, password_hash):
 
 
 def submit_applicant_signup(username, email, password_hash):
-    """Create a USER with no role yet: a rabbi applicant (D-YOSEF-rabbi-signup).
+    """Create a USER with no role yet: a rabbi or owner applicant (D-YOSEF-rabbi-signup).
 
     The account logs in, but sees only its application and its status until an
     admin approves it and grants the role. Returns (SignupOutcome, user or None),

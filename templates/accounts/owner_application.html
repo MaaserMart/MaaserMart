@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Claim your charity · MaaserMart{% endblock %}
+{% block content %}
+<section class="auth">
+  <h1 class="auth__title">Claim your charity</h1>
+  <p class="empty">Search for your charity and choose it. An admin checks with you by email that you run it, then emails you when your charity owner account is open. Until then you can log in to see how your application is doing.</p>
+  {% if error %}<p class="auth__error" role="alert">{{ error }}</p>{% endif %}
+  <form method="get" action="{% url 'accounts:owner_application' %}" role="search">
+    <label class="auth__field">
+      <span class="auth__label">Your charity's name</span>
+      <input class="auth__input" type="search" name="q" value="{{ term }}" maxlength="100"
+             autocomplete="off" autofocus
+             hx-get="{% url 'accounts:owner_application' %}"
+             hx-trigger="input changed delay:300ms, search"
+             hx-target="#charity-results">
+    </label>
+  </form>
+  <div id="charity-results">{% include "accounts/_owner_charity_results.html" %}</div>
+
+  <h2 class="auth__label">Not listed?</h2>
+  {% if add_charity_url %}
+    <p><a class="filters__apply auth__submit" href="{{ add_charity_url }}">Add a charity</a></p>
+  {% else %}
+    {# /charity/add/ isn't built yet (D-YOSEF-owner-signup); this becomes a link when it is. #}
+    <p><button class="filters__apply auth__submit" type="button" disabled>Add a charity</button></p>
+    <p class="empty">Adding a new charity is coming soon.</p>
+  {% endif %}
+</section>
+{% endblock %}
