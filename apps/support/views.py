@@ -14,6 +14,7 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
 from apps.charities.services import find_charities_by_name, get_charity_choice
+from common.clients import client_network
 
 from . import verification
 from .services import MAX_BODY_LENGTH, TicketError, submit_help, submit_report
@@ -27,7 +28,7 @@ def _guest_step(request: HttpRequest, action: str) -> tuple[str | None, str | No
             validate_email(email)
         except ValidationError:
             return None, "Enter a valid email address."
-        result = verification.start(request.session, email)
+        result = verification.start(request.session, email, client_network(request))
     else:
         result = verification.confirm(request.session, request.POST.get("code", ""))
     return (result.message, None) if result.ok else (None, result.message)

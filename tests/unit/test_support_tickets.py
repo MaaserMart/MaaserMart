@@ -1,5 +1,6 @@
 """Help and report tickets (§6.3 Tickets, SRS FR 18 and FR 19, D-072)."""
 
+import copy
 import re
 from unittest import mock
 
@@ -145,6 +146,25 @@ class TestVerification:
         assert not verification.confirm(session, code).ok
         assert verification.pending_email(session) is None
 
+    def test_copies_of_one_session_share_the_five_tries(self):
+        """Parallel guesses each start from the same saved session (issue #45)."""
+        session = {}
+        verification.start(session, "a@b.co")
+        code = _code_from_mail()
+        wrong = "000000" if code != "000000" else "111111"
+        copies = [copy.deepcopy(session) for _ in range(6)]
+        for copy_of_session in copies[: verification.MAX_TRIES]:
+            assert not verification.confirm(copy_of_session, wrong).ok
+        assert not verification.confirm(copies[-1], code).ok
+
+    def test_a_used_code_cannot_be_used_from_a_copy(self):
+        session = {}
+        verification.start(session, "a@b.co")
+        code = _code_from_mail()
+        first, second = copy.deepcopy(session), copy.deepcopy(session)
+        assert verification.confirm(first, code).ok
+        assert not verification.confirm(second, code).ok
+
     def test_expired_code(self):
         session = {}
         verification.start(session, "a@b.co")
@@ -157,6 +177,12 @@ class TestVerification:
             assert verification.start({}, "a@b.co").ok
         assert not verification.start({}, "A@B.co").ok
         assert len(mail.outbox) == verification.MAX_SENDS_PER_EMAIL_PER_HOUR
+
+    def test_sends_per_network_are_capped(self):
+        for i in range(verification.MAX_SENDS_PER_IP_PER_HOUR):
+            assert verification.start({}, f"guest{i}@example.com", "203.0.113.1").ok
+        assert not verification.start({}, "other@example.com", "203.0.113.1").ok
+        assert verification.start({}, "other@example.com", "203.0.113.2").ok
 
     def test_a_new_code_unverifies(self):
         session = {}
@@ -191,6 +217,22 @@ class TestHelpPage:
         response = client.post(HELP, {"action": "send_code", "email": "nope"})
         assert "Enter a valid email address." in response.content.decode()
         assert not mail.outbox
+
+    def test_the_form_caps_codes_by_client_network(self, client):
+        for i in range(verification.MAX_SENDS_PER_IP_PER_HOUR):
+            response = client.post(
+                HELP,
+                {"action": "send_code", "email": f"guest{i}@example.com"},
+                REMOTE_ADDR="203.0.113.4",
+            )
+            assert "We sent a 6-digit code" in response.content.decode()
+        response = client.post(
+            HELP,
+            {"action": "send_code", "email": "last@example.com"},
+            REMOTE_ADDR="203.0.113.4",
+        )
+        assert "Too many codes were sent from this network" in response.content.decode()
+        assert len(mail.outbox) == verification.MAX_SENDS_PER_IP_PER_HOUR
 
     def test_typed_message_survives_a_step(self, client):
         response = client.post(HELP, {"action": "send_code", "email": "a@b.co", "body": "Keep me"})

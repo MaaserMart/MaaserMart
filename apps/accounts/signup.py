@@ -21,10 +21,17 @@ from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.core.cache import caches
 from django.core.exceptions import ValidationError
-from django.db import connection, transaction
 from django.db.models import Value
 from django.db.models.functions import Lower
 from django.utils.crypto import constant_time_compare
+
+from common.verification import (
+    CODE_LIFETIME_SECONDS,
+    MAX_CODE_TRIES,
+    exhaust_tries,
+    new_code,
+    spend_try,
+)
 
 from .backends import find_user
 from .models import User
@@ -43,10 +50,6 @@ EMAIL_REFILL_SECONDS = 20 * 60
 # Per client network: 10 code tries at once, then one a minute.
 VERIFY_CAPACITY = 10
 VERIFY_REFILL_SECONDS = 60
-
-CODE_LENGTH = 6
-CODE_LIFETIME_SECONDS = 15 * 60
-MAX_CODE_TRIES = 5
 
 BACKEND = "apps.accounts.backends.CaseInsensitiveModelBackend"
 
@@ -103,10 +106,6 @@ def email_taken(email):
     )
 
 
-def _new_code():
-    return f"{secrets.randbelow(10**CODE_LENGTH):0{CODE_LENGTH}d}"
-
-
 def mailbox(email):
     """The inbox an address delivers to, so its aliases share one email limit.
 
@@ -133,7 +132,7 @@ def _spend_email(email):
 def _save_and_send(request, pending):
     """Give the signup a fresh code, save it in the session, then email the code."""
     # A new id gives the new code its own try count, starting at zero.
-    pending.update(id=secrets.token_urlsafe(16), code=_new_code(), sent_at=_now())
+    pending.update(id=secrets.token_urlsafe(16), code=new_code(), sent_at=_now())
     request.session[SESSION_KEY] = pending
     enqueue_signup_code(pending["email"], pending["code"])
 
@@ -198,21 +197,8 @@ def _tries_key(pending):
 
 
 def _spend_try(pending):
-    """Count one code try for this code. Returns the count, this try included.
-
-    The count lives in the "login" cache, not the session. Django saves the whole
-    session when a request ends, so guesses sent in parallel would each read 0 and
-    write back 1. A PostgreSQL lock on the code's id makes concurrent tries take
-    turns, so every try is counted.
-    """
-    store = caches["login"]
-    key = _tries_key(pending)
-    lock_id = int.from_bytes(hashlib.sha256(key.encode()).digest()[:8], "big", signed=True)
-    with transaction.atomic(), connection.cursor() as cursor:
-        cursor.execute("SELECT pg_advisory_xact_lock(%s)", [lock_id])
-        tries = store.get(key, 0) + 1
-        store.set(key, tries, timeout=CODE_LIFETIME_SECONDS + 60)
-    return tries
+    """Count one code try for this code, with the shared atomic counter (D-078)."""
+    return spend_try(_tries_key(pending))
 
 
 def verify_signup(request, code):
@@ -241,7 +227,7 @@ def verify_signup(request, code):
             return SignupResult.OUT_OF_TRIES, None
         return SignupResult.WRONG_CODE, None
     # Used up: a copy of this session elsewhere can't try the code again.
-    caches["login"].set(_tries_key(pending), MAX_CODE_TRIES + 1, CODE_LIFETIME_SECONDS + 60)
+    exhaust_tries(_tries_key(pending))
     outcome, user = submit_member_signup(
         pending["username"], pending["email"], pending["password_hash"]
     )

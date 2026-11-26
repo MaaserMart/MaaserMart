@@ -823,6 +823,19 @@ Rules for this file:
 - Why: A typed code keeps the user on one tab and matches §6.2.2. Checking first means a refused signup costs no email and no password hash. The limits stop guessing codes and stop anyone using signup to flood an inbox. These emails are account (transactional) emails, so no separate email consent is asked; marketing email would need its own opt-in.
 - Where in code: `apps/accounts/signup.py`, `apps/accounts/services.py` (`submit_member_signup`, `enqueue_signup_code`), `apps/accounts/tasks.py`, `apps/accounts/views.py`, `templates/accounts/signup*.html`, `tests/integration/test_signup.py`
 
+## D-078: Verification codes and visitor addresses are shared from `common`, outside the apps
+- Date: 2026-11-26
+- Decided by: Platform Lead (Shaul)
+- Status: Active
+- Design doc ref: §6.1, §6.2.2, §6.3, §8.4; picks up D-072 and D-YOSEF-member-signup
+- Decision:
+  - `common/` is a plain package, not a tenth Django app. It owns the parts of email verification that signup and guest support both need and neither may own under D-006: the 6-digit code, the Celery task that emails it, a try counter, and the trusted-proxy client address. Each app keeps its own policy for where the pending code lives and what confirmation does.
+  - `config/celery.py` imports `common.verification` explicitly; autodiscovery only looks inside installed apps.
+  - A guest's code tries are counted in the `login` cache under a random id per code, behind a PostgreSQL advisory lock, not in the session. Session counters let parallel guesses each read the same old value (issue #45).
+  - Code emails stay capped at 5 per address per hour and are also capped at 20 per client network per hour (issue #33). The network key comes from `common.clients`, which reads the last `X-Forwarded-For` entry only behind a trusted proxy and groups IPv6 addresses by /64.
+- Why: Signup and support are forbidden to import each other, so leaving the shared primitive in either app would break §6.1. Both flows use the same code and email, and both had independently grown the same pattern, with support keeping the weaker version of the try count.
+- Where in code: `common/`, `apps/accounts/signup.py`, `apps/accounts/tasks.py`, `apps/accounts/ratelimit.py`, `apps/support/verification.py`, `apps/support/tasks.py`, `apps/support/views.py`, `config/celery.py`, `tests/unit/test_support_tickets.py`, `tests/unit/test_verification_helper.py`
+
 ## Open questions
 
 - **2026-11-11: Which models get audit logging?** django-auditlog is installed (§4.15.1.2), but no models are registered with it. Deferred to Phase 1. Resolved on 2026-11-17 as D-063: the package is out of the app until a model registers; the question of *which* models remains Phase 1.

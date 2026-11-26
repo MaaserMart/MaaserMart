@@ -84,6 +84,7 @@ def usernames(user_ids) -> dict[int, str]:
         return {}
     return dict(User.objects.filter(pk__in=ids).values_list("pk", "username"))
 
+
 ADMIN = "admin"
 
 # The order roles appear in, e.g. on the dashboard chooser.
