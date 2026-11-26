@@ -834,7 +834,7 @@ Rules for this file:
   - A guest's code tries are counted in the `login` cache under a random id per code, behind a PostgreSQL advisory lock, not in the session. Session counters let parallel guesses each read the same old value (issue #45).
   - Code emails stay capped at 5 per address per hour and are also capped at 20 per client network per hour (issue #33). The network key comes from `common.clients`, which reads the last `X-Forwarded-For` entry only behind a trusted proxy and groups IPv6 addresses by /64.
 - Why: Signup and support are forbidden to import each other, so leaving the shared primitive in either app would break §6.1. Both flows use the same code and email, and both had independently grown the same pattern, with support keeping the weaker version of the try count.
-- Where in code: `common/`, `apps/accounts/signup.py`, `apps/accounts/tasks.py`, `apps/accounts/ratelimit.py`, `apps/support/verification.py`, `apps/support/tasks.py`, `apps/support/views.py`, `config/celery.py`, `tests/unit/test_support_tickets.py`, `tests/unit/test_verification_helper.py`
+- Where in code: `common/`, `apps/accounts/signup.py`, `apps/accounts/tasks.py`, `apps/accounts/views.py`, `apps/accounts/ratelimit.py`, `apps/support/verification.py`, `apps/support/tasks.py`, `apps/support/views.py`, `config/celery.py`, `templates/accounts/signup_verify.html`, `tests/unit/test_support_tickets.py`, `tests/unit/test_verification_helper.py`
 
 ## Open questions
 
