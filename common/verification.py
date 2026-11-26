@@ -21,10 +21,11 @@ CODE_LIFETIME_SECONDS = 15 * 60
 MAX_CODE_TRIES = 5
 
 _TRIES_TIMEOUT = CODE_LIFETIME_SECONDS + 60
+_LIFETIME_MINUTES = CODE_LIFETIME_SECONDS // 60
 
 _PURPOSES = {
     "signup": "finish signing up",
-    "support": "verify your email address on the help or report page",
+    "support": "verify your email for the help or report form",
 }
 
 
@@ -61,7 +62,8 @@ def send_verification_code(email: str, code: str, purpose: str) -> None:
         message=(
             f"Your code is {code}.\n\n"
             f"Type it on MaaserMart to {_PURPOSES[purpose]}. "
-            "It works for 15 minutes. If you did not ask for it, ignore this email."
+            f"It works for {_LIFETIME_MINUTES} minutes. "
+            "If you did not ask for it, ignore this email."
         ),
         from_email=None,  # DEFAULT_FROM_EMAIL
         recipient_list=[email],

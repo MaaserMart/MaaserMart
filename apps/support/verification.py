@@ -23,6 +23,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from common.verification import (
+    CODE_LENGTH,
     CODE_LIFETIME_SECONDS,
     MAX_CODE_TRIES,
     exhaust_tries,
@@ -129,7 +130,11 @@ def start(session, email: str, network: str = "") -> CheckResult:
     }
     session.pop(VERIFIED_KEY, None)
     send_ticket_email_code.delay(email, code)
-    return CheckResult(True, f"We sent a 6-digit code to {email}. It works for 15 minutes.")
+    return CheckResult(
+        True,
+        f"We sent a {CODE_LENGTH}-digit code to {email}. "
+        f"It works for {CODE_LIFETIME_SECONDS // 60} minutes.",
+    )
 
 
 def confirm(session, code: str) -> CheckResult:

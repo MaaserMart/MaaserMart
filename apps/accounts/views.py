@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
-from common.verification import CODE_LENGTH, MAX_CODE_TRIES
+from common.verification import CODE_LENGTH, CODE_LIFETIME_SECONDS, MAX_CODE_TRIES
 
 from . import signup
 from .login import LoginResult, attempt_login, dashboard_url, redirect_after_login
@@ -122,6 +122,7 @@ def signup_verify_view(request):
         "notice": notice,
         "tries_left": signup.tries_left(request),
         "code_length": CODE_LENGTH,
+        "code_lifetime_minutes": CODE_LIFETIME_SECONDS // 60,
         "max_tries": MAX_CODE_TRIES,
     }
     return render(request, "accounts/signup_verify.html", context, status=status)
