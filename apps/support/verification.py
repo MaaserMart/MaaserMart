@@ -43,7 +43,13 @@ MAX_SENDS_PER_EMAIL_PER_HOUR = 5
 # Codes one network may cause per hour, across all addresses (D-078). The
 # per-address cap alone can be walked around by trying many different addresses.
 MAX_SENDS_PER_IP_PER_HOUR = 20
-SEND_WINDOW_SECONDS = 60 * 60
+# Code tries one network may spend per hour, across all its codes (D-078). Each
+# code already allows 5 tries, but a network can ask for 20 codes an hour, so
+# without this it could spend 100 guesses an hour here. Generous next to the 5 a
+# careful visitor uses, so a shared address (an office, a school) is not refused.
+MAX_TRIES_PER_NETWORK_PER_HOUR = 30
+# Both limits are hourly buckets in the default cache.
+LIMIT_WINDOW_SECONDS = 60 * 60
 
 
 @dataclass(frozen=True)
@@ -72,8 +78,12 @@ def _ip_count_key(network: str) -> str:
     return "support:email-code-sends-ip:" + hashlib.sha256(network.encode()).hexdigest()
 
 
-def _spend_sends(limits) -> str | None:
-    """Spend one send from every bucket.
+def _network_try_key(network: str) -> str:
+    return "support:code-tries-ip:" + hashlib.sha256(network.encode()).hexdigest()
+
+
+def _spend(limits) -> str | None:
+    """Spend one from every bucket.
 
     Returns None when all of them had room, otherwise the message of the first
     full bucket, and spends nothing: a refused send must not eat the others.
@@ -84,11 +94,11 @@ def _spend_sends(limits) -> str | None:
         if cache.get(key, 0) >= cap:
             return message
     for key, _, _ in limits:
-        cache.add(key, 0, SEND_WINDOW_SECONDS)
+        cache.add(key, 0, LIMIT_WINDOW_SECONDS)
         try:
             cache.incr(key)
         except ValueError:  # Expired between add and incr: start a fresh window.
-            cache.set(key, 1, SEND_WINDOW_SECONDS)
+            cache.set(key, 1, LIMIT_WINDOW_SECONDS)
     return None
 
 
@@ -118,7 +128,7 @@ def start(session, email: str, network: str = "") -> CheckResult:
                 "Too many codes were sent from this network. Try again in an hour.",
             )
         )
-    if refused := _spend_sends(limits):
+    if refused := _spend(limits):
         return CheckResult(False, refused)
 
     code = new_code()
@@ -137,14 +147,32 @@ def start(session, email: str, network: str = "") -> CheckResult:
     )
 
 
-def confirm(session, code: str) -> CheckResult:
-    """Check `code` against the pending one; on a match the address is verified."""
+def confirm(session, code: str, network: str = "") -> CheckResult:
+    """Check `code` against the pending one; on a match the address is verified.
+
+    `network` is the visitor's rate-limit key, as in `start`. A try refused by
+    that cap does not use up one of the code's own 5, so a shared address is not
+    punished twice.
+    """
     pending = session.get(PENDING_KEY)
     if not pending:
         return CheckResult(False, "Ask for a code first.")
     if time.time() > pending["expires"]:
         session.pop(PENDING_KEY, None)
         return CheckResult(False, "That code has expired. Ask for a new one.")
+
+    if network:
+        refused = _spend(
+            [
+                (
+                    _network_try_key(network),
+                    MAX_TRIES_PER_NETWORK_PER_HOUR,
+                    "Too many code tries from this network. Try again in an hour.",
+                )
+            ]
+        )
+        if refused:
+            return CheckResult(False, refused)
 
     key = _tries_key(pending)
     tries = spend_try(key)  # Counted under a lock; parallel guesses cannot tie (D-078).

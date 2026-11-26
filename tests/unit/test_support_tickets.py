@@ -178,6 +178,31 @@ class TestVerification:
         assert not verification.start({}, "A@B.co").ok
         assert len(mail.outbox) == verification.MAX_SENDS_PER_EMAIL_PER_HOUR
 
+    def test_tries_per_network_are_capped(self):
+        """Codes are capped per network too, so one host cannot walk many codes."""
+        network = "203.0.113.9"
+        per_code = verification.MAX_TRIES
+        cap = verification.MAX_TRIES_PER_NETWORK_PER_HOUR
+        assert cap % per_code == 0, "this test walks exactly one hour of tries"
+        refused = "Too many code tries from this network. Try again in an hour."
+
+        spent = []
+        for i in range(cap // per_code):
+            session = {}
+            verification.start(session, f"guest{i}@example.com")
+            code = _code_from_mail()
+            spent.append((session, "000000" if code != "000000" else "111111"))
+        for session, wrong in spent:
+            for _ in range(per_code):
+                assert verification.confirm(session, wrong, network).message != refused
+
+        # The hour's tries are gone; the code waiting in this session is not.
+        pending = {}
+        verification.start(pending, "another@example.com")
+        code = _code_from_mail()
+        assert verification.confirm(pending, code, network).message == refused
+        assert verification.confirm(pending, code, "198.51.100.9").ok
+
     def test_sends_per_network_are_capped(self):
         for i in range(verification.MAX_SENDS_PER_IP_PER_HOUR):
             assert verification.start({}, f"guest{i}@example.com", "203.0.113.1").ok
@@ -233,6 +258,19 @@ class TestHelpPage:
         )
         assert "Too many codes were sent from this network" in response.content.decode()
         assert len(mail.outbox) == verification.MAX_SENDS_PER_IP_PER_HOUR
+
+    def test_the_form_caps_tries_by_client_network(self, client):
+        network = "203.0.113.5"
+        client.post(
+            HELP, {"action": "send_code", "email": "guest@example.com"}, REMOTE_ADDR=network
+        )
+        cache.set(
+            verification._network_try_key(network), verification.MAX_TRIES_PER_NETWORK_PER_HOUR
+        )
+
+        response = client.post(HELP, {"action": "verify", "code": "000000"}, REMOTE_ADDR=network)
+
+        assert "Too many code tries from this network" in response.content.decode()
 
     def test_typed_message_survives_a_step(self, client):
         response = client.post(HELP, {"action": "send_code", "email": "a@b.co", "body": "Keep me"})

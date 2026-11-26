@@ -22,15 +22,16 @@ from .services import MAX_BODY_LENGTH, TicketError, submit_help, submit_report
 
 def _guest_step(request: HttpRequest, action: str) -> tuple[str | None, str | None]:
     """Run a guest's send-code or verify step. Returns (notice, error)."""
+    network = client_network(request)
     if action == "send_code":
         email = request.POST.get("email", "").strip()
         try:
             validate_email(email)
         except ValidationError:
             return None, "Enter a valid email address."
-        result = verification.start(request.session, email, client_network(request))
+        result = verification.start(request.session, email, network)
     else:
-        result = verification.confirm(request.session, request.POST.get("code", ""))
+        result = verification.confirm(request.session, request.POST.get("code", ""), network)
     return (result.message, None) if result.ok else (None, result.message)
 
 
